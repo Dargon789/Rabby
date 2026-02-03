@@ -179,6 +179,7 @@ import { buildCreateListingTypedData } from '@/utils/nft';
 import { http } from '../utils/http';
 import { getPerpsSDK } from '@/ui/views/Perps/sdkManager';
 import { GNOSIS_SUPPORT_CHAINS } from '@rabby-wallet/gnosis-sdk/dist/api';
+import { AccountScene, SCENE_ACCOUNT_CONFIG } from '@/constant/scene-account';
 
 const stashKeyrings: Record<string | number, any> = {};
 
@@ -1067,9 +1068,11 @@ export class WalletController extends BaseController {
       swapPreferMEVGuarded?: boolean;
       isBridge?: boolean;
     },
-    isBuild = false
+    isBuild = false,
+    currentAccount?: Account
   ) => {
-    const account = await preferenceService.getCurrentAccount();
+    const account =
+      currentAccount || (await preferenceService.getCurrentAccount());
     if (!account) throw new Error(t('background.error.noCurrentAccount'));
     const chainId = findChain({
       serverId: chainServerId,
@@ -1899,12 +1902,40 @@ export class WalletController extends BaseController {
     });
     sessionService.broadcastEvent(
       'accountsChanged',
-      currentAccount?.address ? [currentAccount?.address] : []
+      currentAccount?.address ? [currentAccount?.address] : [],
+      undefined,
+      undefined,
+      false
     );
   };
 
   updateGa4EventTime = (timestamp: number) => {
     preferenceService.setPreferencePartials({ ga4EventTime: timestamp });
+  };
+
+  switchSceneAccount = ({
+    scene,
+    account,
+  }: {
+    scene: AccountScene;
+    account: Account;
+  }) => {
+    const prev = preferenceService.getPreference('sceneAccountMap') || {};
+    preferenceService.setPreferencePartials({
+      sceneAccountMap: { ...prev, [scene]: account },
+    });
+    const config = SCENE_ACCOUNT_CONFIG[scene];
+    if (config?.dapps) {
+      config.dapps.forEach((origin) => {
+        sessionService.broadcastEvent(
+          'accountsChanged',
+          [account.address],
+          origin,
+          undefined,
+          true
+        );
+      });
+    }
   };
 
   getLastTimeSendToken = () => preferenceService.getLastTimeSendToken();
@@ -2135,7 +2166,9 @@ export class WalletController extends BaseController {
       sessionService.broadcastEvent(
         'accountsChanged',
         site?.account?.address ? [site.account.address.toLowerCase()] : [],
-        site.origin
+        site.origin,
+        undefined,
+        false
       );
     }
   };
@@ -2190,7 +2223,9 @@ export class WalletController extends BaseController {
       sessionService.broadcastEvent(
         'defaultWalletChanged',
         currentIsDefaultWallet ? 'rabby' : 'metamask',
-        site.origin
+        site.origin,
+        undefined,
+        false
       );
     }
   };
@@ -5718,11 +5753,14 @@ export class WalletController extends BaseController {
   setMarketSlippage = perpsService.setMarketSlippage;
   getSoundEnabled = perpsService.getSoundEnabled;
   setSoundEnabled = perpsService.setSoundEnabled;
+  getPerpsIsNeedSetDarkTheme = perpsService.getIsNeedSetDarkTheme;
   updatePerpsAgentWalletPreference = perpsService.updateAgentWalletPreference;
   setSendApproveAfterDeposit = perpsService.setSendApproveAfterDeposit;
   getSendApproveAfterDeposit = async (masterAddress: string) => {
     return perpsService.getSendApproveAfterDeposit(masterAddress);
   };
+  getPerpsQuoteUnit = perpsService.getQuoteUnit;
+  setPerpsQuoteUnit = perpsService.setQuoteUnit;
   setHasDoneNewUserProcess = perpsService.setHasDoneNewUserProcess;
   getHasDoneNewUserProcess = perpsService.getHasDoneNewUserProcess;
   getPerpsAgentWallet = async (masterWallet: string) => {

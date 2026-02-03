@@ -16,11 +16,9 @@ import {
 } from '@/ui/assets/desktop/common';
 import { Trade } from '..';
 import { getPerpTickOptions } from '../../../utils';
+import { useThemeMode } from '@/ui/hooks/usePreference';
 // View modes
 type ViewMode = 'Both' | 'Bids' | 'Asks';
-
-// Quote unit
-type QuoteUnit = 'base' | 'usd';
 
 // Aggregation level config
 interface AggregationConfig {
@@ -45,10 +43,11 @@ export const OrderBook: React.FC<{ latestTrade?: Trade }> = ({
     wsActiveAssetCtx,
     isInitialized,
     marketEstSize,
+    quoteUnit,
   } = useRabbySelector((state) => state.perps);
+  const { isDarkTheme } = useThemeMode();
   const dispatch = useRabbyDispatch();
   const [viewMode, setViewMode] = useState<ViewMode>('Both');
-  const [quoteUnit, setQuoteUnit] = useState<QuoteUnit>('base');
   const [aggregationIndex, setAggregationIndex] = useState<number>(0);
   const [bids, setBids] = useState<OrderBookLevel[]>([]);
   const [asks, setAsks] = useState<OrderBookLevel[]>([]);
@@ -186,7 +185,10 @@ export const OrderBook: React.FC<{ latestTrade?: Trade }> = ({
       <div
         key={`${type}-${order.price}`}
         onClick={() => handleClickPrice(Number(order.price))}
-        className="relative flex items-center justify-between px-[12px] h-[24px] text-[12px] hover:bg-rb-neutral-bg-0 cursor-pointer group"
+        className={clsx(
+          'relative flex items-center justify-between px-[12px] h-[24px] text-[12px] cursor-pointer group',
+          isDarkTheme ? 'hover:bg-r-neutral-card-1' : 'hover:bg-rb-neutral-bg-0'
+        )}
       >
         {/* Depth background */}
         <div
@@ -197,19 +199,19 @@ export const OrderBook: React.FC<{ latestTrade?: Trade }> = ({
           style={{ width: `${depthPercent}%` }}
         />
 
-        <div className="relative z-10 flex items-center justify-between w-full">
+        <div className="relative z-10 grid grid-cols-10 items-center justify-between w-full">
           <span
             className={clsx(
-              'font-medium min-w-[60px] text-left group-hover:font-bold',
+              'font-medium col-span-3 text-left group-hover:font-bold',
               type === 'bid' ? 'text-rb-green-default' : 'text-rb-red-default'
             )}
           >
             {splitNumberByStep(order.price)}
           </span>
-          <span className="text-r-neutral-title-1 font-medium min-w-[60px] text-right">
+          <span className="text-r-neutral-title-1 font-medium col-span-3 text-right">
             {formatValue(order.size)}
           </span>
-          <span className="text-r-neutral-title-1 font-medium min-w-[60px] text-right">
+          <span className="text-r-neutral-title-1 font-medium col-span-4 text-right">
             {formatValue(order.total)}
           </span>
         </div>
@@ -240,16 +242,16 @@ export const OrderBook: React.FC<{ latestTrade?: Trade }> = ({
     if (!marketEstSize) return;
     let estPrice = '';
     const isBuy = Number(marketEstSize) > 0;
-    const arr = isBuy ? asks : bids;
-    arr.forEach((item, index) => {
-      if (
-        item.total > Math.abs(Number(marketEstSize)) ||
-        index === arr.length - 1
-      ) {
+    const arr = isBuy ? bids : asks;
+    for (const item of arr) {
+      if (item.total >= Math.abs(Number(marketEstSize))) {
         estPrice = item.price;
-        return;
+        break;
       }
-    });
+    }
+    if (!estPrice) {
+      estPrice = arr[arr.length - 1].price;
+    }
     dispatch.perps.patchState({
       marketEstPrice: estPrice,
     });
@@ -266,10 +268,6 @@ export const OrderBook: React.FC<{ latestTrade?: Trade }> = ({
   const priceChange = currentMarketData?.prevDayPx
     ? Number(currentMarketData.markPx) - Number(currentMarketData.prevDayPx)
     : 0;
-  const priceChangePercent = currentMarketData?.prevDayPx
-    ? (priceChange / Number(currentMarketData.prevDayPx)) * 100
-    : 0;
-  const isPositive = priceChange >= 0;
 
   return (
     <div className="h-full flex flex-col bg-rb-neutral-bg-1 whitespace-nowrap">
@@ -320,9 +318,24 @@ export const OrderBook: React.FC<{ latestTrade?: Trade }> = ({
             transitionName=""
             forceRender={true}
             overlay={
-              <Menu onClick={(info) => setQuoteUnit(info.key as QuoteUnit)}>
-                <Menu.Item key="base">{selectedCoin}</Menu.Item>
-                <Menu.Item key="usd">USD</Menu.Item>
+              <Menu
+                className="bg-r-neutral-bg1"
+                onClick={(info) =>
+                  dispatch.perps.updateQuoteUnit(info.key as 'base' | 'usd')
+                }
+              >
+                <Menu.Item
+                  className="text-r-neutral-title1 hover:bg-r-blue-light1"
+                  key="base"
+                >
+                  {selectedCoin}
+                </Menu.Item>
+                <Menu.Item
+                  className="text-r-neutral-title1 hover:bg-r-blue-light1"
+                  key="usd"
+                >
+                  USD
+                </Menu.Item>
               </Menu>
             }
           >
@@ -344,9 +357,17 @@ export const OrderBook: React.FC<{ latestTrade?: Trade }> = ({
             forceRender={true}
             transitionName=""
             overlay={
-              <Menu onClick={(info) => setAggregationIndex(info.key as number)}>
+              <Menu
+                className="bg-r-neutral-bg1"
+                onClick={(info) => setAggregationIndex(info.key as number)}
+              >
                 {aggregationLevels.map((level, index) => (
-                  <Menu.Item key={index}>{level.label}</Menu.Item>
+                  <Menu.Item
+                    className="text-r-neutral-title1 hover:bg-r-blue-light1"
+                    key={index}
+                  >
+                    {level.label}
+                  </Menu.Item>
                 ))}
               </Menu>
             }
@@ -368,15 +389,15 @@ export const OrderBook: React.FC<{ latestTrade?: Trade }> = ({
         </div>
       </div>
 
-      <div className="flex items-center justify-between px-[12px] py-[5px] text-[11px] text-r-neutral-foot flex-shrink-0">
-        <span className="min-w-[60px] text-left">
+      <div className="grid grid-cols-10 px-[12px] py-[5px] text-[11px] text-r-neutral-foot flex-shrink-0">
+        <span className="col-span-3 text-left">
           {t('page.perpsPro.orderBook.price')}
         </span>
-        <span className="min-w-[60px] text-right">
+        <span className="col-span-3 text-right">
           {t('page.perpsPro.orderBook.amount')} (
           {quoteUnit === 'base' ? selectedCoin : 'USD'})
         </span>
-        <span className="min-w-[60px] text-right">
+        <span className="col-span-4 text-right">
           {t('page.perpsPro.orderBook.total')} (
           {quoteUnit === 'base' ? selectedCoin : 'USD'})
         </span>
