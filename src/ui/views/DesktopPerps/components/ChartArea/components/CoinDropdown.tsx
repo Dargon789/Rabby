@@ -10,7 +10,7 @@ import React, {
 import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
 import clsx from 'clsx';
 import { splitNumberByStep } from '@/ui/utils';
-import { Dropdown, Input } from 'antd';
+import { Dropdown, Input, InputRef } from 'antd';
 import { ReactComponent as RcIconArrowDown } from '@/ui/assets/perps/icon-arrow-down.svg';
 import { ReactComponent as RcIconStar } from '@/ui/assets/perps/icon-star.svg';
 import { ReactComponent as RcIconStarFilled } from '@/ui/assets/perps/icon-star-filled.svg';
@@ -23,6 +23,7 @@ import BigNumber from 'bignumber.js';
 import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
 import { FixedSizeList } from 'react-window';
+import { formatPerpsCoin } from '../../../utils';
 
 const SearchInput = styled(Input)`
   background-color: var(--r-neutral-card1, #fff) !important;
@@ -31,6 +32,7 @@ const SearchInput = styled(Input)`
   }
   .ant-input {
     background-color: transparent !important;
+    color: var(--rb-neutral-title-1, #192945) !important;
   }
   height: 46px !important;
   border-radius: 6px !important;
@@ -141,7 +143,7 @@ const MarketRowComponent = memo(
             />
             <div>
               <span className="text-[13px] font-medium text-r-neutral-title-1">
-                {marketItem.name}
+                {formatPerpsCoin(marketItem.name)}
               </span>
               <span className="text-[13px] text-r-neutral-foot ml-4">
                 {marketItem.maxLeverage}x
@@ -159,19 +161,14 @@ const MarketRowComponent = memo(
             {/* 24h Change - 1.5x width */}
             <div
               className={clsx(
-                'text-[13px] text-r-neutral-title-1 text-start flex-[1.5]'
+                'text-[13px] text-start flex-[1.5]',
+                isPositive ? 'text-r-green-default' : 'text-r-red-default'
               )}
             >
               {isPositive ? '+' : '-'}$
-              {splitNumberByStep(Math.abs(priceChangeVal))}{' '}
-              <span
-                className={clsx(
-                  isPositive ? 'text-r-green-default' : 'text-r-red-default'
-                )}
-              >
-                {isPositive ? '+' : ''}
-                {priceChange.toFixed(2)}%
-              </span>
+              {splitNumberByStep(Math.abs(priceChangeVal))} /{' '}
+              {isPositive ? '+' : ''}
+              {priceChange.toFixed(2)}%
             </div>
 
             {/* 8hr Funding */}
@@ -238,12 +235,13 @@ export const CoinDropdown: React.FC<CoinDropdownProps> = ({
   const [sortField, setSortField] = useState<SortField>('dayNtlVlm');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<InputRef | null>(null);
   const listRef = useRef<FixedSizeList>(null);
   const { marketData, favoritedCoins, marketDataMap } = useRabbySelector(
     (state) => state.perps
   );
 
-  const marketItem = marketDataMap[coin.toUpperCase()];
+  const marketItem = marketDataMap[coin];
 
   // Reset scroll position and search text when dropdown opens
   useEffect(() => {
@@ -252,6 +250,7 @@ export const CoinDropdown: React.FC<CoinDropdownProps> = ({
       // Reset virtual list scroll position
       setTimeout(() => {
         listRef.current?.scrollTo(0);
+        searchInputRef.current?.focus();
       }, 0);
     }
   }, [dropdownVisible]);
@@ -380,6 +379,8 @@ export const CoinDropdown: React.FC<CoinDropdownProps> = ({
           prefix={<RcIconSearch className="text-r-neutral-foot" />}
           placeholder={t('page.perpsPro.chatArea.searchMarkets')}
           value={searchText}
+          ref={searchInputRef}
+          spellCheck={false}
           onChange={(e) => setSearchText(e.target.value)}
           allowClear
         />
@@ -480,25 +481,37 @@ export const CoinDropdown: React.FC<CoinDropdownProps> = ({
   );
 
   return (
-    <Dropdown
-      overlay={dropdownMenu}
-      // trigger={['click']}
-      transitionName=""
-      visible={dropdownVisible}
-      onVisibleChange={setDropdownVisible}
-      placement="bottomLeft"
-    >
-      <div className="mr-32 flex items-center gap-[8px] cursor-pointer transition-colors py-[4px] rounded-[6px] min-w-[90px] justify-center">
-        <TokenImg
-          logoUrl={marketItem?.logoUrl || ''}
-          withDirection={false}
-          size={24}
-        />
-        <div className="text-[20px] leading-[24px] font-bold text-r-neutral-title-1">
-          {coin}
-        </div>
-        <RcIconArrowDown className="text-r-neutral-secondary" />
+    <div className="mr-32 flex items-center gap-[8px] py-[4px]">
+      <div
+        className="flex items-center justify-center w-[16px] h-[16px] flex-shrink-0 cursor-pointer"
+        onClick={(e) => handleToggleFavorite(coin, e)}
+      >
+        {favoritedCoins.includes(coin) ? (
+          <RcIconStarFilled className="text-r-yellow-default" />
+        ) : (
+          <RcIconStar className="text-r-neutral-foot" />
+        )}
       </div>
-    </Dropdown>
+      <Dropdown
+        overlay={dropdownMenu}
+        // trigger={['click']}
+        transitionName=""
+        visible={dropdownVisible}
+        onVisibleChange={setDropdownVisible}
+        placement="bottomLeft"
+      >
+        <div className="flex items-center gap-[8px] cursor-pointer transition-colors rounded-[6px] min-w-[90px] justify-center">
+          <TokenImg
+            logoUrl={marketItem?.logoUrl || ''}
+            withDirection={false}
+            size={24}
+          />
+          <div className="text-[20px] leading-[24px] font-bold text-r-neutral-title-1">
+            {formatPerpsCoin(coin)}
+          </div>
+          <RcIconArrowDown className="text-r-neutral-secondary" />
+        </div>
+      </Dropdown>
+    </div>
   );
 };

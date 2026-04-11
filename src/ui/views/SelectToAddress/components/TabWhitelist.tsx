@@ -164,7 +164,7 @@ export default function TabWhitelist({
       {/* WhiteList or Imported Addresses List */}
       <div
         className="flex-1 overflow-y-auto px-[20px]"
-        style={{ paddingBottom: 72 }}
+        style={{ paddingBottom: 84 }}
       >
         <div className="h-full">
           {allAccounts.length > 0 ? (
@@ -189,7 +189,6 @@ export default function TabWhitelist({
                   showWhitelistIcon
                   allowEditAlias
                   hideBalance
-                  longEllipsis
                   address={item.address}
                   alias={ellipsisAddress(item.address)}
                   type={item.type}
@@ -202,12 +201,14 @@ export default function TabWhitelist({
             ))
           ) : (
             <EmptyWhitelistHolder
-              onAddWhitelist={() => {
+              onAddWhitelist={async () => {
                 if (getUiType().isDesktop) {
                   const query = new URLSearchParams(history.location.search);
                   query.set('sendPageType', 'whitelistInput');
                   query.set('action', 'send');
-                  wallet.openInDesktop(`desktop/profile?${query.toString()}`);
+                  wallet.openInDesktop(`desktop/profile?${query.toString()}`, {
+                    triggerFocusEventOnDesktop: false,
+                  });
                 } else {
                   history.push('/whitelist-input');
                 }

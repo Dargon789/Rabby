@@ -4,12 +4,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { sleep, useWallet } from '@/ui/utils';
 import { destroyPerpsSDK, getPerpsSDK } from '../sdkManager';
 import * as Sentry from '@sentry/browser';
+import { UserAbstractionResp } from '@rabby-wallet/hyperliquid-sdk';
 import {
   PERPS_AGENT_NAME,
   PERPS_BUILD_FEE,
   PERPS_BUILD_FEE_RECEIVE_ADDRESS,
   PERPS_REFERENCE_CODE,
   DELETE_AGENT_EMPTY_ADDRESS,
+  HYPE_EVM_BRIDGE_ADDRESS,
+  HYPE_SEND_ASSET_TOKEN,
 } from '../constants';
 import { isSameAddress } from '@/ui/utils';
 import { findAccountByPriority } from '@/utils/account';
@@ -45,7 +48,6 @@ export const usePerpsInitial = () => {
     currentPerpsAccount,
     isLogin,
     accountSummary,
-    positionAndOpenOrders,
   } = perpsState;
 
   // return bool if can use approveSignatures
@@ -101,6 +103,21 @@ export const usePerpsInitial = () => {
     wallet.setSendApproveAfterDeposit(address, []);
   });
 
+  const positionAndOpenOrders = useMemo(() => {
+    if (!perpsState.clearinghouseState || !perpsState.openOrders) {
+      return [];
+    }
+
+    return perpsState.clearinghouseState.assetPositions.map((position) => {
+      return {
+        ...position,
+        openOrders: perpsState.openOrders.filter(
+          (item) => item.coin === position.position.coin
+        ),
+      };
+    });
+  }, [perpsState.clearinghouseState, perpsState.openOrders]);
+
   const perpsPositionInfo = useMemo(() => {
     if (
       !isLogin ||
@@ -125,10 +142,10 @@ export const usePerpsInitial = () => {
 
   return {
     accountSummary,
-    positionAndOpenOrders,
     isLogin,
     safeCheckBuilderFee,
     perpsPositionInfo,
+    positionAndOpenOrders,
   };
 };
 
@@ -146,13 +163,10 @@ export const usePerpsState = ({
     isInitialized,
     currentPerpsAccount,
     isLogin,
-    positionAndOpenOrders,
     hasPermission,
     accountNeedApproveAgent,
     accountNeedApproveBuilderFee,
   } = perpsState;
-
-  console.log('-----', isInitialized);
 
   const wallet = useWallet();
 
@@ -311,7 +325,7 @@ export const usePerpsState = ({
       }
 
       let result: string[] = [];
-      await dispatch.account.changeAccountAsync(account);
+      // await dispatch.account.changeAccountAsync(account);
 
       if (supportedDirectSign(account.type)) {
         typedDataSignatureStore.close();
@@ -334,10 +348,15 @@ export const usePerpsState = ({
         typedDataSignatureStore.close();
       } else {
         for (const actionObj of actions) {
-          const signature = await wallet.sendRequest<string>({
-            method: 'eth_signTypedDataV4',
-            params: [account.address, JSON.stringify(actionObj)],
-          });
+          const signature = await wallet.sendRequest<string>(
+            {
+              method: 'eth_signTypedDataV4',
+              params: [account.address, JSON.stringify(actionObj)],
+            },
+            {
+              account,
+            }
+          );
           result.push(signature);
         }
       }
@@ -552,9 +571,12 @@ export const usePerpsState = ({
 
       await executeSignatures(signActions, currentPerpsAccount);
 
-      // try {
-      await handleDirectApprove(signActions);
-      // } catch (error) {}
+      try {
+        await handleDirectApprove(signActions);
+      } catch (error) {
+        // no throw error to show toast in prod env
+        console.error('Failed to handle direct approve:', error);
+      }
       dispatch.perps.setAccountNeedApproveAgent(false);
       dispatch.perps.setAccountNeedApproveBuilderFee(false);
       isHandlingApproveStatus.current = false;
@@ -711,9 +733,9 @@ export const usePerpsState = ({
   });
 
   const handleWithdraw = useMemoizedFn(
-    async (amount: number): Promise<boolean> => {
+    async (amount: number, isHypeWithdraw = false): Promise<boolean> => {
       try {
-        console.log('handleWithdraw', amount);
+        console.log('handleWithdraw', amount, isHypeWithdraw);
         const sdk = getPerpsSDK();
 
         if (!currentPerpsAccount) {
@@ -724,31 +746,60 @@ export const usePerpsState = ({
           throw new Error('Hyperliquid no exchange client');
         }
 
-        const action = sdk.exchange.prepareWithdraw({
-          amount: amount.toString(),
-          destination: currentPerpsAccount.address,
-        });
-        console.log('withdraw action', action);
+        const isUnified =
+          perpsState.userAbstraction === UserAbstractionResp.unifiedAccount;
 
-        const [signature] = await executeSignTypedData(
-          [action],
-          currentPerpsAccount
-        );
+        const time = Date.now();
+        let res: any;
+        if (isHypeWithdraw) {
+          const action = sdk.exchange.prepareSendAsset({
+            destination: HYPE_EVM_BRIDGE_ADDRESS,
+            amount: amount.toString(),
+            token: HYPE_SEND_ASSET_TOKEN,
+            sourceDex: isUnified ? 'spot' : '',
+            destinationDex: 'spot',
+          });
+          console.log('withdraw sendAsset action', action);
 
-        console.log('withdraw signature', signature);
-        const res = await sdk.exchange.sendWithdraw({
-          action: action.message as any,
-          nonce: action.nonce || 0,
-          signature: signature as string,
-        });
+          const [signature] = await executeSignTypedData(
+            [action],
+            currentPerpsAccount
+          );
+
+          res = await sdk.exchange.sendSendAsset({
+            action: action.message as any,
+            nonce: action.nonce || 0,
+            signature: signature as string,
+          });
+        } else {
+          const action = sdk.exchange.prepareWithdraw({
+            amount: amount.toString(),
+            destination: currentPerpsAccount.address,
+          });
+          console.log('withdraw action', action);
+
+          const [signature] = await executeSignTypedData(
+            [action],
+            currentPerpsAccount
+          );
+
+          console.log('withdraw signature', signature);
+          res = await sdk.exchange.sendWithdraw({
+            action: action.message as any,
+            nonce: action.nonce || 0,
+            signature: signature as string,
+          });
+        }
         console.log('withdraw res', res);
         dispatch.perps.setLocalLoadingHistory([
           {
-            time: Date.now(),
+            time,
             hash: res.hash || '',
             type: 'withdraw',
             status: 'pending',
-            usdValue: (amount - 1).toString(),
+            usdValue: isHypeWithdraw
+              ? amount.toString()
+              : (amount - 1).toString(),
           },
         ]);
         dispatch.perps.fetchClearinghouseState();
@@ -820,10 +871,10 @@ export const usePerpsState = ({
           account: initAccount,
           isPro: false,
         });
-        dispatch.perps.fetchMarketData(undefined);
-
         // checkIsNeedAutoLoginOut(initAccount.address, agentAddress);
         ensureLoginApproveSign(initAccount, agentAddress);
+
+        await dispatch.perps.fetchMarketData(undefined);
 
         dispatch.perps.setInitialized(true);
         return true;
@@ -835,11 +886,26 @@ export const usePerpsState = ({
     initIsLogin();
   }, [wallet, dispatch, isInitialized]);
 
+  const positionAndOpenOrders = useMemo(() => {
+    if (!perpsState.clearinghouseState || !perpsState.openOrders) {
+      return [];
+    }
+
+    return perpsState.clearinghouseState.assetPositions.map((position) => {
+      return {
+        ...position,
+        openOrders: perpsState.openOrders.filter(
+          (item) => item.coin === position.position.coin
+        ),
+      };
+    });
+  }, [perpsState.clearinghouseState, perpsState.openOrders]);
+
   return {
     // State
     marketData: perpsState.marketData,
     marketDataMap: perpsState.marketDataMap,
-    positionAndOpenOrders: perpsState.positionAndOpenOrders,
+    positionAndOpenOrders: positionAndOpenOrders,
     accountSummary: perpsState.accountSummary,
     currentPerpsAccount: perpsState.currentPerpsAccount,
     isLogin: perpsState.isLogin,

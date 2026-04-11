@@ -6,9 +6,8 @@ import { TokenWithChain, Popup } from '@/ui/component';
 import { ReactComponent as RcIconLoginLoading } from 'ui/assets/perps/IconLoginLoading.svg';
 import { formatUsdValue, useWallet } from '@/ui/utils';
 import {
-  ARB_USDC_TOKEN_ID,
-  ARB_USDC_TOKEN_ITEM,
-  ARB_USDC_TOKEN_SERVER_CHAIN,
+  WITHDRAW_TOKEN_LIST,
+  isDirectDepositToken as isDirectDepositTokenFn,
 } from '@/ui/views/Perps/constants';
 import { TokenItem } from '@rabby-wallet/rabby-api/dist/types';
 import { getTokenSymbol } from '@/ui/utils/token';
@@ -26,6 +25,7 @@ interface TokenSelectPopupProps {
   onSelect: (token: TokenItem) => void;
   tokenList: TokenItem[];
   tokenListLoading: boolean;
+  mode?: 'deposit' | 'withdraw';
 }
 
 export const TokenSelectPopup: React.FC<TokenSelectPopupProps> = ({
@@ -34,59 +34,27 @@ export const TokenSelectPopup: React.FC<TokenSelectPopupProps> = ({
   onSelect,
   tokenList,
   tokenListLoading,
+  mode = 'deposit',
 }) => {
   const { t } = useTranslation();
-  const supportedChains = useRabbySelector((s) => s.bridge.supportedChains);
   const { getContainer } = usePopupContainer();
   const wallet = useWallet();
+  const supportedChains = useRabbySelector((s) => s.bridge.supportedChains);
   const [clickLoading, setClickLoading] = useState(false);
   const [loadingItem, setLoadingItem] = useState<string | null>(null);
 
+  const isWithdrawMode = mode === 'withdraw';
+
   const sortedTokenList = useMemo(() => {
-    const items = [...(tokenList || [])];
+    return isWithdrawMode ? WITHDRAW_TOKEN_LIST : tokenList;
+  }, [tokenList, isWithdrawMode]);
 
-    // Sort by amount * price (descending)
-    items.sort((a, b) => {
-      const aValue = b.amount * b.price;
-      const bValue = a.amount * a.price;
-
-      // Check if tokens are in supported chains
-      const aChain = findChainByServerID(a.chain)?.enum || CHAINS_ENUM.ETH;
-      const bChain = findChainByServerID(b.chain)?.enum || CHAINS_ENUM.ETH;
-      const aIsSupported = supportedChains.includes(aChain);
-      const bIsSupported = supportedChains.includes(bChain);
-
-      // Supported chains first, then by value
-      if (aIsSupported && !bIsSupported) return -1;
-      if (!aIsSupported && bIsSupported) return 1;
-
-      // Both supported or both not supported, sort by value
-      return aValue - bValue;
-    });
-
-    // Move ARB USDC to the front if it exists
-    const idx = items.findIndex(
-      (token) =>
-        token.id === ARB_USDC_TOKEN_ID &&
-        token.chain === ARB_USDC_TOKEN_SERVER_CHAIN
-    );
-    if (idx > 0) {
-      const [hit] = items.splice(idx, 1);
-      items.unshift(hit);
-    } else if (idx === -1) {
-      items.unshift(ARB_USDC_TOKEN_ITEM);
-    }
-    return items;
-  }, [tokenList, supportedChains]);
+  const isDirectDepositToken = isDirectDepositTokenFn;
 
   const handleClickToken = useMemoizedFn(async (token: TokenItem) => {
     if (clickLoading) return;
     try {
-      if (
-        token.id === ARB_USDC_TOKEN_ID &&
-        token.chain === ARB_USDC_TOKEN_SERVER_CHAIN
-      ) {
-        // direct deposit
+      if (isWithdrawMode || isDirectDepositToken(token)) {
         onSelect(token);
         return;
       }
@@ -126,9 +94,11 @@ export const TokenSelectPopup: React.FC<TokenSelectPopupProps> = ({
       style: CSSProperties;
     }) => {
       const item = data[index];
-      const isDisabled = !supportedChains.includes(
-        findChainByServerID(item.chain)?.enum || CHAINS_ENUM.ETH
-      );
+      const isDisabled =
+        !isWithdrawMode &&
+        !supportedChains.includes(
+          findChainByServerID(item.chain)?.enum || CHAINS_ENUM.ETH
+        );
 
       return (
         <div
@@ -152,24 +122,45 @@ export const TokenSelectPopup: React.FC<TokenSelectPopupProps> = ({
             <span className="text-13 text-r-neutral-title-1 font-medium">
               {getTokenSymbol(item)}
             </span>
-            {item.id === ARB_USDC_TOKEN_ID &&
-              item.chain === ARB_USDC_TOKEN_SERVER_CHAIN && (
-                <div className="text-12 font-medium text-r-blue-default bg-r-blue-light-1 rounded-[4px] px-6 py-2">
-                  {t('page.perps.directDeposit')}
-                </div>
-              )}
-          </div>
-          <div className="text-13 text-r-neutral-title-1 font-medium">
-            {clickLoading && loadingItem === item.id + item.chain ? (
-              <RcIconLoginLoading className="w-16 h-16 animate-spin" />
-            ) : (
-              formatUsdValue(item.amount * item.price || 0)
+            {isDirectDepositToken(item) && !isWithdrawMode && (
+              <div className="flex items-center gap-4 text-[11px] font-medium text-r-blue-default bg-r-blue-light-1 rounded-[4px] px-6 py-2">
+                <svg
+                  width="8"
+                  height="10"
+                  viewBox="0 0 10 12"
+                  fill="currentColor"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path d="M5.833 0 0 6.667h4.167L4.167 12 10 5.333H5.833z" />
+                </svg>
+                {t('page.perps.directDepositFast')}
+              </div>
             )}
           </div>
+          {!isWithdrawMode && (
+            <div className="text-13 text-r-neutral-title-1 font-medium">
+              {clickLoading && loadingItem === item.id + item.chain ? (
+                <RcIconLoginLoading className="w-16 h-16 animate-spin" />
+              ) : (
+                formatUsdValue(
+                  isDirectDepositToken(item)
+                    ? item.amount
+                    : item.amount * item.price || 0
+                )
+              )}
+            </div>
+          )}
         </div>
       );
     },
-    [handleClickToken, clickLoading, t, loadingItem]
+    [
+      handleClickToken,
+      clickLoading,
+      t,
+      loadingItem,
+      supportedChains,
+      isWithdrawMode,
+    ]
   );
 
   return (
@@ -191,7 +182,9 @@ export const TokenSelectPopup: React.FC<TokenSelectPopupProps> = ({
       <div className="flex flex-col h-full pt-16 px-16 bg-r-neutral-bg2 rounded-t-[16px]">
         {/* Token Select Header */}
         <div className="text-[20px] font-medium text-r-neutral-title-1 text-center mb-16">
-          {t('page.perps.selectTokenToDeposit')}
+          {isWithdrawMode
+            ? t('page.perps.selectTokenToWithdraw')
+            : t('page.perps.selectTokenToDeposit')}
         </div>
 
         {/* Token List */}
