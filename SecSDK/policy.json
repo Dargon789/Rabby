@@ -1,4 +1,45 @@
 {
+    "node_modules/@aave/contract-helpers/dist/esm/commons/types.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@aave/math-utils/dist/esm/bignumber.js": {
+        "dependency": [
+            "node_modules/bignumber.js/bignumber.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@aave/math-utils/dist/esm/constants.js": {
+        "dependency": [
+            "node_modules/@aave/math-utils/dist/esm/bignumber.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@aave/math-utils/dist/esm/formatters/usd/normalized-to-usd.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@aave/math-utils/dist/esm/pool-math.js": {
+        "dependency": [
+            "node_modules/@aave/math-utils/dist/esm/bignumber.js",
+            "node_modules/@aave/math-utils/dist/esm/constants.js",
+            "node_modules/@aave/math-utils/dist/esm/ray.math.js",
+            "node_modules/bignumber.js/bignumber.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@aave/math-utils/dist/esm/ray.math.js": {
+        "dependency": [
+            "node_modules/@aave/math-utils/dist/esm/bignumber.js"
+        ],
+        "global": {},
+        "enable": true
+    },
     "node_modules/@adraffy/ens-normalize/dist/index.cjs": {
         "dependency": [],
         "global": {
@@ -948,6 +989,96 @@
             "module": "r",
             "require": "r"
         },
+        "enable": true
+    },
+    "node_modules/@bgd-labs/aave-address-book/dist/AaveV3Arbitrum.mjs": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@bgd-labs/aave-address-book/dist/AaveV3Avalanche.mjs": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@bgd-labs/aave-address-book/dist/AaveV3BNB.mjs": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@bgd-labs/aave-address-book/dist/AaveV3Base.mjs": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@bgd-labs/aave-address-book/dist/AaveV3Celo.mjs": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@bgd-labs/aave-address-book/dist/AaveV3Ethereum.mjs": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@bgd-labs/aave-address-book/dist/AaveV3EthereumLido.mjs": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@bgd-labs/aave-address-book/dist/AaveV3Gnosis.mjs": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@bgd-labs/aave-address-book/dist/AaveV3InkWhitelabel.mjs": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@bgd-labs/aave-address-book/dist/AaveV3Linea.mjs": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@bgd-labs/aave-address-book/dist/AaveV3Metis.mjs": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@bgd-labs/aave-address-book/dist/AaveV3Optimism.mjs": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@bgd-labs/aave-address-book/dist/AaveV3Plasma.mjs": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@bgd-labs/aave-address-book/dist/AaveV3Polygon.mjs": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@bgd-labs/aave-address-book/dist/AaveV3Scroll.mjs": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@bgd-labs/aave-address-book/dist/AaveV3Soneium.mjs": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@bgd-labs/aave-address-book/dist/AaveV3Sonic.mjs": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@bgd-labs/aave-address-book/dist/AaveV3ZkSync.mjs": {
+        "dependency": [],
+        "global": {},
         "enable": true
     },
     "node_modules/@chainsafe/as-sha256/lib/hashObject.js": {
@@ -2172,7 +2303,7 @@
         "dependency": [
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Subject.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Subscription.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
@@ -2181,7 +2312,7 @@
         "dependency": [
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Subject.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/util/ObjectUnsubscribedError.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
@@ -2206,7 +2337,7 @@
     "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/OuterSubscriber.js": {
         "dependency": [
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Subscriber.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
@@ -2218,7 +2349,7 @@
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Subscription.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/operators/observeOn.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/util/ObjectUnsubscribedError.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
@@ -2235,7 +2366,7 @@
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Subscription.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/symbol/rxSubscriber.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/util/ObjectUnsubscribedError.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "rxSubscriber": "r"
@@ -2245,7 +2376,7 @@
     "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/SubjectSubscription.js": {
         "dependency": [
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Subscription.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
@@ -2258,7 +2389,7 @@
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/symbol/rxSubscriber.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/util/hostReportError.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/util/isFunction.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "empty": "r",
@@ -2286,7 +2417,7 @@
     "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/innerSubscribe.js": {
         "dependency": [
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Subscriber.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
@@ -2297,7 +2428,7 @@
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Subscriber.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Subscription.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/operators/refCount.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "refCount": "r"
@@ -2310,7 +2441,7 @@
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/observable/fromArray.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/util/isArray.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/util/isScheduler.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
@@ -2372,7 +2503,7 @@
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/OuterSubscriber.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/observable/fromArray.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/util/isArray.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
@@ -2398,7 +2529,7 @@
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/observable/fromArray.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/symbol/iterator.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/util/isArray.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "iterator": "r"
@@ -2415,7 +2546,7 @@
     "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/operators/filter.js": {
         "dependency": [
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Subscriber.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
@@ -2425,7 +2556,7 @@
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Subject.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Subscriber.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Subscription.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
@@ -2433,7 +2564,7 @@
     "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/operators/map.js": {
         "dependency": [
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Subscriber.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
@@ -2451,7 +2582,7 @@
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/innerSubscribe.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/observable/from.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/operators/map.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
@@ -2460,7 +2591,7 @@
         "dependency": [
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Notification.js",
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Subscriber.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
@@ -2468,7 +2599,7 @@
     "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/operators/refCount.js": {
         "dependency": [
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Subscriber.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
@@ -2483,7 +2614,7 @@
     "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/scheduler/AsyncScheduler.js": {
         "dependency": [
             "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/Scheduler.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
@@ -2609,6 +2740,11 @@
         "enable": true
     },
     "node_modules/@coinbase/wallet-sdk/node_modules/rxjs/_esm5/internal/util/subscribeToArray.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@coinbase/wallet-sdk/node_modules/tslib/tslib.es6.js": {
         "dependency": [],
         "global": {},
         "enable": true
@@ -3651,6 +3787,14 @@
         },
         "enable": true
     },
+    "node_modules/@ethersproject/base64/lib.esm/index.js": {
+        "dependency": [],
+        "global": {
+            "decode": "r",
+            "encode": "r"
+        },
+        "enable": true
+    },
     "node_modules/@ethersproject/constants/lib.esm/addresses.js": {
         "dependency": [],
         "global": {},
@@ -3682,6 +3826,21 @@
         "global": {},
         "enable": true
     },
+    "node_modules/@ethersproject/hash/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/@ethersproject/hash/lib.esm/id.js",
+            "node_modules/@ethersproject/hash/lib.esm/message.js"
+        ],
+        "global": {
+            "TypedDataEncoder": "r"
+        },
+        "enable": true
+    },
+    "node_modules/@ethersproject/hash/lib.esm/message.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
     "node_modules/@ethersproject/hash/node_modules/bn.js/lib/bn.js": {
         "dependency": [
             "node_modules/@ethersproject/hash/node_modules/bn.js/lib/bn.js"
@@ -3693,6 +3852,54 @@
         },
         "enable": true
     },
+    "node_modules/@ethersproject/units/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/units/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/@ethersproject/units/lib.esm/_version.js",
+            "node_modules/@ethersproject/units/node_modules/@ethersproject/bignumber/lib.esm/fixednumber.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/units/node_modules/@ethersproject/bignumber/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/units/node_modules/@ethersproject/bignumber/lib.esm/bignumber.js": {
+        "dependency": [
+            "node_modules/@ethersproject/units/node_modules/@ethersproject/bignumber/lib.esm/_version.js",
+            "node_modules/@ethersproject/units/node_modules/@ethersproject/bytes/lib.esm/index.js",
+            "node_modules/@ethersproject/units/node_modules/bn.js/lib/bn.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/units/node_modules/@ethersproject/bignumber/lib.esm/fixednumber.js": {
+        "dependency": [
+            "node_modules/@ethersproject/units/node_modules/@ethersproject/bignumber/lib.esm/_version.js",
+            "node_modules/@ethersproject/units/node_modules/@ethersproject/bignumber/lib.esm/bignumber.js",
+            "node_modules/@ethersproject/units/node_modules/@ethersproject/bytes/lib.esm/index.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/units/node_modules/@ethersproject/bytes/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/units/node_modules/@ethersproject/bytes/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/@ethersproject/units/node_modules/@ethersproject/bytes/lib.esm/_version.js"
+        ],
+        "global": {},
+        "enable": true
+    },
     "node_modules/@ethersproject/units/node_modules/bn.js/lib/bn.js": {
         "dependency": [
             "node_modules/@ethersproject/units/node_modules/bn.js/lib/bn.js"
@@ -3701,6 +3908,314 @@
             "Buffer": "r",
             "module": "r",
             "require": "r"
+        },
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/@ethersproject/hash/lib.esm/index.js",
+            "node_modules/@ethersproject/hash/lib.esm/message.js",
+            "node_modules/@ethersproject/wallet/lib.esm/_version.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/abstract-provider/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/abstract-signer/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bytes/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/hdnode/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/json-wallets/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/json-wallets/lib.esm/keystore.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/properties/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/random/lib.esm/random.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/signing-key/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/transactions/lib.esm/index.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/abstract-provider/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/abstract-provider/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/abstract-provider/lib.esm/_version.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bignumber/lib.esm/bignumber.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bytes/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/properties/lib.esm/index.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/abstract-signer/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/abstract-signer/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/abstract-signer/lib.esm/_version.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/properties/lib.esm/index.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/basex/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bytes/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/properties/lib.esm/index.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bignumber/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bignumber/lib.esm/bignumber.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bignumber/lib.esm/_version.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bytes/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/bn.js/lib/bn.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bytes/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bytes/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bytes/lib.esm/_version.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/hdnode/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/hdnode/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/basex/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bignumber/lib.esm/bignumber.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bytes/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/hdnode/lib.esm/_version.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/pbkdf2/lib.esm/pbkdf2.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/properties/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/sha2/lib.esm/sha2.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/sha2/lib.esm/types.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/signing-key/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/transactions/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/wordlists/lib.esm/wordlists.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/json-wallets/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/json-wallets/lib.esm/crowdsale.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bytes/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/json-wallets/lib.esm/_version.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/json-wallets/lib.esm/utils.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/pbkdf2/lib.esm/pbkdf2.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/properties/lib.esm/index.js",
+            "node_modules/aes-js/index.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/json-wallets/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/json-wallets/lib.esm/crowdsale.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/json-wallets/lib.esm/inspect.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/json-wallets/lib.esm/keystore.js"
+        ],
+        "global": {
+            "decrypt": "r",
+            "decryptSync": "r",
+            "encrypt": "r"
+        },
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/json-wallets/lib.esm/inspect.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/json-wallets/lib.esm/keystore.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bytes/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/hdnode/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/json-wallets/lib.esm/_version.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/json-wallets/lib.esm/utils.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/pbkdf2/lib.esm/pbkdf2.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/properties/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/random/lib.esm/random.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/transactions/lib.esm/index.js",
+            "node_modules/aes-js/index.js",
+            "node_modules/scrypt-js/scrypt.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/json-wallets/lib.esm/utils.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bytes/lib.esm/index.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/pbkdf2/lib.esm/pbkdf2.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bytes/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/sha2/lib.esm/sha2.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/properties/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/properties/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/properties/lib.esm/_version.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/random/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/random/lib.esm/random.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bytes/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/random/lib.esm/_version.js"
+        ],
+        "global": {
+            "crypto": "r",
+            "global": "r"
+        },
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/rlp/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/rlp/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bytes/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/rlp/lib.esm/_version.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/sha2/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/sha2/lib.esm/sha2.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bytes/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/sha2/lib.esm/_version.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/sha2/lib.esm/types.js",
+            "node_modules/hash.js/lib/hash.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/sha2/lib.esm/types.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/signing-key/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/signing-key/lib.esm/elliptic.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/bn.js/lib/bn.js",
+            "node_modules/hash.js/lib/hash.js"
+        ],
+        "global": {
+            "global": "r"
+        },
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/signing-key/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bytes/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/properties/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/signing-key/lib.esm/_version.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/signing-key/lib.esm/elliptic.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/transactions/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/transactions/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bignumber/lib.esm/bignumber.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/bytes/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/properties/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/rlp/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/signing-key/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/transactions/lib.esm/_version.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/wordlists/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/wordlists/lib.esm/lang-en.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/wordlists/lib.esm/wordlist.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/wordlists/lib.esm/wordlist.js": {
+        "dependency": [
+            "node_modules/@ethersproject/hash/lib.esm/id.js",
+            "node_modules/@ethersproject/hash/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/properties/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/wordlists/lib.esm/_version.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@ethersproject/wallet/node_modules/@ethersproject/wordlists/lib.esm/wordlists.js": {
+        "dependency": [
+            "node_modules/@ethersproject/wallet/node_modules/@ethersproject/wordlists/lib.esm/lang-en.js"
+        ],
+        "global": {
+            "langEn": "r"
         },
         "enable": true
     },
@@ -5163,8 +5678,8 @@
             "node_modules/@keystonehq/bc-ur-registry-eth/node_modules/@keystonehq/bc-ur-registry/dist/patchCBOR.js",
             "node_modules/@keystonehq/bc-ur-registry-eth/node_modules/@keystonehq/bc-ur-registry/dist/types.js",
             "node_modules/@keystonehq/bc-ur-registry-eth/node_modules/@keystonehq/bc-ur-registry/dist/utils.js",
-            "node_modules/@keystonehq/bc-ur-registry-eth/node_modules/tslib/tslib.es6.js",
-            "node_modules/buffer/index.js"
+            "node_modules/buffer/index.js",
+            "node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "exports": "r",
@@ -5246,11 +5761,6 @@
             "module": "r",
             "require": "r"
         },
-        "enable": true
-    },
-    "node_modules/@keystonehq/bc-ur-registry-eth/node_modules/tslib/tslib.es6.js": {
-        "dependency": [],
-        "global": {},
         "enable": true
     },
     "node_modules/@keystonehq/bc-ur-registry/dist/Bytes.js": {
@@ -5515,8 +6025,8 @@
             "node_modules/@keystonehq/bc-ur-registry/dist/patchCBOR.js",
             "node_modules/@keystonehq/bc-ur-registry/dist/types.js",
             "node_modules/@keystonehq/bc-ur-registry/dist/utils.js",
-            "node_modules/@keystonehq/bc-ur-registry/node_modules/tslib/tslib.es6.js",
-            "node_modules/buffer/index.js"
+            "node_modules/buffer/index.js",
+            "node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "exports": "r",
@@ -5583,11 +6093,6 @@
             "exports": "r",
             "require": "r"
         },
-        "enable": true
-    },
-    "node_modules/@keystonehq/bc-ur-registry/node_modules/tslib/tslib.es6.js": {
-        "dependency": [],
-        "global": {},
         "enable": true
     },
     "node_modules/@keystonehq/hw-app-eth/lib/index.js": {
@@ -7314,7 +7819,7 @@
             "node_modules/@keystonehq/hw-app-eth/node_modules/@keystonehq/bc-ur-registry-eth/node_modules/@keystonehq/bc-ur-registry/dist/patchCBOR.js",
             "node_modules/@keystonehq/hw-app-eth/node_modules/@keystonehq/bc-ur-registry-eth/node_modules/@keystonehq/bc-ur-registry/dist/types.js",
             "node_modules/@keystonehq/hw-app-eth/node_modules/@keystonehq/bc-ur-registry-eth/node_modules/@keystonehq/bc-ur-registry/dist/utils.js",
-            "node_modules/@keystonehq/hw-app-eth/node_modules/tslib/tslib.es6.js"
+            "node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "exports": "r",
@@ -8500,11 +9005,6 @@
             "module": "r",
             "require": "r"
         },
-        "enable": true
-    },
-    "node_modules/@keystonehq/hw-app-eth/node_modules/tslib/tslib.es6.js": {
-        "dependency": [],
-        "global": {},
         "enable": true
     },
     "node_modules/@keystonehq/hw-transport-error/lib/error.js": {
@@ -23599,8 +24099,8 @@
         "dependency": [
             "node_modules/@rabby-wallet/eth-walletconnect-keyring/node_modules/@walletconnect/keyvaluestorage/dist/cjs/browser/lib/localStorage.js",
             "node_modules/@rabby-wallet/eth-walletconnect-keyring/node_modules/@walletconnect/keyvaluestorage/dist/cjs/shared/index.js",
-            "node_modules/safe-json-utils/dist/cjs/index.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@rabby-wallet/eth-walletconnect-keyring/node_modules/tslib/tslib.es6.js",
+            "node_modules/safe-json-utils/dist/cjs/index.js"
         ],
         "global": {
             "exports": "r",
@@ -23624,7 +24124,7 @@
             "node_modules/@rabby-wallet/eth-walletconnect-keyring/node_modules/@walletconnect/keyvaluestorage/dist/cjs/shared/index.js",
             "node_modules/@rabby-wallet/eth-walletconnect-keyring/node_modules/@walletconnect/keyvaluestorage/dist/cjs/shared/types.js",
             "node_modules/@rabby-wallet/eth-walletconnect-keyring/node_modules/@walletconnect/keyvaluestorage/dist/cjs/shared/utils.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@rabby-wallet/eth-walletconnect-keyring/node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "exports": "r",
@@ -23647,6 +24147,11 @@
             "exports": "r",
             "require": "r"
         },
+        "enable": true
+    },
+    "node_modules/@rabby-wallet/eth-walletconnect-keyring/node_modules/tslib/tslib.es6.js": {
+        "dependency": [],
+        "global": {},
         "enable": true
     },
     "node_modules/@rabby-wallet/eth-walletconnect-keyring/node_modules/web3-utils/lib/index.js": {
@@ -51047,10 +51552,10 @@
             "node_modules/@sentry/browser/esm/eventbuilder.js",
             "node_modules/@sentry/browser/esm/transports/fetch.js",
             "node_modules/@sentry/browser/esm/transports/xhr.js",
+            "node_modules/@sentry/browser/node_modules/tslib/tslib.es6.js",
             "node_modules/@sentry/core/esm/basebackend.js",
             "node_modules/@sentry/types/esm/severity.js",
-            "node_modules/@sentry/utils/esm/supports.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/esm/supports.js"
         ],
         "global": {},
         "enable": true
@@ -51060,11 +51565,11 @@
             "node_modules/@sentry/browser/esm/backend.js",
             "node_modules/@sentry/browser/esm/helpers.js",
             "node_modules/@sentry/browser/esm/integrations/breadcrumbs.js",
+            "node_modules/@sentry/browser/node_modules/tslib/tslib.es6.js",
             "node_modules/@sentry/core/esm/baseclient.js",
             "node_modules/@sentry/core/esm/version.js",
             "node_modules/@sentry/utils/esm/logger.js",
-            "node_modules/@sentry/utils/esm/misc.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/esm/misc.js"
         ],
         "global": {},
         "enable": true
@@ -51073,21 +51578,21 @@
         "dependency": [
             "node_modules/@sentry/browser/esm/parsers.js",
             "node_modules/@sentry/browser/esm/tracekit.js",
+            "node_modules/@sentry/browser/node_modules/tslib/tslib.es6.js",
             "node_modules/@sentry/types/esm/severity.js",
             "node_modules/@sentry/utils/esm/is.js",
             "node_modules/@sentry/utils/esm/misc.js",
-            "node_modules/@sentry/utils/esm/syncpromise.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/esm/syncpromise.js"
         ],
         "global": {},
         "enable": true
     },
     "node_modules/@sentry/browser/esm/helpers.js": {
         "dependency": [
+            "node_modules/@sentry/browser/node_modules/tslib/tslib.es6.js",
             "node_modules/@sentry/core/esm/api.js",
             "node_modules/@sentry/utils/esm/logger.js",
-            "node_modules/@sentry/utils/esm/misc.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/esm/misc.js"
         ],
         "global": {
             "document": "r",
@@ -51097,13 +51602,13 @@
     },
     "node_modules/@sentry/browser/esm/integrations/breadcrumbs.js": {
         "dependency": [
+            "node_modules/@sentry/browser/node_modules/tslib/tslib.es6.js",
             "node_modules/@sentry/core/node_modules/@sentry/hub/esm/hub.js",
             "node_modules/@sentry/types/esm/severity.js",
             "node_modules/@sentry/utils/esm/browser.js",
             "node_modules/@sentry/utils/esm/instrument.js",
             "node_modules/@sentry/utils/esm/misc.js",
-            "node_modules/@sentry/utils/esm/string.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/esm/string.js"
         ],
         "global": {},
         "enable": true
@@ -51112,13 +51617,13 @@
         "dependency": [
             "node_modules/@sentry/browser/esm/eventbuilder.js",
             "node_modules/@sentry/browser/esm/helpers.js",
+            "node_modules/@sentry/browser/node_modules/tslib/tslib.es6.js",
             "node_modules/@sentry/core/node_modules/@sentry/hub/esm/hub.js",
             "node_modules/@sentry/types/esm/severity.js",
             "node_modules/@sentry/utils/esm/instrument.js",
             "node_modules/@sentry/utils/esm/is.js",
             "node_modules/@sentry/utils/esm/logger.js",
-            "node_modules/@sentry/utils/esm/misc.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/esm/misc.js"
         ],
         "global": {},
         "enable": true
@@ -51127,10 +51632,10 @@
         "dependency": [
             "node_modules/@sentry/browser/esm/parsers.js",
             "node_modules/@sentry/browser/esm/tracekit.js",
+            "node_modules/@sentry/browser/node_modules/tslib/tslib.es6.js",
             "node_modules/@sentry/core/node_modules/@sentry/hub/esm/hub.js",
             "node_modules/@sentry/core/node_modules/@sentry/hub/esm/scope.js",
-            "node_modules/@sentry/utils/esm/is.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/esm/is.js"
         ],
         "global": {},
         "enable": true
@@ -51138,9 +51643,9 @@
     "node_modules/@sentry/browser/esm/integrations/trycatch.js": {
         "dependency": [
             "node_modules/@sentry/browser/esm/helpers.js",
+            "node_modules/@sentry/browser/node_modules/tslib/tslib.es6.js",
             "node_modules/@sentry/utils/esm/misc.js",
-            "node_modules/@sentry/utils/esm/stacktrace.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/esm/stacktrace.js"
         ],
         "global": {
             "XMLHttpRequest": "r"
@@ -51149,10 +51654,10 @@
     },
     "node_modules/@sentry/browser/esm/integrations/useragent.js": {
         "dependency": [
+            "node_modules/@sentry/browser/node_modules/tslib/tslib.es6.js",
             "node_modules/@sentry/core/node_modules/@sentry/hub/esm/hub.js",
             "node_modules/@sentry/core/node_modules/@sentry/hub/esm/scope.js",
-            "node_modules/@sentry/utils/esm/misc.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/esm/misc.js"
         ],
         "global": {},
         "enable": true
@@ -51190,20 +51695,20 @@
     },
     "node_modules/@sentry/browser/esm/tracekit.js": {
         "dependency": [
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/browser/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
     },
     "node_modules/@sentry/browser/esm/transports/base.js": {
         "dependency": [
+            "node_modules/@sentry/browser/node_modules/tslib/tslib.es6.js",
             "node_modules/@sentry/core/esm/api.js",
             "node_modules/@sentry/types/esm/status.js",
             "node_modules/@sentry/utils/esm/error.js",
             "node_modules/@sentry/utils/esm/logger.js",
             "node_modules/@sentry/utils/esm/misc.js",
-            "node_modules/@sentry/utils/esm/promisebuffer.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/esm/promisebuffer.js"
         ],
         "global": {},
         "enable": true
@@ -51211,12 +51716,12 @@
     "node_modules/@sentry/browser/esm/transports/fetch.js": {
         "dependency": [
             "node_modules/@sentry/browser/esm/transports/base.js",
+            "node_modules/@sentry/browser/node_modules/tslib/tslib.es6.js",
             "node_modules/@sentry/core/esm/request.js",
             "node_modules/@sentry/utils/esm/logger.js",
             "node_modules/@sentry/utils/esm/misc.js",
             "node_modules/@sentry/utils/esm/supports.js",
-            "node_modules/@sentry/utils/esm/syncpromise.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/esm/syncpromise.js"
         ],
         "global": {},
         "enable": true
@@ -51224,13 +51729,18 @@
     "node_modules/@sentry/browser/esm/transports/xhr.js": {
         "dependency": [
             "node_modules/@sentry/browser/esm/transports/base.js",
+            "node_modules/@sentry/browser/node_modules/tslib/tslib.es6.js",
             "node_modules/@sentry/core/esm/request.js",
-            "node_modules/@sentry/utils/esm/syncpromise.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/esm/syncpromise.js"
         ],
         "global": {
             "XMLHttpRequest": "r"
         },
+        "enable": true
+    },
+    "node_modules/@sentry/browser/node_modules/tslib/tslib.es6.js": {
+        "dependency": [],
+        "global": {},
         "enable": true
     },
     "node_modules/@sentry/core/esm/api.js": {
@@ -51253,6 +51763,7 @@
         "dependency": [
             "node_modules/@sentry/core/esm/integration.js",
             "node_modules/@sentry/core/node_modules/@sentry/hub/esm/scope.js",
+            "node_modules/@sentry/core/node_modules/tslib/tslib.es6.js",
             "node_modules/@sentry/types/esm/session.js",
             "node_modules/@sentry/utils/esm/dsn.js",
             "node_modules/@sentry/utils/esm/error.js",
@@ -51261,8 +51772,7 @@
             "node_modules/@sentry/utils/esm/misc.js",
             "node_modules/@sentry/utils/esm/string.js",
             "node_modules/@sentry/utils/esm/syncpromise.js",
-            "node_modules/@sentry/utils/esm/time.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/esm/time.js"
         ],
         "global": {
             "clearInterval": "r",
@@ -51274,8 +51784,8 @@
         "dependency": [
             "node_modules/@sentry/core/node_modules/@sentry/hub/esm/hub.js",
             "node_modules/@sentry/core/node_modules/@sentry/hub/esm/scope.js",
-            "node_modules/@sentry/utils/esm/logger.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/core/node_modules/tslib/tslib.es6.js",
+            "node_modules/@sentry/utils/esm/logger.js"
         ],
         "global": {},
         "enable": true
@@ -51289,17 +51799,17 @@
         "dependency": [
             "node_modules/@sentry/core/node_modules/@sentry/hub/esm/hub.js",
             "node_modules/@sentry/core/node_modules/@sentry/hub/esm/scope.js",
+            "node_modules/@sentry/core/node_modules/tslib/tslib.es6.js",
             "node_modules/@sentry/utils/esm/logger.js",
             "node_modules/@sentry/utils/esm/misc.js",
-            "node_modules/@sentry/utils/esm/string.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/esm/string.js"
         ],
         "global": {},
         "enable": true
     },
     "node_modules/@sentry/core/esm/request.js": {
         "dependency": [
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/core/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
@@ -51329,23 +51839,23 @@
         "dependency": [
             "node_modules/@sentry/core/node_modules/@sentry/hub/esm/scope.js",
             "node_modules/@sentry/core/node_modules/@sentry/hub/esm/session.js",
+            "node_modules/@sentry/core/node_modules/tslib/tslib.es6.js",
             "node_modules/@sentry/types/esm/session.js",
             "node_modules/@sentry/utils/esm/logger.js",
             "node_modules/@sentry/utils/esm/misc.js",
             "node_modules/@sentry/utils/esm/node.js",
-            "node_modules/@sentry/utils/esm/time.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/esm/time.js"
         ],
         "global": {},
         "enable": true
     },
     "node_modules/@sentry/core/node_modules/@sentry/hub/esm/scope.js": {
         "dependency": [
+            "node_modules/@sentry/core/node_modules/tslib/tslib.es6.js",
             "node_modules/@sentry/utils/esm/is.js",
             "node_modules/@sentry/utils/esm/misc.js",
             "node_modules/@sentry/utils/esm/syncpromise.js",
-            "node_modules/@sentry/utils/esm/time.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/esm/time.js"
         ],
         "global": {},
         "enable": true
@@ -51356,6 +51866,11 @@
             "node_modules/@sentry/utils/esm/misc.js",
             "node_modules/@sentry/utils/esm/time.js"
         ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/@sentry/core/node_modules/tslib/tslib.es6.js": {
+        "dependency": [],
         "global": {},
         "enable": true
     },
@@ -51384,7 +51899,7 @@
     "node_modules/@sentry/utils/esm/dsn.js": {
         "dependency": [
             "node_modules/@sentry/utils/esm/error.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
@@ -51392,7 +51907,7 @@
     "node_modules/@sentry/utils/esm/error.js": {
         "dependency": [
             "node_modules/@sentry/utils/esm/polyfill.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/node_modules/tslib/tslib.es6.js"
         ],
         "global": {},
         "enable": true
@@ -51404,7 +51919,7 @@
             "node_modules/@sentry/utils/esm/misc.js",
             "node_modules/@sentry/utils/esm/stacktrace.js",
             "node_modules/@sentry/utils/esm/supports.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@sentry/utils/node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "Request": "r",
@@ -51554,6 +52069,11 @@
         "global": {
             "module": "r"
         },
+        "enable": true
+    },
+    "node_modules/@sentry/utils/node_modules/tslib/tslib.es6.js": {
+        "dependency": [],
+        "global": {},
         "enable": true
     },
     "node_modules/@stablelib/binary/lib/binary.js": {
@@ -56682,12 +57202,17 @@
             "node_modules/@walletconnect/environment/dist/cjs/crypto.js",
             "node_modules/@walletconnect/environment/dist/cjs/env.js",
             "node_modules/@walletconnect/environment/dist/cjs/index.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@walletconnect/environment/node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "exports": "r",
             "require": "r"
         },
+        "enable": true
+    },
+    "node_modules/@walletconnect/environment/node_modules/tslib/tslib.es6.js": {
+        "dependency": [],
+        "global": {},
         "enable": true
     },
     "node_modules/@walletconnect/events/dist/esm/events.js": {
@@ -56716,7 +57241,7 @@
         "dependency": [
             "node_modules/@walletconnect/heartbeat/dist/cjs/constants/heartbeat.js",
             "node_modules/@walletconnect/heartbeat/dist/cjs/constants/index.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@walletconnect/heartbeat/node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "exports": "r",
@@ -56728,9 +57253,9 @@
         "dependency": [
             "node_modules/@walletconnect/heartbeat/dist/cjs/constants/index.js",
             "node_modules/@walletconnect/heartbeat/dist/cjs/types/index.js",
+            "node_modules/@walletconnect/heartbeat/node_modules/tslib/tslib.es6.js",
             "node_modules/@walletconnect/time/dist/cjs/index.js",
-            "node_modules/events/events.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/events/events.js"
         ],
         "global": {
             "clearInterval": "r",
@@ -56746,7 +57271,7 @@
             "node_modules/@walletconnect/heartbeat/dist/cjs/heartbeat.js",
             "node_modules/@walletconnect/heartbeat/dist/cjs/index.js",
             "node_modules/@walletconnect/heartbeat/dist/cjs/types/index.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@walletconnect/heartbeat/node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "exports": "r",
@@ -56768,12 +57293,17 @@
         "dependency": [
             "node_modules/@walletconnect/heartbeat/dist/cjs/types/heartbeat.js",
             "node_modules/@walletconnect/heartbeat/dist/cjs/types/index.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@walletconnect/heartbeat/node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "exports": "r",
             "require": "r"
         },
+        "enable": true
+    },
+    "node_modules/@walletconnect/heartbeat/node_modules/tslib/tslib.es6.js": {
+        "dependency": [],
+        "global": {},
         "enable": true
     },
     "node_modules/@walletconnect/jsonrpc-utils/dist/esm/constants.js": {
@@ -56846,8 +57376,8 @@
             "node_modules/@walletconnect/logger/dist/cjs/constants.js",
             "node_modules/@walletconnect/logger/dist/cjs/index.js",
             "node_modules/@walletconnect/logger/dist/cjs/utils.js",
-            "node_modules/pino/browser.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@walletconnect/logger/node_modules/tslib/tslib.es6.js",
+            "node_modules/pino/browser.js"
         ],
         "global": {
             "exports": "r",
@@ -56865,6 +57395,11 @@
         },
         "enable": true
     },
+    "node_modules/@walletconnect/logger/node_modules/tslib/tslib.es6.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
     "node_modules/@walletconnect/relay-api/dist/esm/types.js": {
         "dependency": [],
         "global": {},
@@ -56880,7 +57415,7 @@
             "node_modules/@walletconnect/time/dist/cjs/constants/index.js",
             "node_modules/@walletconnect/time/dist/cjs/constants/misc.js",
             "node_modules/@walletconnect/time/dist/cjs/constants/time.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@walletconnect/time/node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "exports": "r",
@@ -56911,7 +57446,7 @@
             "node_modules/@walletconnect/time/dist/cjs/types/index.js",
             "node_modules/@walletconnect/time/dist/cjs/utils/index.js",
             "node_modules/@walletconnect/time/dist/cjs/watch.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@walletconnect/time/node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "exports": "r",
@@ -56923,7 +57458,7 @@
         "dependency": [
             "node_modules/@walletconnect/time/dist/cjs/types/index.js",
             "node_modules/@walletconnect/time/dist/cjs/types/watch.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@walletconnect/time/node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "exports": "r",
@@ -56961,7 +57496,7 @@
             "node_modules/@walletconnect/time/dist/cjs/utils/convert.js",
             "node_modules/@walletconnect/time/dist/cjs/utils/delay.js",
             "node_modules/@walletconnect/time/dist/cjs/utils/index.js",
-            "node_modules/tslib/tslib.es6.js"
+            "node_modules/@walletconnect/time/node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "exports": "r",
@@ -56974,6 +57509,11 @@
         "global": {
             "exports": "r"
         },
+        "enable": true
+    },
+    "node_modules/@walletconnect/time/node_modules/tslib/tslib.es6.js": {
+        "dependency": [],
+        "global": {},
         "enable": true
     },
     "node_modules/@walletconnect/utils/node_modules/query-string/index.js": {
@@ -60238,9 +60778,9 @@
             "node_modules/assert/build/internal/assert/assertion_error.js",
             "node_modules/assert/build/internal/errors.js",
             "node_modules/assert/build/internal/util/comparisons.js",
+            "node_modules/assert/node_modules/object-is/index.js",
             "node_modules/assert/node_modules/util/util.js",
             "node_modules/es6-object-assign/index.js",
-            "node_modules/object-is/index.js",
             "node_modules/process/browser.js"
         ],
         "global": {
@@ -60279,9 +60819,67 @@
     "node_modules/assert/build/internal/util/comparisons.js": {
         "dependency": [
             "node_modules/assert/build/internal/util/comparisons.js",
+            "node_modules/assert/node_modules/object-is/index.js",
             "node_modules/assert/node_modules/util/util.js",
-            "node_modules/is-nan/index.js",
-            "node_modules/object-is/index.js"
+            "node_modules/is-nan/index.js"
+        ],
+        "global": {
+            "module": "r",
+            "require": "r"
+        },
+        "enable": true
+    },
+    "node_modules/assert/node_modules/is-arguments/index.js": {
+        "dependency": [
+            "node_modules/assert/node_modules/is-arguments/index.js",
+            "node_modules/call-bind/callBound.js"
+        ],
+        "global": {
+            "module": "r",
+            "require": "r"
+        },
+        "enable": true
+    },
+    "node_modules/assert/node_modules/object-is/implementation.js": {
+        "dependency": [
+            "node_modules/assert/node_modules/object-is/implementation.js"
+        ],
+        "global": {
+            "module": "r"
+        },
+        "enable": true
+    },
+    "node_modules/assert/node_modules/object-is/index.js": {
+        "dependency": [
+            "node_modules/assert/node_modules/object-is/implementation.js",
+            "node_modules/assert/node_modules/object-is/index.js",
+            "node_modules/assert/node_modules/object-is/polyfill.js",
+            "node_modules/assert/node_modules/object-is/shim.js",
+            "node_modules/call-bind/index.js",
+            "node_modules/define-properties/index.js"
+        ],
+        "global": {
+            "module": "r",
+            "require": "r"
+        },
+        "enable": true
+    },
+    "node_modules/assert/node_modules/object-is/polyfill.js": {
+        "dependency": [
+            "node_modules/assert/node_modules/object-is/implementation.js",
+            "node_modules/assert/node_modules/object-is/polyfill.js"
+        ],
+        "global": {
+            "module": "r",
+            "require": "r"
+        },
+        "enable": true
+    },
+    "node_modules/assert/node_modules/object-is/shim.js": {
+        "dependency": [
+            "node_modules/assert/node_modules/object-is/polyfill.js",
+            "node_modules/assert/node_modules/object-is/shim.js",
+            "node_modules/define-properties/index.js"
         ],
         "global": {
             "module": "r",
@@ -60300,8 +60898,8 @@
     },
     "node_modules/assert/node_modules/util/support/types.js": {
         "dependency": [
+            "node_modules/assert/node_modules/is-arguments/index.js",
             "node_modules/assert/node_modules/util/support/types.js",
-            "node_modules/is-arguments/index.js",
             "node_modules/is-generator-function/index.js",
             "node_modules/is-typed-array/index.js",
             "node_modules/which-typed-array/index.js"
@@ -60816,7 +61414,9 @@
             "TextDecoder": "r",
             "TextEncoder": "r",
             "Window": "r",
+            "crypto": "r",
             "global": "r",
+            "localStorage": "r",
             "module": "r",
             "queueMicrotask": "r",
             "toString": "r"
@@ -60843,7 +61443,7 @@
             "module": "r",
             "require": "r"
         },
-        "enable": true
+        "enable": false
     },
     "node_modules/brorand/index.js": {
         "dependency": [
@@ -61477,7 +62077,7 @@
             "exports": "r",
             "require": "r"
         },
-        "enable": true
+        "enable": false
     },
     "node_modules/builtin-status-codes/browser.js": {
         "dependency": [
@@ -62491,7 +63091,7 @@
             "module": "r",
             "require": "r"
         },
-        "enable": true
+        "enable": false
     },
     "node_modules/elliptic/lib/elliptic/curve/edwards.js": {
         "dependency": [
@@ -62547,7 +63147,7 @@
             "module": "r",
             "require": "r"
         },
-        "enable": true
+        "enable": false
     },
     "node_modules/elliptic/lib/elliptic/curves.js": {
         "dependency": [
@@ -62578,7 +63178,7 @@
             "module": "r",
             "require": "r"
         },
-        "enable": true
+        "enable": false
     },
     "node_modules/elliptic/lib/elliptic/ec/key.js": {
         "dependency": [
@@ -63713,7 +64313,7 @@
     "node_modules/eth-json-rpc-filters/node_modules/async-mutex/lib/Mutex.js": {
         "dependency": [
             "node_modules/eth-json-rpc-filters/node_modules/async-mutex/lib/Semaphore.js",
-            "node_modules/eth-json-rpc-filters/node_modules/tslib/tslib.es6.js"
+            "node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "exports": "r",
@@ -63723,7 +64323,7 @@
     },
     "node_modules/eth-json-rpc-filters/node_modules/async-mutex/lib/Semaphore.js": {
         "dependency": [
-            "node_modules/eth-json-rpc-filters/node_modules/tslib/tslib.es6.js"
+            "node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "exports": "r",
@@ -63745,7 +64345,7 @@
     },
     "node_modules/eth-json-rpc-filters/node_modules/async-mutex/lib/withTimeout.js": {
         "dependency": [
-            "node_modules/eth-json-rpc-filters/node_modules/tslib/tslib.es6.js"
+            "node_modules/tslib/tslib.es6.js"
         ],
         "global": {
             "exports": "r",
@@ -63761,11 +64361,6 @@
         "global": {
             "module": "r"
         },
-        "enable": true
-    },
-    "node_modules/eth-json-rpc-filters/node_modules/tslib/tslib.es6.js": {
-        "dependency": [],
-        "global": {},
         "enable": true
     },
     "node_modules/eth-json-rpc-filters/subscriptionManager.js": {
@@ -65114,6 +65709,25 @@
         },
         "enable": true
     },
+    "node_modules/ethers/lib/utils.js": {
+        "dependency": [
+            "node_modules/@ethersproject/base64/lib.esm/index.js",
+            "node_modules/@ethersproject/hash/lib.esm/index.js",
+            "node_modules/@ethersproject/units/lib.esm/index.js",
+            "node_modules/@ethersproject/wallet/lib.esm/index.js",
+            "node_modules/ethers/lib/utils.js",
+            "node_modules/ethers/node_modules/@ethersproject/abi/lib.esm/index.js",
+            "node_modules/ethers/node_modules/@ethersproject/basex/lib.esm/index.js",
+            "node_modules/ethers/node_modules/@ethersproject/hdnode/lib.esm/index.js",
+            "node_modules/ethers/node_modules/@ethersproject/sha2/lib.esm/index.js",
+            "node_modules/ethers/node_modules/@ethersproject/solidity/lib.esm/index.js"
+        ],
+        "global": {
+            "exports": "r",
+            "require": "r"
+        },
+        "enable": true
+    },
     "node_modules/ethers/node_modules/@ethersproject/abi/lib.esm/_version.js": {
         "dependency": [],
         "global": {},
@@ -65137,13 +65751,48 @@
         },
         "enable": true
     },
+    "node_modules/ethers/node_modules/@ethersproject/abi/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/ethers/node_modules/@ethersproject/abi/lib.esm/coders/abstract-coder.js",
+            "node_modules/ethers/node_modules/@ethersproject/abi/lib.esm/fragments.js",
+            "node_modules/ethers/node_modules/@ethersproject/abi/lib.esm/interface.js"
+        ],
+        "global": {},
+        "enable": true
+    },
     "node_modules/ethers/node_modules/@ethersproject/abi/lib.esm/interface.js": {
         "dependency": [
             "node_modules/@ethersproject/hash/lib.esm/id.js",
+            "node_modules/@ethersproject/hash/lib.esm/index.js",
             "node_modules/ethers/node_modules/@ethersproject/abi/lib.esm/_version.js",
             "node_modules/ethers/node_modules/@ethersproject/abi/lib.esm/coders/abstract-coder.js",
             "node_modules/ethers/node_modules/@ethersproject/abi/lib.esm/fragments.js",
             "node_modules/ethers/node_modules/@ethersproject/bignumber/lib.esm/bignumber.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/ethers/node_modules/@ethersproject/abstract-provider/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/ethers/node_modules/@ethersproject/abstract-provider/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/ethers/node_modules/@ethersproject/abstract-provider/lib.esm/_version.js",
+            "node_modules/ethers/node_modules/@ethersproject/bignumber/lib.esm/bignumber.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/ethers/node_modules/@ethersproject/abstract-signer/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/ethers/node_modules/@ethersproject/abstract-signer/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/ethers/node_modules/@ethersproject/abstract-signer/lib.esm/_version.js"
         ],
         "global": {},
         "enable": true
@@ -65166,6 +65815,63 @@
         "global": {},
         "enable": true
     },
+    "node_modules/ethers/node_modules/@ethersproject/contracts/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/ethers/node_modules/@ethersproject/contracts/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/ethers/node_modules/@ethersproject/abi/lib.esm/coders/abstract-coder.js",
+            "node_modules/ethers/node_modules/@ethersproject/abi/lib.esm/index.js",
+            "node_modules/ethers/node_modules/@ethersproject/abi/lib.esm/interface.js",
+            "node_modules/ethers/node_modules/@ethersproject/abstract-provider/lib.esm/index.js",
+            "node_modules/ethers/node_modules/@ethersproject/abstract-signer/lib.esm/index.js",
+            "node_modules/ethers/node_modules/@ethersproject/bignumber/lib.esm/bignumber.js",
+            "node_modules/ethers/node_modules/@ethersproject/contracts/lib.esm/_version.js"
+        ],
+        "global": {
+            "setTimeout": "r"
+        },
+        "enable": true
+    },
+    "node_modules/ethers/node_modules/@ethersproject/hdnode/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/ethers/node_modules/@ethersproject/hdnode/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/ethers/node_modules/@ethersproject/basex/lib.esm/index.js",
+            "node_modules/ethers/node_modules/@ethersproject/bignumber/lib.esm/bignumber.js",
+            "node_modules/ethers/node_modules/@ethersproject/hdnode/lib.esm/_version.js",
+            "node_modules/ethers/node_modules/@ethersproject/pbkdf2/lib.esm/pbkdf2.js",
+            "node_modules/ethers/node_modules/@ethersproject/sha2/lib.esm/index.js",
+            "node_modules/ethers/node_modules/@ethersproject/sha2/lib.esm/types.js",
+            "node_modules/ethers/node_modules/@ethersproject/wordlists/lib.esm/wordlists.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/ethers/node_modules/@ethersproject/networks/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/ethers/node_modules/@ethersproject/networks/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/ethers/node_modules/@ethersproject/networks/lib.esm/_version.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/ethers/node_modules/@ethersproject/pbkdf2/lib.esm/pbkdf2.js": {
+        "dependency": [
+            "node_modules/ethers/node_modules/@ethersproject/sha2/lib.esm/index.js"
+        ],
+        "global": {},
+        "enable": true
+    },
     "node_modules/ethers/node_modules/@ethersproject/providers/lib.esm/_version.js": {
         "dependency": [],
         "global": {},
@@ -65173,12 +65879,17 @@
     },
     "node_modules/ethers/node_modules/@ethersproject/providers/lib.esm/base-provider.js": {
         "dependency": [
+            "node_modules/@ethersproject/base64/lib.esm/index.js",
             "node_modules/@ethersproject/constants/lib.esm/hashes.js",
+            "node_modules/@ethersproject/hash/lib.esm/index.js",
             "node_modules/bech32/index.js",
+            "node_modules/ethers/node_modules/@ethersproject/abstract-provider/lib.esm/index.js",
             "node_modules/ethers/node_modules/@ethersproject/basex/lib.esm/index.js",
             "node_modules/ethers/node_modules/@ethersproject/bignumber/lib.esm/bignumber.js",
+            "node_modules/ethers/node_modules/@ethersproject/networks/lib.esm/index.js",
             "node_modules/ethers/node_modules/@ethersproject/providers/lib.esm/_version.js",
-            "node_modules/ethers/node_modules/@ethersproject/providers/lib.esm/formatter.js"
+            "node_modules/ethers/node_modules/@ethersproject/providers/lib.esm/formatter.js",
+            "node_modules/ethers/node_modules/@ethersproject/sha2/lib.esm/index.js"
         ],
         "global": {
             "clearInterval": "r",
@@ -65203,6 +65914,8 @@
     },
     "node_modules/ethers/node_modules/@ethersproject/providers/lib.esm/json-rpc-provider.js": {
         "dependency": [
+            "node_modules/@ethersproject/hash/lib.esm/index.js",
+            "node_modules/ethers/node_modules/@ethersproject/abstract-signer/lib.esm/index.js",
             "node_modules/ethers/node_modules/@ethersproject/bignumber/lib.esm/bignumber.js",
             "node_modules/ethers/node_modules/@ethersproject/providers/lib.esm/_version.js",
             "node_modules/ethers/node_modules/@ethersproject/providers/lib.esm/base-provider.js"
@@ -65220,9 +65933,75 @@
         "global": {},
         "enable": true
     },
+    "node_modules/ethers/node_modules/@ethersproject/random/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/ethers/node_modules/@ethersproject/random/lib.esm/random.js": {
+        "dependency": [
+            "node_modules/ethers/node_modules/@ethersproject/random/lib.esm/_version.js"
+        ],
+        "global": {
+            "crypto": "r",
+            "global": "r"
+        },
+        "enable": true
+    },
+    "node_modules/ethers/node_modules/@ethersproject/sha2/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/ethers/node_modules/@ethersproject/sha2/lib.esm/types.js"
+        ],
+        "global": {},
+        "enable": true
+    },
     "node_modules/ethers/node_modules/@ethersproject/sha2/lib.esm/types.js": {
         "dependency": [],
         "global": {},
+        "enable": true
+    },
+    "node_modules/ethers/node_modules/@ethersproject/solidity/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/ethers/node_modules/@ethersproject/solidity/lib.esm/index.js": {
+        "dependency": [
+            "node_modules/ethers/node_modules/@ethersproject/bignumber/lib.esm/bignumber.js",
+            "node_modules/ethers/node_modules/@ethersproject/sha2/lib.esm/index.js",
+            "node_modules/ethers/node_modules/@ethersproject/solidity/lib.esm/_version.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/ethers/node_modules/@ethersproject/wordlists/lib.esm/_version.js": {
+        "dependency": [],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/ethers/node_modules/@ethersproject/wordlists/lib.esm/lang-en.js": {
+        "dependency": [
+            "node_modules/ethers/node_modules/@ethersproject/wordlists/lib.esm/wordlist.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/ethers/node_modules/@ethersproject/wordlists/lib.esm/wordlist.js": {
+        "dependency": [
+            "node_modules/@ethersproject/hash/lib.esm/id.js",
+            "node_modules/@ethersproject/hash/lib.esm/index.js",
+            "node_modules/ethers/node_modules/@ethersproject/wordlists/lib.esm/_version.js"
+        ],
+        "global": {},
+        "enable": true
+    },
+    "node_modules/ethers/node_modules/@ethersproject/wordlists/lib.esm/wordlists.js": {
+        "dependency": [
+            "node_modules/ethers/node_modules/@ethersproject/wordlists/lib.esm/lang-en.js"
+        ],
+        "global": {
+            "langEn": "r"
+        },
         "enable": true
     },
     "node_modules/ethers/node_modules/bn.js/lib/bn.js": {
@@ -69892,17 +70671,6 @@
         },
         "enable": true
     },
-    "node_modules/is-arguments/index.js": {
-        "dependency": [
-            "node_modules/call-bind/callBound.js",
-            "node_modules/is-arguments/index.js"
-        ],
-        "global": {
-            "module": "r",
-            "require": "r"
-        },
-        "enable": true
-    },
     "node_modules/is-generator-function/index.js": {
         "dependency": [
             "node_modules/is-generator-function/index.js"
@@ -73339,53 +74107,6 @@
         },
         "enable": true
     },
-    "node_modules/object-is/implementation.js": {
-        "dependency": [
-            "node_modules/object-is/implementation.js"
-        ],
-        "global": {
-            "module": "r"
-        },
-        "enable": true
-    },
-    "node_modules/object-is/index.js": {
-        "dependency": [
-            "node_modules/call-bind/index.js",
-            "node_modules/define-properties/index.js",
-            "node_modules/object-is/implementation.js",
-            "node_modules/object-is/index.js",
-            "node_modules/object-is/polyfill.js",
-            "node_modules/object-is/shim.js"
-        ],
-        "global": {
-            "module": "r",
-            "require": "r"
-        },
-        "enable": true
-    },
-    "node_modules/object-is/polyfill.js": {
-        "dependency": [
-            "node_modules/object-is/implementation.js",
-            "node_modules/object-is/polyfill.js"
-        ],
-        "global": {
-            "module": "r",
-            "require": "r"
-        },
-        "enable": true
-    },
-    "node_modules/object-is/shim.js": {
-        "dependency": [
-            "node_modules/define-properties/index.js",
-            "node_modules/object-is/polyfill.js",
-            "node_modules/object-is/shim.js"
-        ],
-        "global": {
-            "module": "r",
-            "require": "r"
-        },
-        "enable": true
-    },
     "node_modules/object-keys/implementation.js": {
         "dependency": [
             "node_modules/object-keys/implementation.js",
@@ -74378,7 +75099,7 @@
             "node_modules/qs/lib/formats.js",
             "node_modules/qs/lib/stringify.js",
             "node_modules/qs/lib/utils.js",
-            "node_modules/side-channel/index.js"
+            "node_modules/qs/node_modules/side-channel/index.js"
         ],
         "global": {
             "module": "r",
@@ -74389,7 +75110,23 @@
     "node_modules/qs/lib/utils.js": {
         "dependency": [
             "node_modules/qs/lib/formats.js",
-            "node_modules/qs/lib/utils.js"
+            "node_modules/qs/lib/utils.js",
+            "node_modules/qs/node_modules/side-channel/index.js"
+        ],
+        "global": {
+            "module": "r",
+            "require": "r"
+        },
+        "enable": true
+    },
+    "node_modules/qs/node_modules/side-channel/index.js": {
+        "dependency": [
+            "node_modules/es-errors/type.js",
+            "node_modules/object-inspect/index.js",
+            "node_modules/qs/node_modules/side-channel/index.js",
+            "node_modules/side-channel-list/index.js",
+            "node_modules/side-channel-map/index.js",
+            "node_modules/side-channel-weakmap/index.js"
         ],
         "global": {
             "module": "r",
@@ -74447,6 +75184,21 @@
             "process": "r",
             "require": "r"
         },
+        "enable": true
+    },
+    "node_modules/rc-checkbox/es/index.js": {
+        "dependency": [
+            "node_modules/@babel/runtime/helpers/esm/classCallCheck.js",
+            "node_modules/@babel/runtime/helpers/esm/createClass.js",
+            "node_modules/@babel/runtime/helpers/esm/defineProperty.js",
+            "node_modules/@babel/runtime/helpers/esm/extends.js",
+            "node_modules/@babel/runtime/helpers/esm/inherits.js",
+            "node_modules/@babel/runtime/helpers/esm/objectSpread2.js",
+            "node_modules/@babel/runtime/helpers/esm/objectWithoutProperties.js",
+            "node_modules/classnames/index.js",
+            "node_modules/react/index.js"
+        ],
+        "global": {},
         "enable": true
     },
     "node_modules/rc-field-form/es/FieldContext.js": {
@@ -77960,6 +78712,17 @@
         },
         "enable": true
     },
+    "node_modules/util/node_modules/is-arguments/index.js": {
+        "dependency": [
+            "node_modules/call-bind/callBound.js",
+            "node_modules/util/node_modules/is-arguments/index.js"
+        ],
+        "global": {
+            "module": "r",
+            "require": "r"
+        },
+        "enable": true
+    },
     "node_modules/util/support/isBufferBrowser.js": {
         "dependency": [
             "node_modules/util/support/isBufferBrowser.js"
@@ -77971,9 +78734,9 @@
     },
     "node_modules/util/support/types.js": {
         "dependency": [
-            "node_modules/is-arguments/index.js",
             "node_modules/is-generator-function/index.js",
             "node_modules/is-typed-array/index.js",
+            "node_modules/util/node_modules/is-arguments/index.js",
             "node_modules/util/support/types.js",
             "node_modules/which-typed-array/index.js"
         ],

@@ -8,7 +8,7 @@ export const calcAssetAmountByNotional = (
 ) => {
   const amount = new BigNumber(notional)
     .div(new BigNumber(markPrice))
-    .toFixed(szDecimals);
+    .toFixed(szDecimals, BigNumber.ROUND_DOWN);
   return amount;
 };
 
@@ -45,6 +45,24 @@ export const calculatePnL = (
   const priceDiff =
     direction === 'Long' ? targetPrice - markPrice : markPrice - targetPrice;
   return priceDiff * size;
+};
+
+/**
+ * Calculate direction-specific amount from percentage and max trade size.
+ * Used by containers when placing orders in percentage/slider mode.
+ */
+export const calcAmountFromPercentage = (
+  pct: number,
+  directionMax: string | undefined,
+  szDecimals: number
+): string => {
+  if (!directionMax || pct === 0) return '0';
+  if (pct === 100) return directionMax;
+  const amount = new BigNumber(directionMax)
+    .multipliedBy(pct)
+    .div(100)
+    .toFixed(szDecimals, BigNumber.ROUND_DOWN);
+  return Number(amount) > 0 ? amount : '0';
 };
 
 export function removeTrailingZeros(value: string): string {

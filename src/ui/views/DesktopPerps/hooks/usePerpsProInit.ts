@@ -1,4 +1,5 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { useHistory, useLocation } from 'react-router-dom';
 import { usePerpsDefaultAccount } from '../../Perps/hooks/usePerpsDefaultAccount';
 import { getPerpsSDK } from '../../Perps/sdkManager';
 import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
@@ -6,8 +7,9 @@ import { useWallet } from '@/ui/utils';
 import { PERPS_AGENT_NAME } from '../../Perps/constants';
 import { usePerpsProState } from './usePerpsProState';
 import { preloadSound } from '@/ui/utils/sound';
+import { DARK_MODE_TYPE } from '@/constant';
 
-export const usePerpsProInit = () => {
+export const usePerpsProInit = (isActive = true) => {
   usePerpsDefaultAccount({
     isPro: true,
   });
@@ -21,12 +23,64 @@ export const usePerpsProInit = () => {
   const isInitialized = useRabbySelector((state) => state.perps.isInitialized);
   const dispatch = useRabbyDispatch();
   const wallet = useWallet();
+  const history = useHistory();
+  const location = useLocation();
 
+  const urlCoin = useMemo(() => {
+    return new URLSearchParams(location.search).get('coin');
+  }, [location.search]);
+
+  // Init persisted settings + coin (URL coin > persisted coin)
   useEffect(() => {
+    dispatch.perps.initQuoteUnit(undefined);
     dispatch.perps.initFavoritedCoins(undefined);
     dispatch.perps.initMarketSlippage(undefined);
     dispatch.perps.initSoundEnabled(undefined);
-  }, [dispatch]);
+    dispatch.perps.initSkipMarketCloseConfirm(undefined);
+    if (urlCoin) {
+      dispatch.perps.updateSelectedCoin(urlCoin);
+    } else {
+      dispatch.perps.initSelectedCoin(undefined);
+    }
+  }, []);
+
+  // URL coin changed -> sync to redux
+  const prevUrlCoin = useRef(urlCoin);
+  useEffect(() => {
+    if (!isActive) return;
+    if (prevUrlCoin.current === urlCoin) return;
+    prevUrlCoin.current = urlCoin;
+    if (urlCoin && urlCoin !== selectedCoin) {
+      dispatch.perps.updateSelectedCoin(urlCoin);
+    }
+  }, [urlCoin, isActive]);
+
+  // selectedCoin changed -> sync to URL
+  const prevSelectedCoin = useRef(selectedCoin);
+  useEffect(() => {
+    if (!isActive) return;
+    if (prevSelectedCoin.current === selectedCoin) return;
+    prevSelectedCoin.current = selectedCoin;
+    if (selectedCoin && selectedCoin !== urlCoin) {
+      const searchParams = new URLSearchParams(location.search);
+      searchParams.set('coin', selectedCoin);
+      history.replace({
+        pathname: location.pathname,
+        search: searchParams.toString(),
+      });
+    }
+  }, [selectedCoin, isActive]);
+
+  const checkIsNeedSetDarkTheme = async () => {
+    const isNeedSetDarkTheme = await wallet.getPerpsIsNeedSetDarkTheme();
+    if (isNeedSetDarkTheme) {
+      dispatch.preference.switchThemeMode(DARK_MODE_TYPE.dark);
+    }
+  };
+
+  useEffect(() => {
+    checkIsNeedSetDarkTheme();
+  }, []);
 
   useEffect(() => {
     preloadSound('/sounds/order-filled.mp3');

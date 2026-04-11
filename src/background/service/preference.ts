@@ -1,5 +1,6 @@
 import cloneDeep from 'lodash/cloneDeep';
 import * as Sentry from '@sentry/browser';
+import type { BalanceCacheData } from '@/db/schema/balance';
 import eventBus from '@/eventBus';
 import { createPersistStore, isSameAddress } from 'background/utils';
 import {
@@ -69,9 +70,7 @@ export interface PreferenceStore {
   externalLinkAck: boolean;
   hiddenAddresses: Account[];
   balanceMap: {
-    [address: string]: TotalBalanceResponse & {
-      evmUsdValue?: number;
-    };
+    [address: string]: BalanceCacheData;
   };
   curvePointsMap: {
     [address: string]: CurvePointCollection;
@@ -141,13 +140,30 @@ export interface PreferenceStore {
 
   isEnabledPwdForNonWhitelistedTx?: boolean;
   isEnabledDappAccount?: boolean;
+  biometricUnlockEnabled?: boolean;
+  biometricUnlockCredentialId?: string;
+  biometricUnlockEncryptedPassword?: string;
+  biometricUnlockIv?: string;
+  unlockPreferredMethod?: UnlockPreferredMethod;
 
   rateGuideLastExposure?: RateGuideLastExposure;
 
+  /** @deprecated use desktopTabIds instead */
   desktopTabId?: number;
+
+  desktopTabIds?: {
+    profile?: number;
+    perps?: number;
+    lending?: number;
+    prediction?: number;
+  };
+
+  dashboardPanelOrder?: string[];
 
   /** @deprecated */
   desktopTokensAllMode?: boolean;
+
+  sceneAccountMap?: Record<string, Account | null>;
 }
 
 export interface AddressSortStore {
@@ -163,6 +179,7 @@ const defaultAddressSortStore: AddressSortStore = {
 };
 
 export type PreferenceServiceCls = PreferenceService;
+export type UnlockPreferredMethod = 'password' | 'biometric';
 
 class PreferenceService {
   store!: PreferenceStore;
@@ -223,10 +240,18 @@ class PreferenceService {
         safeSelfHostConfirm: {},
         isEnabledPwdForNonWhitelistedTx: false,
         isEnabledDappAccount: false,
+        biometricUnlockEnabled: false,
+        biometricUnlockCredentialId: '',
+        biometricUnlockEncryptedPassword: '',
+        biometricUnlockIv: '',
+        unlockPreferredMethod: 'biometric',
         ga4EventTime: 0,
         rateGuideLastExposure: getDefaultRateGuideLastExposure(),
         desktopTabId: undefined,
+        desktopTabIds: {},
         desktopTokensAllMode: false,
+        dashboardPanelOrder: [],
+        sceneAccountMap: {},
       },
     });
 
@@ -323,7 +348,25 @@ class PreferenceService {
     if (!this.store.safeSelfHostConfirm) {
       this.store.safeSelfHostConfirm = {};
     }
-
+    if (this.store.biometricUnlockEnabled == null) {
+      this.store.biometricUnlockEnabled = false;
+    }
+    if (!this.store.biometricUnlockCredentialId) {
+      this.store.biometricUnlockCredentialId = '';
+    }
+    if (!this.store.biometricUnlockEncryptedPassword) {
+      this.store.biometricUnlockEncryptedPassword = '';
+    }
+    if (!this.store.biometricUnlockIv) {
+      this.store.biometricUnlockIv = '';
+    }
+    if (!this.store.unlockPreferredMethod) {
+      this.store.unlockPreferredMethod = 'biometric';
+    }
+    if ((this.store as any).biometricUnlockPrfSalt) {
+      this.clearBiometricUnlockStorage();
+      (this.store as any).biometricUnlockPrfSalt = '';
+    }
     if (
       !this.store.currentVersion ||
       semver(version, this.store.currentVersion) > 0
@@ -339,6 +382,9 @@ class PreferenceService {
 
     if (this.store.ga4EventTime) {
       this.store.ga4EventTime = 0;
+    }
+    if (!this.store.sceneAccountMap) {
+      this.store.sceneAccountMap = {};
     }
   };
 
@@ -381,6 +427,15 @@ class PreferenceService {
           console.error(err);
         }
       }
+    });
+  };
+
+  clearBiometricUnlockStorage = () => {
+    this.setPreferencePartials({
+      biometricUnlockEnabled: false,
+      biometricUnlockCredentialId: '',
+      biometricUnlockEncryptedPassword: '',
+      biometricUnlockIv: '',
     });
   };
 
@@ -538,9 +593,13 @@ class PreferenceService {
     this.store.currentAccount = account;
     if (account) {
       if (!this.store.isEnabledDappAccount) {
-        sessionService.broadcastEvent('accountsChanged', [
-          account.address.toLowerCase(),
-        ]);
+        sessionService.broadcastEvent(
+          'accountsChanged',
+          [account.address.toLowerCase()],
+          undefined,
+          undefined,
+          false
+        );
       }
       syncStateToUI(BROADCAST_TO_UI_EVENTS.accountsChanged, account);
     }
@@ -584,7 +643,7 @@ class PreferenceService {
   updateBalanceAboutCache = (
     address: string,
     data: {
-      totalBalance?: TotalBalanceResponse;
+      totalBalance?: BalanceCacheData;
       curvePoints?: CurvePointCollection;
     }
   ) => {
@@ -942,6 +1001,10 @@ class PreferenceService {
         ...exposure[LAST_EXPOSURE_VERSIONED_KEY],
       },
     };
+  };
+
+  updateDashboardPanelOrder = (order: string[]) => {
+    this.store.dashboardPanelOrder = order;
   };
 }
 

@@ -3,6 +3,7 @@ import { message } from 'antd';
 import { useMemoizedFn } from 'ahooks';
 import { useWallet, isSameAddress } from '@/ui/utils';
 import { useAsync, useDebounce } from 'react-use';
+import { toChecksumAddress } from '@ethereumjs/util';
 import BigNumber from 'bignumber.js';
 import abiCoderInst, { AbiCoder } from 'web3-eth-abi';
 import { last } from 'lodash';
@@ -13,6 +14,14 @@ import {
   ARB_USDC_TOKEN_ITEM,
   ARB_USDC_TOKEN_SERVER_CHAIN,
   PERPS_SEND_ARB_USDC_ADDRESS,
+  HYPE_USDC_TOKEN_ID,
+  HYPE_USDC_TOKEN_SERVER_CHAIN,
+  HYPE_CORE_DEPOSIT_WALLET,
+  HYPE_CORE_DEPOSIT_PERPS_DEX,
+  HYPE_USDC_TOKEN_ITEM,
+  HYPE_EVM_BRIDGE_ADDRESS,
+  HYPE_SEND_ASSET_TOKEN,
+  isHypeWithdrawToken,
 } from '@/ui/views/Perps/constants';
 import { PerpBridgeQuote, TokenItem } from '@rabby-wallet/rabby-api/dist/types';
 import { tokenAmountBn } from '@/ui/utils/token';
@@ -31,6 +40,9 @@ import { DepositWithdrawModalType } from './index';
 import { typedDataSignatureStore } from '@/ui/component/MiniSignV2';
 import { usePopupContainer } from '@/ui/hooks/usePopupContainer';
 import { Account } from '@/background/service/preference';
+import { sortTokenList } from '../../utils';
+import { usePerpsAccount } from '@/ui/views/Perps/hooks/usePerpsAccount';
+import { useTwoStepSwap } from '@/ui/views/Swap/hooks/twoStepSwap';
 
 const abiCoder = (abiCoderInst as unknown) as AbiCoder;
 
@@ -79,7 +91,33 @@ export const useDepositWithdraw = (
   const abortControllerRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const availableBalance = clearinghouseState?.withdrawable || '0';
+  const { availableBalance, isUnifiedAccount } = usePerpsAccount();
+
+  // Fetch preTransferCheck fee for HyperEVM withdrawal
+  const [hypeTransferFee, setHypeTransferFee] = useState<string>('0');
+  useEffect(() => {
+    if (!visible || !currentPerpsAccount?.address) {
+      setHypeTransferFee('0');
+      return;
+    }
+    const sdk = getPerpsSDK();
+    sdk.info
+      .getPreTransferCheck(HYPE_EVM_BRIDGE_ADDRESS, currentPerpsAccount.address)
+      .then((res) => {
+        setHypeTransferFee(res?.fee || '0');
+      })
+      .catch(() => {
+        setHypeTransferFee('0');
+      });
+  }, [visible, currentPerpsAccount?.address]);
+
+  const marketDataMap = useRabbySelector((state) => state.perps.marketDataMap);
+
+  // Gas fee for every HyperEVM withdrawal: fixed 0.00002 HYPE
+  const hypeGasFeeUsd = useMemo(() => {
+    const hypePrice = Number(marketDataMap?.['HYPE']?.markPx || 0);
+    return new BigNumber(0.00002).times(hypePrice).toNumber();
+  }, [marketDataMap]);
 
   // Fetch token info
   const { value: _tokenInfo } = useAsync(async () => {
@@ -98,32 +136,45 @@ export const useDepositWithdraw = (
     selectedToken?.id,
   ]);
 
+  const isMissingRole = false;
   // Check if user is missing role
-  const { value: isMissingRole } = useAsync(async () => {
-    if (Number(clearinghouseState?.marginSummary?.accountValue)) return false;
-    if (!currentPerpsAccount?.address || !visible) return false;
-    const sdk = getPerpsSDK();
-    const { role } = await sdk.info.getUserRole(currentPerpsAccount.address);
-    return role === 'missing';
-  }, [currentPerpsAccount?.address, visible]);
+  // const { value: isMissingRole } = useAsync(async () => {
+  //   if (Number(clearinghouseState?.marginSummary?.accountValue)) return false;
+  //   if (!currentPerpsAccount?.address || !visible) return false;
+  //   const sdk = getPerpsSDK();
+  //   const { role } = await sdk.info.getUserRole(currentPerpsAccount.address);
+  //   return role === 'missing';
+  // }, [currentPerpsAccount?.address, visible]);
 
   const tokenInfo = useMemo(() => {
     return _tokenInfo || selectedToken || ARB_USDC_TOKEN_ITEM;
   }, [_tokenInfo, selectedToken]);
 
+  const supportedChains = useRabbySelector((s) => s.bridge.supportedChains);
+
+  const pickDefaultToken = useCallback((list: TokenItem[]) => {
+    if (!list.length) return;
+    // Pick the first token with balance (list is already sorted by USD value)
+    const withBalance = list.find((t) => t.amount > 0);
+    setSelectedToken(withBalance ?? ARB_USDC_TOKEN_ITEM);
+  }, []);
+
   // Fetch token list
   const fetchTokenList = useCallback(async () => {
+    if (!currentPerpsAccount?.address || !visible) return;
     setTokenListLoading(true);
-    if (!currentPerpsAccount?.address || !visible || type === 'withdraw')
-      return [];
+    if (type === 'withdraw') {
+      setTokenListLoading(false);
+      if (!selectedToken) {
+        setSelectedToken(ARB_USDC_TOKEN_ITEM);
+      }
+      return;
+    }
     const res = await queryTokensCache(currentPerpsAccount.address, wallet);
+    const sortedTokenList = sortTokenList(res, supportedChains);
     setTokenListLoading(false);
-    setTokenList(res);
-    const usdcToken = res.find(
-      (t) =>
-        t.id === ARB_USDC_TOKEN_ID && t.chain === ARB_USDC_TOKEN_SERVER_CHAIN
-    );
-    usdcToken && setSelectedToken(usdcToken);
+    setTokenList(sortedTokenList);
+    pickDefaultToken(sortedTokenList);
 
     const tokenRes = await batchQueryTokens(
       currentPerpsAccount.address,
@@ -132,9 +183,18 @@ export const useDepositWithdraw = (
       false,
       false
     );
-    setTokenList(tokenRes);
-    return res;
-  }, [currentPerpsAccount?.address, visible, wallet, type]);
+    const fullSortedList = sortTokenList(tokenRes, supportedChains);
+    setTokenList(fullSortedList);
+    pickDefaultToken(fullSortedList);
+    return;
+  }, [
+    currentPerpsAccount?.address,
+    visible,
+    wallet,
+    type,
+    supportedChains,
+    pickDefaultToken,
+  ]);
 
   useEffect(() => {
     if (visible) {
@@ -178,12 +238,36 @@ export const useDepositWithdraw = (
     };
   }, []);
 
-  const isDirectDeposit = useMemo(() => {
+  const isHypeDeposit = useMemo(() => {
     return (
-      selectedToken?.id === ARB_USDC_TOKEN_ID &&
-      selectedToken?.chain === ARB_USDC_TOKEN_SERVER_CHAIN
+      selectedToken?.id === HYPE_USDC_TOKEN_ID &&
+      selectedToken?.chain === HYPE_USDC_TOKEN_SERVER_CHAIN
     );
   }, [selectedToken]);
+
+  const isDirectDeposit = useMemo(() => {
+    return (
+      (selectedToken?.id === ARB_USDC_TOKEN_ID &&
+        selectedToken?.chain === ARB_USDC_TOKEN_SERVER_CHAIN) ||
+      isHypeDeposit
+    );
+  }, [selectedToken, isHypeDeposit]);
+
+  const isHypeWithdraw = useMemo(() => {
+    return type === 'withdraw' && isHypeWithdrawToken(selectedToken);
+  }, [type, selectedToken]);
+
+  const withdrawMaxBalance = useMemo(() => {
+    if (!isHypeWithdraw) return availableBalance;
+    if (!Number(hypeTransferFee)) return availableBalance;
+    return Math.max(
+      0,
+      new BigNumber(availableBalance)
+        .minus(hypeTransferFee)
+        .decimalPlaces(6, BigNumber.ROUND_DOWN)
+        .toNumber()
+    );
+  }, [isHypeWithdraw, availableBalance, hypeTransferFee]);
 
   const depositMaxUsdValue = useMemo(() => {
     return isDirectDeposit
@@ -246,6 +330,76 @@ export const useDepositWithdraw = (
     setCacheUsdValue(0);
   });
 
+  // Build HYPE deposit transactions (approve + deposit)
+  const buildHypeDepositTxs = useMemoizedFn(
+    async (amount: number, token: TokenItem) => {
+      if (!currentPerpsAccount) return [];
+
+      const chain = findChain({
+        serverId: HYPE_USDC_TOKEN_SERVER_CHAIN,
+      })!;
+      const rawAmount = new BigNumber(amount)
+        .multipliedBy(10 ** token.decimals)
+        .toFixed(0, 1)
+        .toString();
+
+      const targetTxs: Tx[] = [];
+
+      const allowance = await wallet.getERC20Allowance(
+        HYPE_USDC_TOKEN_SERVER_CHAIN,
+        HYPE_USDC_TOKEN_ID,
+        HYPE_CORE_DEPOSIT_WALLET
+      );
+
+      const tokenApproved = new BigNumber(allowance).gte(
+        new BigNumber(rawAmount)
+      );
+
+      if (!tokenApproved) {
+        const resp = await wallet.approveToken(
+          HYPE_USDC_TOKEN_SERVER_CHAIN,
+          HYPE_USDC_TOKEN_ID,
+          HYPE_CORE_DEPOSIT_WALLET,
+          rawAmount,
+          {
+            ga: {
+              category: 'Perps',
+              source: 'Perps',
+              trigger: 'Perps',
+            },
+          },
+          undefined,
+          undefined,
+          true,
+          currentPerpsAccount
+        );
+        targetTxs.push(resp.params[0]);
+      }
+
+      const depositData = abiCoder.encodeFunctionCall(
+        {
+          name: 'deposit',
+          type: 'function',
+          inputs: [
+            { type: 'uint256', name: 'amount' },
+            { type: 'uint32', name: 'destinationDex' },
+          ] as any[],
+        },
+        [rawAmount, String(HYPE_CORE_DEPOSIT_PERPS_DEX)] as any[]
+      );
+
+      targetTxs.push({
+        chainId: chain.id,
+        from: currentPerpsAccount.address,
+        to: HYPE_CORE_DEPOSIT_WALLET,
+        value: '0x0',
+        data: depositData,
+      } as Tx);
+
+      return targetTxs;
+    }
+  );
+
   // Update mini sign tx for deposit
   const updateMiniSignTx = useMemoizedFn(async () => {
     if (!visible || type === 'withdraw' || !selectedToken) return;
@@ -254,7 +408,19 @@ export const useDepositWithdraw = (
 
     const token = tokenInfo || ARB_USDC_TOKEN_ITEM;
 
-    if (token.id !== ARB_USDC_TOKEN_ID) {
+    if (isHypeDeposit) {
+      setQuoteLoading(true);
+      try {
+        const hypeTxs = await buildHypeDepositTxs(value, token);
+        setMiniSignTx(hypeTxs);
+        setBridgeQuote(null);
+        setCacheUsdValue(value);
+        setQuoteLoading(false);
+      } catch (error) {
+        console.error('buildHypeDepositTxs error', error);
+        resetBridgeQuote();
+      }
+    } else if (token.id !== ARB_USDC_TOKEN_ID) {
       setQuoteLoading(true);
       const txs: Tx[] = [];
       try {
@@ -306,7 +472,7 @@ export const useDepositWithdraw = (
         if (controller.signal.aborted) {
           return;
         }
-        if (res.tx) {
+        if (res.tx && currentPerpsAccount) {
           if (!tokenApproved) {
             if (shouldTwoStepApprove) {
               const resp = await wallet.approveToken(
@@ -323,7 +489,8 @@ export const useDepositWithdraw = (
                 },
                 undefined,
                 undefined,
-                true
+                true,
+                currentPerpsAccount
               );
               txs.push(resp.params[0]);
             }
@@ -342,7 +509,8 @@ export const useDepositWithdraw = (
               },
               undefined,
               undefined,
-              true
+              true,
+              currentPerpsAccount
             );
 
             txs.push(resp.params[0]);
@@ -405,7 +573,7 @@ export const useDepositWithdraw = (
             },
           ] as any[],
         } as const,
-        [to, sendValue.toFixed(0)] as any[],
+        [toChecksumAddress(to), sendValue.toFixed(0)] as any[],
       ] as const;
       const params: Record<string, any> = {
         chainId: chain.id,
@@ -431,6 +599,7 @@ export const useDepositWithdraw = (
     tokenInfo,
     isMissingRole,
     selectedToken,
+    isHypeDeposit,
   ]);
 
   const postPerpBridgeQuote = useMemoizedFn(async (hash: string) => {
@@ -456,11 +625,13 @@ export const useDepositWithdraw = (
   const handleSignDepositDone = useMemoizedFn(async (hash: string) => {
     if (!hash) return;
 
-    const depositType = bridgeQuote?.tx ? 'receive' : 'deposit';
+    const depositType =
+      bridgeQuote?.tx || isHypeDeposit ? 'receive' : 'deposit';
 
     dispatch.perps.setLocalLoadingHistory([
       {
-        time: Date.now(),
+        // Set a slightly earlier time to ensure it appears before withdraw in history
+        time: Date.now() - 1000,
         hash,
         type: depositType,
         status: 'pending',
@@ -474,6 +645,19 @@ export const useDepositWithdraw = (
     account: currentPerpsAccount!,
   });
 
+  const {
+    shouldTwoStep,
+    currentTxs: twoStepCurrentTxs,
+    next: twoStepNext,
+    isApprove: twoStepIsApprove,
+    approvePending: twoStepApprovePending,
+  } = useTwoStepSwap({
+    chain: chainInfo?.enum || ('' as CHAINS_ENUM),
+    txs: miniSignTx || undefined,
+    enable: !!canUseDirectSubmitTx && isHypeDeposit,
+    type: 'approveBridge',
+  });
+
   // Handle deposit
   const handleDepositClick = useMemoizedFn(async () => {
     if (!miniSignTx || !currentPerpsAccount) {
@@ -481,14 +665,14 @@ export const useDepositWithdraw = (
       return;
     }
 
+    const txsToSign = shouldTwoStep ? twoStepCurrentTxs : miniSignTx;
+
     if (canUseDirectSubmitTx) {
       setIsPreparingSign(true);
       closeSign();
       try {
-        await dispatch.account.changeAccountAsync(currentPerpsAccount);
-
         const hashes = await openDirect({
-          txs: miniSignTx,
+          txs: txsToSign,
           checkGasFeeTooHigh: true,
           getContainer: '.desktop-perps-deposit-withdraw-content',
           ga: {
@@ -501,11 +685,17 @@ export const useDepositWithdraw = (
           },
         });
         if (hashes && hashes.length > 0) {
-          handleSignDepositDone(hashes[hashes.length - 1]);
-          resetFormValue();
-          onCancel();
+          const lastHash = hashes[hashes.length - 1];
+          if (shouldTwoStep && twoStepIsApprove) {
+            twoStepNext(lastHash);
+          } else {
+            handleSignDepositDone(lastHash);
+            resetFormValue();
+            onCancel();
+          }
         }
       } catch (error) {
+        console.error('handleDepositClick error', error);
         if (error === MINI_SIGN_ERROR.USER_CANCELLED) {
           return;
         }
@@ -528,17 +718,22 @@ export const useDepositWithdraw = (
     try {
       const promise = Promise.all(
         miniSignTx.map((tx) => {
-          return wallet.sendRequest({
-            method: 'eth_sendTransaction',
-            params: [tx],
-            $ctx: {
-              ga: {
-                category: 'Perps',
-                source: 'Perps',
-                trigger: 'Perps',
+          return wallet.sendRequest(
+            {
+              method: 'eth_sendTransaction',
+              params: [tx],
+              $ctx: {
+                ga: {
+                  category: 'Perps',
+                  source: 'Perps',
+                  trigger: 'Perps',
+                },
               },
             },
-          });
+            {
+              account: currentPerpsAccount!,
+            }
+          );
         })
       );
 
@@ -558,7 +753,7 @@ export const useDepositWithdraw = (
         throw new Error('no signature, try later');
       }
       let result: string[] = [];
-      await dispatch.account.changeAccountAsync(account);
+      // await dispatch.account.changeAccountAsync(account);
       if (canUseDirectSubmitTx) {
         typedDataSignatureStore.close();
         result = await typedDataSignatureStore.start(
@@ -581,10 +776,15 @@ export const useDepositWithdraw = (
         typedDataSignatureStore.close();
       } else {
         for (const actionObj of actions) {
-          const signature = await wallet.sendRequest<string>({
-            method: 'eth_signTypedDataV4',
-            params: [account.address, JSON.stringify(actionObj)],
-          });
+          const signature = await wallet.sendRequest<string>(
+            {
+              method: 'eth_signTypedDataV4',
+              params: [account.address, JSON.stringify(actionObj)],
+            },
+            {
+              account,
+            }
+          );
           result.push(signature);
         }
       }
@@ -609,29 +809,59 @@ export const useDepositWithdraw = (
         throw new Error('Hyperliquid no exchange client');
       }
 
-      const action = sdk.exchange.prepareWithdraw({
-        amount: amount.toString(),
-        destination: currentPerpsAccount.address,
-      });
+      const time = Date.now();
+      let res: any;
+      if (isHypeWithdraw) {
+        const hypeAmount = new BigNumber(amount)
+          .minus(hypeGasFeeUsd)
+          .decimalPlaces(6, BigNumber.ROUND_DOWN)
+          .toNumber();
+        if (hypeAmount <= 0) return;
+        const action = sdk.exchange.prepareSendAsset({
+          destination: HYPE_EVM_BRIDGE_ADDRESS,
+          amount: hypeAmount.toString(),
+          token: HYPE_SEND_ASSET_TOKEN,
+          sourceDex: isUnifiedAccount ? 'spot' : '',
+          destinationDex: 'spot',
+        });
 
-      const [signature] = await executeSignTypedData(
-        [action],
-        currentPerpsAccount
-      );
+        const [signature] = await executeSignTypedData(
+          [action],
+          currentPerpsAccount
+        );
 
-      const res = await sdk.exchange.sendWithdraw({
-        action: action.message as any,
-        nonce: action.nonce || 0,
-        signature: signature as string,
-      });
+        res = await sdk.exchange.sendSendAsset({
+          action: action.message as any,
+          nonce: action.nonce || 0,
+          signature: signature as string,
+        });
+      } else {
+        const action = sdk.exchange.prepareWithdraw({
+          amount: amount.toString(),
+          destination: currentPerpsAccount.address,
+        });
+
+        const [signature] = await executeSignTypedData(
+          [action],
+          currentPerpsAccount
+        );
+
+        res = await sdk.exchange.sendWithdraw({
+          action: action.message as any,
+          nonce: action.nonce || 0,
+          signature: signature as string,
+        });
+      }
 
       dispatch.perps.setLocalLoadingHistory([
         {
-          time: Date.now(),
+          time,
           hash: res.hash || '',
           type: 'withdraw',
           status: 'pending',
-          usdValue: (amount - 1).toString(),
+          usdValue: isHypeWithdraw
+            ? amount.toString()
+            : (amount - 1).toString(),
         },
       ]);
       dispatch.perps.fetchClearinghouseState();
@@ -663,9 +893,9 @@ export const useDepositWithdraw = (
   const handlePercentageClick = useCallback(
     (percentage: number) => {
       if (type === 'withdraw') {
-        const value = new BigNumber(availableBalance)
+        const value = new BigNumber(withdrawMaxBalance)
           .times(percentage)
-          .decimalPlaces(2, BigNumber.ROUND_DOWN)
+          .decimalPlaces(6, BigNumber.ROUND_DOWN)
           .toFixed();
         setUsdValue(value);
       } else {
@@ -689,7 +919,7 @@ export const useDepositWithdraw = (
               setUsdValue(
                 val
                   .times(tokenInfo?.price || 0)
-                  .decimalPlaces(2, BigNumber.ROUND_DOWN)
+                  .decimalPlaces(6, BigNumber.ROUND_DOWN)
                   .toFixed()
               );
               setGasPrice(normalPrice);
@@ -703,14 +933,14 @@ export const useDepositWithdraw = (
             setUsdValue(
               tokenAmountBn(tokenInfo)
                 ?.times(tokenInfo?.price || 0)
-                .decimalPlaces(2, BigNumber.ROUND_DOWN)
+                .decimalPlaces(6, BigNumber.ROUND_DOWN)
                 .toFixed()
             );
           }
         } else {
           const value = new BigNumber(depositMaxUsdValue)
             .times(percentage)
-            .decimalPlaces(2, BigNumber.ROUND_DOWN)
+            .decimalPlaces(6, BigNumber.ROUND_DOWN)
             .toFixed();
           setUsdValue(value);
         }
@@ -773,8 +1003,17 @@ export const useDepositWithdraw = (
     availableBalance,
     depositMaxUsdValue,
     isDirectDeposit,
+    isHypeWithdraw,
+    hypeTransferFee,
+    hypeGasFeeUsd,
+    withdrawMaxBalance,
     estReceiveUsdValue,
     tokenInfo,
+
+    // Two-step deposit (HYPE)
+    shouldTwoStep,
+    twoStepIsApprove,
+    twoStepApprovePending,
 
     // Actions
     handlePercentageClick,
