@@ -145,7 +145,7 @@ export default function TabWhitelist({
       {isEnabledPwdForNonWhitelistedTx && (
         <div className="flex-1 overflow-y-auto px-[20px] mb-[12px]">
           <div className="flex justify-between items-center px-[10px] py-[8px] bg-r-yellow-light rounded-[8px] bg-r-neutral-card1">
-            <span className="text-[13px] font-normal">
+            <span className="text-[13px] font-normal text-r-neutral-title1">
               {t(
                 'page.selectToAddress.whitelist.PwdForNonWhitelistedTx.enabledHint'
               )}
@@ -164,7 +164,7 @@ export default function TabWhitelist({
       {/* WhiteList or Imported Addresses List */}
       <div
         className="flex-1 overflow-y-auto px-[20px]"
-        style={{ paddingBottom: 72 }}
+        style={{ paddingBottom: 84 }}
       >
         <div className="h-full">
           {allAccounts.length > 0 ? (
@@ -189,7 +189,6 @@ export default function TabWhitelist({
                   showWhitelistIcon
                   allowEditAlias
                   hideBalance
-                  longEllipsis
                   address={item.address}
                   alias={ellipsisAddress(item.address)}
                   type={item.type}
@@ -202,12 +201,14 @@ export default function TabWhitelist({
             ))
           ) : (
             <EmptyWhitelistHolder
-              onAddWhitelist={() => {
+              onAddWhitelist={async () => {
                 if (getUiType().isDesktop) {
                   const query = new URLSearchParams(history.location.search);
                   query.set('sendPageType', 'whitelistInput');
                   query.set('action', 'send');
-                  wallet.openInDesktop(`desktop/profile?${query.toString()}`);
+                  wallet.openInDesktop(`desktop/profile?${query.toString()}`, {
+                    triggerFocusEventOnDesktop: false,
+                  });
                 } else {
                   history.push('/whitelist-input');
                 }

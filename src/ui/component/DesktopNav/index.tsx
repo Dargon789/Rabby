@@ -4,12 +4,11 @@ import {
   RcIconHomeInActive,
   RcIconLeadingCC,
   RcIconPerpsCC,
-  RcIconPredictionCC,
 } from '@/ui/assets/desktop/nav';
 import { splitNumberByStep } from '@/ui/utils';
 import { Skeleton, Tooltip } from 'antd';
 import clsx from 'clsx';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import {
@@ -21,11 +20,30 @@ import {
 import { useHistory } from 'react-router-dom';
 import { useCurrentAccount } from '@/ui/hooks/backgroundState/useAccount';
 import { KEYRING_TYPE } from '@/constant';
+import { matomoRequestEvent } from '@/utils/matomo-request';
+import { ga4 } from '@/utils/ga4';
+import { debounce } from 'lodash';
+import { useRabbySelector } from '@/ui/store';
+import { INNER_DAPP_LIST } from '@/constant/dappIframe';
 
 type DesktopNavAction = 'swap' | 'send' | 'bridge' | 'gnosis-queue';
 
 export const DESKTOP_NAV_HEIGHT = 84;
 
+const reportNavEvent = debounce((eventKey: string) => {
+  matomoRequestEvent({
+    category: 'RabbyWeb_Active',
+    action: `RabbyWeb_${eventKey}`,
+  });
+
+  ga4.fireEvent('RabbyWeb_Active', {
+    event_category: `RabbyWeb_${eventKey}`,
+  });
+}, 300);
+
+/**
+ * @deprecated
+ */
 export const DesktopNav: React.FC<{
   onActionSelect?: (action: DesktopNavAction) => void;
   showRightItems?: boolean;
@@ -33,37 +51,53 @@ export const DesktopNav: React.FC<{
   const { t } = useTranslation();
   const history = useHistory();
   const currentAccount = useCurrentAccount();
+  const activeProfileTab = useRabbySelector(
+    (state) => state.desktopProfile.activeTab || 'tokens'
+  );
 
   const isGnosis = currentAccount?.type === KEYRING_TYPE.GnosisKeyring;
 
   const currentPathname = history.location.pathname;
+  const lendingId = useRabbySelector((state) => state.innerDappFrame.lending);
 
-  const navs = useMemo(
-    () => [
+  const IconLending = useMemo(() => {
+    const dapp = INNER_DAPP_LIST.LENDING.find((item) => item.id === lendingId);
+    return dapp?.NavIcon || RcIconLeadingCC;
+  }, [lendingId]);
+  const IconPerps = RcIconPerpsCC;
+
+  const navs: {
+    key: string;
+    icon: React.FC<React.SVGProps<SVGSVGElement>>;
+    title: string;
+    isSoon?: boolean;
+    eventKey?: string;
+  }[] = useMemo(() => {
+    return [
       {
         key: '/desktop/profile',
         icon: RcIconHomeCC,
         title: t('component.DesktopNav.portfolio'),
+        eventKey: 'Portfolio',
       },
       {
         key: '/desktop/perps',
-        icon: RcIconPerpsCC,
+        icon: IconPerps,
         title: t('component.DesktopNav.perps'),
-        isSoon: true,
+        eventKey: 'Perps',
       },
       {
         key: '/desktop/lending',
-        icon: RcIconLeadingCC,
+        icon: IconLending,
         title: t('component.DesktopNav.lending'),
-        isSoon: true,
+        eventKey: 'Lending',
       },
-      {
-        key: '/desktop/dapp-iframe',
-        icon: RcIconPredictionCC,
-        title: t('component.DesktopNav.prediction'),
-      },
-    ],
-    [t]
+    ];
+  }, [t, IconLending, IconPerps]);
+
+  const activeNav = useMemo(
+    () => navs.find((item) => currentPathname.startsWith(item.key)),
+    [navs, currentPathname]
   );
 
   const handleActionClick = useCallback(
@@ -104,8 +138,20 @@ export const DesktopNav: React.FC<{
     [handleActionClick, t, showRightItems]
   );
 
+  useEffect(() => {
+    if (!activeNav?.eventKey) {
+      return;
+    }
+    reportNavEvent(activeNav.eventKey);
+  }, [activeNav?.eventKey]);
+
   return (
-    <div className="sticky top-0 z-10 pt-[20px] pb-[16px] bg-rb-neutral-bg-1">
+    <div
+      className="sticky top-0 z-10 pt-[20px] pb-[16px] bg-rb-neutral-bg-1"
+      style={{
+        minHeight: DESKTOP_NAV_HEIGHT,
+      }}
+    >
       <div className="flex items-center justify-between">
         <div className="flex">
           <div
@@ -147,7 +193,11 @@ export const DesktopNav: React.FC<{
                       if (item.isSoon) {
                         return;
                       }
-                      history.push(item.key);
+                      if (item.key === '/desktop/profile') {
+                        history.push(`/desktop/profile/${activeProfileTab}`);
+                      } else {
+                        history.push(item.key);
+                      }
                     }}
                   >
                     <Icon
@@ -182,7 +232,7 @@ export const DesktopNav: React.FC<{
               {title}
             </div>
           ))}
-          {isGnosis ? (
+          {isGnosis && showRightItems ? (
             <div
               className={clsx(
                 'min-w-[88px] p-[12px] rounded-[14px]',
