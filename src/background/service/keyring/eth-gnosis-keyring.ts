@@ -504,7 +504,7 @@ class GnosisKeyring extends EventEmitter {
   async buildBatchTransaction(
     address: string,
     transactions: SafeTransactionDataPartial[],
-    provider,
+    provider: any,
     version: SafeVersion,
     networkId: string
   ) {
