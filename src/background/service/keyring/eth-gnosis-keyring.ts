@@ -549,7 +549,7 @@ class GnosisKeyring extends EventEmitter {
     const tx = {
       data: multiSendCallData,
       from: address,
-      to: multiSendContract.contractAddress,
+      to: await multiSendContract.getAddress(),
       value: '0',
       operation: Number(Operation.DELEGATE), // DelegateCall
     };
