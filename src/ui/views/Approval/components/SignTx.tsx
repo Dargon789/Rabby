@@ -1153,7 +1153,7 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
         data: tx.data,
         value: tx.value,
         safeTxGas: safeTxGas,
-        operation: (tx as any).operation,
+        operation,
       };
       params.nonce = realNonce;
       await wallet.buildGnosisTransaction(
