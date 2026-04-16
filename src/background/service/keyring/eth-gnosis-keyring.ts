@@ -525,7 +525,7 @@ class GnosisKeyring extends EventEmitter {
         to: this._normalize(tx.to),
         value: tx.value || '0',
         data: tx.data || '0x',
-        operation: tx.operation || 0,
+        operation: Number(tx.operation || 0),
       }))
     ) as `0x${string}`;
 
