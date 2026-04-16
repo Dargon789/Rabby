@@ -522,7 +522,7 @@ class GnosisKeyring extends EventEmitter {
 
     const multiSendData = encodeMultiSendData(
       transactions.map((tx) => ({
-        to: tx.to,
+        to: this._normalize(tx.to),
         value: tx.value || '0',
         data: tx.data || '0x',
         operation: tx.operation || 0,
