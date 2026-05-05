@@ -525,14 +525,14 @@ class GnosisKeyring extends EventEmitter {
         to: tx.to,
         value: tx.value || '0',
         data: tx.data || '0x',
-        operation: Number(tx.operation ?? 0),
+        operation: tx.operation || 0,
       }))
     ) as `0x${string}`;
 
     const safeProvider = new SafeProvider({
       provider: {
         request: async ({ method, params }) => {
-          return provider.request ? provider.request({ method, params }) : provider.send(method, params);
+          return provider.send(method, params);
         },
       },
     });
@@ -549,7 +549,7 @@ class GnosisKeyring extends EventEmitter {
     const tx = {
       data: multiSendCallData,
       from: address,
-      to: await multiSendContract.getAddress(),
+      to: multiSendContract.contractAddress,
       value: '0',
       operation: Number(Operation.DELEGATE), // DelegateCall
     };
