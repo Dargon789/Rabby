@@ -7,7 +7,7 @@ import { Image } from 'antd';
 import { isNumber } from 'lodash';
 import { TooltipWithMagnetArrow } from '@/ui/component/Tooltip/TooltipWithMagnetArrow';
 import { findChain } from '@/utils/chain';
-import { isLpToken } from '@/ui/utils/portfolio/lpToken';
+import { isLpToken, isUnknownToken } from '@/ui/utils/portfolio/lpToken';
 import { LpTokenTag } from '../../DesktopProfile/components/TokensTabPane/components/LpTokenTag';
 import styled from 'styled-components';
 import { useHistory } from 'react-router-dom';
@@ -20,6 +20,7 @@ import {
   RcIconSendWhiteCC,
 } from 'ui/assets/dashboard/panel';
 import { useThemeMode } from '@/ui/hooks/usePreference';
+import { UnknownTag } from '@/ui/component';
 
 export interface Props {
   item: AbstractPortfolioToken;
@@ -36,7 +37,7 @@ const LpContainer = styled.div`
   align-items: center;
   gap: 2px;
   .inner-symbol {
-    max-width: calc(100% - 24px);
+    max-width: 140px;
   }
 `;
 
@@ -144,7 +145,7 @@ const TokenItemAsset: React.FC<TokenItemAssetProps> = ({
   );
 
   return (
-    <TCell className="py-8 flex gap-10 w-[146px] items-center flex-shrink-0">
+    <TCell className="py-8 flex gap-10 items-center flex-shrink-1 flex-1">
       <div className="relative h-[32px]">
         <Image
           className="w-32 h-32 rounded-full"
@@ -180,6 +181,7 @@ const TokenItemAsset: React.FC<TokenItemAssetProps> = ({
             <span className="text-r-neutral-title-1 font-medium text-15 leading-[18px] whitespace-nowrap overflow-ellipsis overflow-hidden inner-symbol">
               {item.symbol}
             </span>
+            {isUnknownToken(item) && <UnknownTag className="ml-2" />}
             {isLpToken(item) && (
               <span className="inline-flex">
                 <LpTokenTag
