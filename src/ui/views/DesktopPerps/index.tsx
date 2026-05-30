@@ -28,6 +28,9 @@ import { ReactComponent as RcIconRabbyCC } from '@/ui/assets/perps/IconRabbyCC.s
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import './resizable-panels.css';
 import { useTranslation } from 'react-i18next';
+import { useMount } from 'ahooks';
+import { reportWebPageView } from '@/ui/utils/ga-event';
+import { useLocation } from 'react-router-dom';
 
 const Wrap = styled.div`
   width: 100%;
@@ -64,11 +67,18 @@ export const DesktopPerps: React.FC<{ isActive?: boolean }> = ({
     target,
     disableSwitch,
     next,
+    isActionOpen,
+    getActionZIndex,
     closePerpsPopup,
     advancePerpsPopup,
     openPerpsPopup,
   } = usePerpsPopupNav();
   const { handleEnableUnifiedAccount } = usePerpsActions();
+
+  const location = useLocation();
+  useMount(() => {
+    reportWebPageView(location.pathname);
+  });
 
   return (
     <>
@@ -142,13 +152,15 @@ export const DesktopPerps: React.FC<{ isActive?: boolean }> = ({
       /> */}
 
       <DepositWithdrawModal
-        visible={action === 'deposit' || action === 'withdraw'}
-        type={action === 'deposit' ? 'deposit' : 'withdraw'}
+        visible={isActionOpen('deposit') || isActionOpen('withdraw')}
+        type={action === 'withdraw' ? 'withdraw' : 'deposit'}
+        zIndex={getActionZIndex('deposit') ?? getActionZIndex('withdraw')}
         onCancel={closePerpsPopup}
       />
 
       <SpotSwapModal
-        visible={action === 'swap'}
+        visible={isActionOpen('swap')}
+        zIndex={getActionZIndex('swap')}
         sourceAsset={source}
         targetAsset={target}
         disableSwitch={disableSwitch}
@@ -159,7 +171,8 @@ export const DesktopPerps: React.FC<{ isActive?: boolean }> = ({
       />
 
       <EnableUnifiedAccountModal
-        visible={action === 'enable-unified'}
+        visible={isActionOpen('enable-unified')}
+        zIndex={getActionZIndex('enable-unified')}
         onCancel={closePerpsPopup}
         onConfirm={async () => {
           const ok = await handleEnableUnifiedAccount();
@@ -175,7 +188,8 @@ export const DesktopPerps: React.FC<{ isActive?: boolean }> = ({
       />
 
       <TransferToPerpsModal
-        visible={action === 'transfer-to-perps'}
+        visible={isActionOpen('transfer-to-perps')}
+        zIndex={getActionZIndex('transfer-to-perps')}
         onClose={closePerpsPopup}
       />
     </>

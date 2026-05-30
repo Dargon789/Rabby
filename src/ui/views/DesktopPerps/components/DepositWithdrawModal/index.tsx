@@ -6,7 +6,7 @@ import { ModalCloseIcon } from '@/ui/views/DesktopProfile/components/TokenDetail
 import { SvgIconCross } from 'ui/assets';
 import { TokenWithChain } from '@/ui/component';
 import { ReactComponent as RcIconArrowRight } from '@/ui/assets/dashboard/settings/icon-right-arrow-cc.svg';
-import { ReactComponent as RcIconHistory } from '@/ui/assets/swap/history.svg';
+import { ReactComponent as RcIconHistory } from '@/ui/assets/swap/history-cc.svg';
 import { RcIconArrowDownCC } from '@/ui/assets/desktop/common';
 import { SvgPendingSpin } from '@/ui/assets';
 import ThemeIcon from '@/ui/component/ThemeMode/ThemeIcon';
@@ -34,6 +34,8 @@ export type DepositWithdrawModalType = 'deposit' | 'withdraw';
 interface DepositWithdrawModalProps {
   visible: boolean;
   type: DepositWithdrawModalType;
+  /** Stack-aware z-index from usePerpsPopupNav. */
+  zIndex?: number;
   onCancel: () => void;
 }
 
@@ -47,6 +49,7 @@ const PERCENTAGE_OPTIONS = [
 export const DepositWithdrawModal: React.FC<DepositWithdrawModalProps> = ({
   visible,
   type,
+  zIndex,
   onCancel,
 }) => {
   const { t } = useTranslation();
@@ -174,9 +177,10 @@ export const DepositWithdrawModal: React.FC<DepositWithdrawModalProps> = ({
       footer={null}
       width={400}
       centered
+      zIndex={zIndex}
       bodyStyle={{ padding: 0, height: '520px', maxHeight: '520px' }}
       maskStyle={{
-        zIndex: 1000,
+        zIndex: zIndex ?? 1000,
         backdropFilter: 'blur(8px)',
         backgroundColor: 'rgba(0, 0, 0, 0.3)',
       }}
@@ -193,13 +197,13 @@ export const DepositWithdrawModal: React.FC<DepositWithdrawModalProps> = ({
           <div className="px-20 pt-16 flex-1 pb-24">
             <div className="flex items-center justify-center gap-8 mb-16 relative">
               <div
-                className="absolute left-0 top-1/2 -translate-y-1/2 cursor-pointer"
+                className="absolute left-0 top-1/2 -translate-y-1/2 cursor-pointer text-r-neutral-title-1 hover:text-r-blue-default"
                 onClick={() => setHistoryVisible(true)}
               >
                 {pendingCount > 0 ? (
                   <DepositPending pendingCount={pendingCount} />
                 ) : (
-                  <RcIconHistory className="w-20 h-20 text-r-neutral-title-1" />
+                  <RcIconHistory className="w-20 h-20" />
                 )}
               </div>
 
