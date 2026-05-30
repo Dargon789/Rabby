@@ -32,6 +32,7 @@ import type {
   NFTApprovalContract,
   Spender,
 } from '@/background/service/openapi';
+import { checkCompareContractItem } from '../../DesktopProfile/components/ApprovalsTabPane/utils';
 
 export type {
   ApprovalItem,
@@ -51,6 +52,17 @@ export const FILTER_TYPES = {
 
 export type ApprovalProcessType = 'contract' | 'assets';
 export type RevokeItemDict = Record<string, ApprovalSpenderItemToBeRevoked>;
+type ApprovalsData = {
+  contractMap: Record<string, ContractApprovalItem>;
+  tokenMap: Record<string, TokenApprovalItem>;
+  nftMap: Record<string, NftApprovalItem>;
+};
+
+const EMPTY_APPROVALS_DATA: ApprovalsData = {
+  contractMap: {},
+  tokenMap: {},
+  nftMap: {},
+};
 
 function sortTokenOrNFTApprovalsSpenderList(
   approval: TokenApprovalItem | NftApprovalItem
@@ -65,6 +77,27 @@ function sortTokenOrNFTApprovalsSpenderList(
 
     return right.value - left.value;
   });
+}
+
+function getAssetApprovalTime(approval: AssetApprovalItem) {
+  return approval.list.reduce(
+    (latestApproveTime, spender) =>
+      Math.max(latestApproveTime, spender.last_approve_at || 0),
+    approval.$riskAboutValues.last_approve_at || 0
+  );
+}
+
+function sortByApprovalTimeDesc<T extends ApprovalItem>(left: T, right: T) {
+  const leftApprovalTime =
+    left.type === 'contract'
+      ? left.$riskAboutValues.last_approve_at || 0
+      : getAssetApprovalTime(left);
+  const rightApprovalTime =
+    right.type === 'contract'
+      ? right.$riskAboutValues.last_approve_at || 0
+      : getAssetApprovalTime(right);
+
+  return rightApprovalTime - leftApprovalTime;
 }
 
 function sortAssetApproval<T extends ApprovalItem>(approvals: T[]) {
@@ -95,8 +128,29 @@ function sortAssetApproval<T extends ApprovalItem>(approvals: T[]) {
       ...dangerList,
       ...warningList,
       ...flatten(sortedSafeGroups.reverse()),
-    ],
+    ].sort(sortByApprovalTimeDesc),
   };
+}
+
+function sortContractApprovalTimeWithRiskFirst(
+  left: ContractApprovalItem,
+  right: ContractApprovalItem
+) {
+  const checkResult = checkCompareContractItem(
+    left,
+    right,
+    { field: 'last_approve_at', order: 'descend' },
+    'contractApprovalTime'
+  );
+
+  if (checkResult.shouldEarlyReturn) {
+    return -checkResult.keepRiskFirstReturnValue;
+  }
+
+  return (
+    (right.$riskAboutValues.last_approve_at || 0) -
+    (left.$riskAboutValues.last_approve_at || 0)
+  );
 }
 
 function sortContractApproval(contractApprovals: ContractApprovalItem[]) {
@@ -144,7 +198,12 @@ function sortContractApproval(contractApprovals: ContractApprovalItem[]) {
   return [
     ...Object.values(riskBuckets).flat().sort(sortContractListAsCards),
     ...flatten(sortedSafeGroups.reverse()).sort(sortContractListAsCards),
-  ];
+  ].sort((left, right) => {
+    return (
+      sortByApprovalTimeDesc(left, right) ||
+      sortContractListAsCards(left, right)
+    );
+  });
 }
 
 export function encodeApprovalKey(approvalItem: ApprovalItem) {
@@ -500,28 +559,15 @@ export function useManageApprovalsPage(options: {
   const [searchKw, setSearchKw] = React.useState('');
   const debouncedSearchKw = useDebouncedValue(searchKw, 250);
   const queueRef = React.useRef(new PQueue({ concurrency: 40 }));
-  const [approvalsData, setApprovalsData] = React.useState<{
-    contractMap: Record<string, ContractApprovalItem>;
-    tokenMap: Record<string, TokenApprovalItem>;
-    nftMap: Record<string, NftApprovalItem>;
-  }>({
-    contractMap: {},
-    tokenMap: {},
-    nftMap: {},
-  });
-  const emptyApprovalsData = React.useMemo(
-    () => ({
-      contractMap: {},
-      tokenMap: {},
-      nftMap: {},
-    }),
-    []
-  );
 
-  const { loading: isLoading, runAsync: loadApprovals } = useRequest(
+  const {
+    loading: isLoading,
+    runAsync: loadApprovals,
+    data: approvalsData = EMPTY_APPROVALS_DATA,
+  } = useRequest(
     async () => {
       if (!account?.address) {
-        return emptyApprovalsData;
+        return EMPTY_APPROVALS_DATA;
       }
 
       const openapiClient = options.isTestnet
@@ -532,7 +578,7 @@ export function useManageApprovalsPage(options: {
         contractMap: {},
         tokenMap: {},
         nftMap: {},
-      } as typeof approvalsData;
+      } as ApprovalsData;
 
       queueRef.current.clear();
 
@@ -755,15 +801,14 @@ export function useManageApprovalsPage(options: {
       manual: true,
       refreshDeps: [account?.address],
       cacheKey: `manage-approvals-${account?.address}`,
-      staleTime: 5000,
-      onSuccess(data) {
-        setApprovalsData(data);
-      },
+      staleTime: 1000,
     }
   );
 
   const sortedContractList = React.useMemo(() => {
-    return sortContractApproval(Object.values(approvalsData.contractMap));
+    return Object.values(approvalsData.contractMap).sort(
+      sortContractApprovalTimeWithRiskFirst
+    );
   }, [approvalsData.contractMap]);
 
   const sortedAssetsList = React.useMemo(() => {

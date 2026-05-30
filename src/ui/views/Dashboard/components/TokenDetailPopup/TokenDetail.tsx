@@ -1,10 +1,6 @@
 import { useInfiniteScroll } from 'ahooks';
 import { Button } from 'antd';
-import {
-  TokenEntityDetail,
-  TokenItem,
-  TxHistoryResult,
-} from 'background/service/openapi';
+import { TokenEntityDetail, TokenItem } from 'background/service/openapi';
 import clsx from 'clsx';
 import { last, sortBy } from 'lodash';
 import React, { useCallback, useMemo, useRef } from 'react';
@@ -24,18 +20,17 @@ import { Loading } from './Loading';
 import './style.less';
 import { ellipsisOverflowedText } from 'ui/utils';
 import { getTokenSymbol } from '@/ui/utils/token';
-import { BlockedButton } from './BlockedButton';
 import { TooltipWithMagnetArrow } from '@/ui/component/Tooltip/TooltipWithMagnetArrow';
+import { UnknownTag } from '@/ui/component';
 import TokenChainAndContract from './TokenInfo';
 import { TokenCharts } from '@/ui/component/TokenChart';
-import { BlockedTopTips } from './BlockedTopTips';
 import { ScamTokenTips } from './ScamTokenTips';
 import { useGetHandleTokenSelectInTokenDetails } from '@/ui/component/TokenSelector/context';
 import { Account } from '@/background/service/preference';
 import { useCurrentAccount } from '@/ui/hooks/backgroundState/useAccount';
 import { DbkButton } from '@/ui/views/Ecology/dbk-chain/components/DbkButton';
 import { DBK_CHAIN_ID } from '@/constant';
-import { isLpToken } from '@/ui/utils/portfolio/lpToken';
+import { isLpToken, isUnknownToken } from '@/ui/utils/portfolio/lpToken';
 import { LpTokenTag } from '@/ui/views/DesktopProfile/components/TokensTabPane/components/LpTokenTag';
 import { transformToHistory } from '@/utils/history';
 const isDesktop = getUiType().isDesktop;
@@ -364,6 +359,9 @@ const TokenDetail = ({
             <div className="token-symbol ml-8" title={getTokenSymbol(token)}>
               {ellipsisOverflowedText(getTokenSymbol(token), 16)}
             </div>
+            {isUnknownToken(token) && (
+              <UnknownTag className="ml-8 !px-[8px] !py-[4px] !text-[13px] !leading-[13px] bg-rb-neutral-line" />
+            )}
             {isLpToken(token) && (
               <LpTokenTag
                 className="ml-8"
