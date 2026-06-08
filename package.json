@@ -1,6 +1,6 @@
 {
   "name": "rabby",
-  "version": "0.93.91",
+  "version": "0.93.92",
   "description": "A browser plugin for DeFi users",
   "scripts": {
     "clean": "node build/clean.js",
@@ -39,7 +39,7 @@
     "@dnd-kit/core": "5.0.1",
     "@dnd-kit/sortable": "6.0.0",
     "@dnd-kit/utilities": "3.0.2",
-    "@eth-optimism/contracts": "0.5.32",
+    "@eth-optimism/contracts": "0.5.34",
     "@eth-optimism/contracts-ts": "0.17.2",
     "@ethereumjs/common": "4.4.0",
     "@ethereumjs/rlp": "5.0.2",
