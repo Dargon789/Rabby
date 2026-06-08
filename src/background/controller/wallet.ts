@@ -208,6 +208,7 @@ import { tokenDbService } from '@/db/services/tokenDbService';
 import { defiDbService } from '@/db/services/defiDbService';
 import { appChainDbService } from '@/db/services/appChainDbService';
 import { balanceDbService } from '@/db/services/balanceDbService';
+import { nftDbService } from '@/db/services/nftDbService';
 import { BALANCE_SYNC_SCENE, CACHE_VALID_DURATION } from '@/db/constants';
 import {
   BalanceCacheData,
@@ -4158,6 +4159,7 @@ export class WalletController extends BaseController {
     defiDbService.deleteForAddress(address);
     appChainDbService.deleteForAddress(address);
     balanceDbService.deleteForAddress(address);
+    nftDbService.deleteForAddress(address);
   };
 
   removeAddresses = async (
@@ -4951,6 +4953,15 @@ export class WalletController extends BaseController {
     type
   ) =>
     transactionHistoryService.getRecentTxHistory(address, hash, chainId, type);
+  updateBridgeGasAccountTx: typeof transactionHistoryService.updateBridgeGasAccountTx = (
+    params
+  ) => transactionHistoryService.updateBridgeGasAccountTx(params);
+  checkIsGasDepositTx: typeof transactionHistoryService.checkIsGasDepositTx = (
+    params
+  ) => transactionHistoryService.checkIsGasDepositTx(params);
+  checkIsGasDepositTxs: typeof transactionHistoryService.checkIsGasDepositTxs = (
+    params
+  ) => transactionHistoryService.checkIsGasDepositTxs(params);
   completeBridgeTxHistory = (
     from_tx_id: string,
     chainId: number,
@@ -6736,6 +6747,19 @@ export class WalletController extends BaseController {
   };
   getPerpsInviteConfig = perpsService.getInviteConfig;
   setPerpsInviteConfig = perpsService.setInviteConfig;
+
+  /* Perps float widget RPC */
+  getPerpsWidgetEnabled = () => preferenceService.getPerpsWidgetEnabled();
+  setPerpsWidgetEnabled = (v: boolean) =>
+    preferenceService.setPerpsWidgetEnabled(v);
+  getPerpsWidgetBlockedHosts = () =>
+    preferenceService.getPerpsWidgetBlockedHosts();
+  setPerpsWidgetBlockedHosts = (hosts: string[]) =>
+    preferenceService.setPerpsWidgetBlockedHosts(hosts);
+  getPerpsWidgetBallPosition = () =>
+    preferenceService.getPerpsWidgetBallPosition();
+  setPerpsWidgetBallPosition = (pos: { x: number; y: number } | null) =>
+    preferenceService.setPerpsWidgetBallPosition(pos);
 
   signPerpsSendSetReferrer = async ({
     address,

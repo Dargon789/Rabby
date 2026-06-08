@@ -193,6 +193,7 @@ export const TransactionItem = ({
           name: originTx?.site?.name,
           icon: originTx?.site?.icon,
           origin: originTx?.site?.origin,
+          isFromRabby: true,
         }
       : undefined;
 
@@ -447,6 +448,7 @@ export const TransactionItem = ({
             isCancel={isCanceled}
             isSubmitFailed={!!item.isSubmitFailed}
             isWithdrawed={!!maxGasTx?.isWithdrawed}
+            isGasDeposit={maxGasTx?.isGasDeposit}
             explain={item.explain}
             action={item.action}
             onOpenScan={handleOpenScan}

@@ -1,17 +1,47 @@
 import { Account } from 'background/service/preference';
-import { AccountHistoryItem, MarketData } from '@/ui/models/perps';
+import { MarketData } from '@/ui/models/perps';
 import { Meta, MarginTable } from '@rabby-wallet/hyperliquid-sdk';
 import { PerpTopTokenV3 } from '@rabby-wallet/rabby-api/dist/types';
 import {
   PERPS_MAX_NTL_VALUE,
   PERPS_POSITION_RISK_LEVEL,
   PerpsQuoteAsset,
-  COLLATERAL_TOKEN_TO_QUOTE,
 } from './constants';
 import { useWallet, WalletController } from '@/ui/utils';
 import { KEYRING_CLASS } from '@/constant';
 import { getPerpsSDK } from './sdkManager';
-import { maxBy } from 'lodash';
+import store from '@/ui/store';
+
+/**
+ * Wait until both the user clearinghouseState and the global asset ticker
+ * have arrived via WS for the current account. Resolves immediately if both
+ * are already ready, or after `timeoutMs` to avoid hanging init forever
+ * (e.g. brand-new account with no positions, flaky WS).
+ */
+export const waitForInitialWsData = (timeoutMs = 5000): Promise<void> => {
+  return new Promise((resolve) => {
+    const isReady = () => {
+      const s = store.getState().perps;
+      return s.isUserDataReady && s.isMarketTickerReady;
+    };
+    if (isReady()) {
+      resolve();
+      return;
+    }
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      unsubscribe();
+      clearTimeout(timer);
+      resolve();
+    };
+    const unsubscribe = store.subscribe(() => {
+      if (isReady()) finish();
+    });
+    const timer = setTimeout(finish, timeoutMs);
+  });
+};
 
 export const getPxDecimals = (markPx: string) => {
   const parts = markPx.split('.');
@@ -20,30 +50,15 @@ export const getPxDecimals = (markPx: string) => {
   return decimalPart.length;
 };
 
-/**
- * Determine quote asset from Meta.collateralToken.
- */
-export const getQuoteAssetFromMeta = (meta: Meta): PerpsQuoteAsset => {
-  return COLLATERAL_TOKEN_TO_QUOTE[meta.collateralToken] ?? 'USDC';
-};
-
-export const normalizeHyperliquidCoinForLogo = (coin: string) => {
-  if (!coin) {
-    return '';
-  }
-  // Keep km:* untouched, but drop k-prefix for meme perps like kPEPE -> PEPE.
-  if (coin.startsWith('k') && !coin.startsWith('km:')) {
-    return coin.slice(1);
-  }
-  return coin;
-};
-
-export const getHyperliquidCoinLogoUrl = (coin: string) => {
-  const iconKey = normalizeHyperliquidCoinForLogo(coin);
-  if (!iconKey) {
-    return '';
-  }
-  return `https://app.hyperliquid.xyz/coins/${iconKey}.svg`;
+import { getQuoteAssetFromMeta } from '@/utils/perps/quoteAsset';
+import {
+  normalizeHyperliquidCoinForLogo,
+  getHyperliquidCoinLogoUrl,
+} from '@/utils/perps/coinLogo';
+export {
+  getQuoteAssetFromMeta,
+  normalizeHyperliquidCoinForLogo,
+  getHyperliquidCoinLogoUrl,
 };
 
 export const formatMarkData = (
@@ -106,6 +121,7 @@ export const formatMarkData = (
           quoteAsset,
           displayName: topAsset.display_name || topAsset.name,
           category: topAsset.category || '',
+          categoryId: topAsset.category_id || topAsset.category || '',
           maxLeverage: Number(
             firstTier?.maxLeverage ?? hlDataAsset?.maxLeverage
           ),
@@ -395,20 +411,4 @@ export const checkPerpsReference = async ({
     console.error('checkPerpsReference error', e);
     return false;
   }
-};
-
-export const getMaxTimeFromAccountHistory = (
-  historyList: AccountHistoryItem[]
-) => {
-  const depositList = historyList.filter((item) => item.type === 'deposit');
-  const withdrawList = historyList.filter((item) => item.type === 'withdraw');
-  const receiveList = historyList.filter((item) => item.type === 'receive');
-  const depositMaxTime = maxBy(depositList, 'time')?.time || 0;
-  const withdrawMaxTime = maxBy(withdrawList, 'time')?.time || 0;
-  const receiveMaxTime = maxBy(receiveList, 'time')?.time || 0;
-  return {
-    depositMaxTime,
-    withdrawMaxTime,
-    receiveMaxTime,
-  };
 };
