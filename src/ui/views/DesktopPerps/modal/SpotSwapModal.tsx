@@ -1,5 +1,6 @@
 import React from 'react';
-import { Modal, Button, Dropdown, Menu, Input } from 'antd';
+import { Modal, Button, Dropdown, Menu } from 'antd';
+import { ThousandsInput } from '../components/ThousandsInput';
 import { useTranslation } from 'react-i18next';
 import BigNumber from 'bignumber.js';
 import { TooltipWithMagnetArrow } from '@/ui/component/Tooltip/TooltipWithMagnetArrow';
@@ -27,6 +28,9 @@ interface SpotSwapModalProps {
   sourceAsset?: PerpsQuoteAsset;
   /** When true, locks BOTH from and to dropdowns and hides their dropdown arrows. */
   disableSwitch?: boolean;
+  /** Stack-aware z-index from usePerpsPopupNav — applied to both the dialog
+   *  and the mask so deposit's mask renders above swap's dialog when nested. */
+  zIndex?: number;
   onClose: () => void;
   onSuccess?: () => void;
   onDeposit?: () => void;
@@ -37,6 +41,7 @@ export const SpotSwapModal: React.FC<SpotSwapModalProps> = ({
   targetAsset,
   sourceAsset,
   disableSwitch,
+  zIndex,
   onClose,
   onSuccess,
   onDeposit,
@@ -118,11 +123,12 @@ export const SpotSwapModal: React.FC<SpotSwapModalProps> = ({
       footer={null}
       centered
       width={400}
+      zIndex={zIndex}
       closable={!submitting}
       closeIcon={<RcIconCloseCC className="w-14 text-r-neutral-title-1" />}
       bodyStyle={{ padding: 0, height: '520px', maxHeight: '520px' }}
       maskStyle={{
-        zIndex: 1000,
+        zIndex: zIndex ?? 1000,
         backdropFilter: 'blur(8px)',
         backgroundColor: 'rgba(0, 0, 0, 0.3)',
       }}
@@ -199,7 +205,7 @@ export const SpotSwapModal: React.FC<SpotSwapModalProps> = ({
                 </div>
               </div>
               <div className="flex items-center gap-8">
-                <Input
+                <ThousandsInput
                   bordered={false}
                   size="large"
                   value={amount}

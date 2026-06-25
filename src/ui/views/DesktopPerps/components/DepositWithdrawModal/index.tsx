@@ -6,7 +6,7 @@ import { ModalCloseIcon } from '@/ui/views/DesktopProfile/components/TokenDetail
 import { SvgIconCross } from 'ui/assets';
 import { TokenWithChain } from '@/ui/component';
 import { ReactComponent as RcIconArrowRight } from '@/ui/assets/dashboard/settings/icon-right-arrow-cc.svg';
-import { ReactComponent as RcIconHistory } from '@/ui/assets/swap/history.svg';
+import { ReactComponent as RcIconHistory } from '@/ui/assets/swap/history-cc.svg';
 import { RcIconArrowDownCC } from '@/ui/assets/desktop/common';
 import { SvgPendingSpin } from '@/ui/assets';
 import ThemeIcon from '@/ui/component/ThemeMode/ThemeIcon';
@@ -27,6 +27,7 @@ import { HistoryPopup } from './HistoryPopup';
 import { ReactComponent as RcIconPending } from '@/ui/assets/perps/IconPending.svg';
 import { DepositPending } from './DepositPending';
 import { DashedUnderlineText } from '../DashedUnderlineText';
+import { ThousandsNativeInput } from '../ThousandsNativeInput';
 import { ReactComponent as RcIconInfo } from '@/ui/assets/perps/IconInfo.svg';
 
 export type DepositWithdrawModalType = 'deposit' | 'withdraw';
@@ -34,6 +35,8 @@ export type DepositWithdrawModalType = 'deposit' | 'withdraw';
 interface DepositWithdrawModalProps {
   visible: boolean;
   type: DepositWithdrawModalType;
+  /** Stack-aware z-index from usePerpsPopupNav. */
+  zIndex?: number;
   onCancel: () => void;
 }
 
@@ -47,6 +50,7 @@ const PERCENTAGE_OPTIONS = [
 export const DepositWithdrawModal: React.FC<DepositWithdrawModalProps> = ({
   visible,
   type,
+  zIndex,
   onCancel,
 }) => {
   const { t } = useTranslation();
@@ -174,9 +178,10 @@ export const DepositWithdrawModal: React.FC<DepositWithdrawModalProps> = ({
       footer={null}
       width={400}
       centered
+      zIndex={zIndex}
       bodyStyle={{ padding: 0, height: '520px', maxHeight: '520px' }}
       maskStyle={{
-        zIndex: 1000,
+        zIndex: zIndex ?? 1000,
         backdropFilter: 'blur(8px)',
         backgroundColor: 'rgba(0, 0, 0, 0.3)',
       }}
@@ -189,17 +194,17 @@ export const DepositWithdrawModal: React.FC<DepositWithdrawModalProps> = ({
       className="modal-support-darkmode desktop-perps-deposit-withdraw-modal"
     >
       <PopupContainer>
-        <div className="bg-r-neutral-bg-2 h-[520px] flex flex-col h-full relative overflow-hidden desktop-perps-deposit-withdraw-content">
+        <div className="bg-r-neutral-bg-2 h-[520px] flex flex-col relative overflow-hidden desktop-perps-deposit-withdraw-content">
           <div className="px-20 pt-16 flex-1 pb-24">
             <div className="flex items-center justify-center gap-8 mb-16 relative">
               <div
-                className="absolute left-0 top-1/2 -translate-y-1/2 cursor-pointer"
+                className="absolute left-0 top-1/2 -translate-y-1/2 cursor-pointer text-r-neutral-title-1 hover:text-r-blue-default"
                 onClick={() => setHistoryVisible(true)}
               >
                 {pendingCount > 0 ? (
                   <DepositPending pendingCount={pendingCount} />
                 ) : (
-                  <RcIconHistory className="w-20 h-20 text-r-neutral-title-1" />
+                  <RcIconHistory className="w-20 h-20" />
                 )}
               </div>
 
@@ -275,7 +280,7 @@ export const DepositWithdrawModal: React.FC<DepositWithdrawModalProps> = ({
                 {/* Amount input + token pill */}
                 <div className="bg-r-neutral-card1 rounded-[8px] px-16 py-24 mb-12">
                   <div className="flex items-center gap-12">
-                    <input
+                    <ThousandsNativeInput
                       ref={inputRef}
                       className={clsx(
                         'flex-1 text-[28px] leading-[34px] font-medium bg-transparent border-none p-0 outline-none focus:outline-none min-w-0',
@@ -296,7 +301,7 @@ export const DepositWithdrawModal: React.FC<DepositWithdrawModalProps> = ({
                       onClick={() => setTokenSelectVisible(true)}
                       className={clsx(
                         'flex items-center justify-center gap-6 pl-6 pr-8 h-32 rounded-[8px] border border-solid border-transparent',
-                        'bg-r-neutral-card-2 cursor-pointer flex-shrink-0',
+                        'bg-r-neutral-card-2 cursor-pointer shrink-0',
                         'hover:border-rabby-blue-default hover:text-rb-brand-default'
                       )}
                     >
@@ -342,7 +347,7 @@ export const DepositWithdrawModal: React.FC<DepositWithdrawModalProps> = ({
               <>
                 <div className="bg-r-neutral-card1 rounded-[8px] px-20 py-20 mb-12">
                   <div className="flex flex-col items-center justify-center">
-                    <input
+                    <ThousandsNativeInput
                       ref={inputRef}
                       className={clsx(
                         'text-[32px] font-medium bg-transparent border-none p-0 text-center w-full outline-none focus:outline-none',
@@ -427,7 +432,7 @@ export const DepositWithdrawModal: React.FC<DepositWithdrawModalProps> = ({
             )}
 
             <div className="mt-12 space-y-8">
-              {type === 'withdraw' && (
+              {type === 'withdraw' && !amountValidation.errorMessage && (
                 <>
                   <div className="flex items-center justify-between text-13">
                     <Tooltip

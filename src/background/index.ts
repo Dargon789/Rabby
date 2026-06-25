@@ -4,6 +4,7 @@ import { getOriginFromUrl, transformFunctionsToZero } from '@/utils';
 import { appIsDev, getSentryEnv, isManifestV3 } from '@/utils/env';
 import { matomoRequestEvent } from '@/utils/matomo-request';
 import { Message, sendReadyMessageToTabs } from '@/utils/message';
+import { RABBY_SENTRY_IGNORE_ERRORS } from '@/utils/sentry';
 import Safe from '@rabby-wallet/gnosis-sdk';
 import * as Sentry from '@sentry/browser';
 import fetchAdapter from 'background/utils/fetchAdapter';
@@ -13,6 +14,7 @@ import {
   BALANCE_SYNC_SCENE,
   CACHE_VALID_DURATION,
   DEFI_SYNC_SCENE,
+  NFT_SYNC_SCENE,
   TOKEN_SYNC_SCENE,
 } from '@/db/constants';
 import { syncDbService } from '@/db/services/syncDbService';
@@ -59,6 +61,7 @@ import {
   perpsService,
   transactionsService,
   innerDappFrameService,
+  feedbackService,
 } from './service';
 import { customTestnetService } from './service/customTestnet';
 import { GasAccountServiceStore } from './service/gasAccount';
@@ -66,12 +69,24 @@ import { testnetOpenapiService } from './service/openapi';
 import { syncChainService } from './service/syncChain';
 import { userGuideService } from './service/userGuide';
 import lendingService from './service/lending';
+import perpsLive from './service/perpsLive';
+import { PERPS_LIVE_PORT_NAME } from '@/utils/message/perpsLive';
+
+/** Controller methods the perps widget content-script may call via runtime.sendMessage */
+const PERPS_WIDGET_RPC_ALLOWLIST = new Set<string>([
+  'getPerpsWidgetEnabled',
+  'getPerpsWidgetBlockedHosts',
+  'getPerpsWidgetBallPosition',
+  'setPerpsWidgetBallPosition',
+  'openInDesktop',
+]);
 import rpcCache from './utils/rpcCache';
 import { storage } from './webapi';
 import { metamaskModeService } from './service/metamaskModeService';
 import { ga4 } from '@/utils/ga4';
 import { ALARMS_SYNC_DEFAULT_RPC, ALARMS_USER_ENABLE } from './utils/alarms';
 import { subscribeTxCompleted } from './subscriptions/rateGuidance';
+import { shouldReportUserBehaviorData } from '@/utils/user-data-tracking';
 
 BigNumber.config({ EXPONENTIAL_AT: [-20, 100] });
 
@@ -89,19 +104,14 @@ Sentry.init({
     'https://f4a992c621c55f48350156a32da4778d@o4507018303438848.ingest.us.sentry.io/4507018389749760',
   release: process.env.release,
   environment: getSentryEnv(),
-  ignoreErrors: [
-    'Transport error: {"event":"transport_error","params":["Websocket connection failed"]}',
-    'Failed to fetch',
-    'TransportOpenUserCancelled',
-    'Non-Error promise rejection captured with keys: message, stack',
-    'Non-Error promise rejection captured with keys: message',
-    /Non-Error promise rejection captured with keys/,
-    /\[From .*\]/, // error from custom rpc
-    /AxiosError/,
-    /WebSocket connection failed/,
-    /Could not establish connection/,
-    /HttpRequestError/,
-  ],
+  autoSessionTracking: false,
+  beforeSend: async (event) => {
+    if (!(await shouldReportUserBehaviorData())) {
+      return null;
+    }
+    return event;
+  },
+  ignoreErrors: RABBY_SENTRY_IGNORE_ERRORS,
 });
 
 async function restoreAppState() {
@@ -109,6 +119,7 @@ async function restoreAppState() {
   const keyringState = await storage.get('keyringState');
   keyringService.loadStore(keyringState);
   keyringService.store.subscribe((value) => storage.set('keyringState', value));
+  keyringService.sanitizeUnencryptedKeyringDataInStore();
   await openapiService.init();
   await testnetOpenapiService.init();
 
@@ -141,6 +152,10 @@ async function restoreAppState() {
   await transactionsService.init();
   await lendingService.init();
   await innerDappFrameService.init();
+  await feedbackService.init();
+
+  // WS is lazy — subscribes only after the first content-script port attaches
+  perpsLive.boot();
 
   await walletController.tryUnlock();
 
@@ -199,6 +214,11 @@ async function restoreAppState() {
       scene: BALANCE_SYNC_SCENE,
       updatedAt: Date.now() - CACHE_VALID_DURATION,
     });
+    syncDbService.setUpdatedAtIfExists({
+      address,
+      scene: NFT_SYNC_SCENE,
+      updatedAt: Date.now() - CACHE_VALID_DURATION,
+    });
   });
 
   if (appIsDev) {
@@ -216,6 +236,34 @@ async function restoreAppState() {
           ready: true,
         },
       });
+      return;
+    }
+    // Native chrome.runtime.onMessage requires explicit `sendResponse(...)` + `return true`
+    // on async paths — returning a Promise would let Chrome close the channel immediately.
+    if (message?.type === 'controller' && typeof message.method === 'string') {
+      if (!PERPS_WIDGET_RPC_ALLOWLIST.has(message.method)) return;
+      const params = Array.isArray(message.params) ? message.params : [];
+      try {
+        const res = (walletController as any)[message.method](...params);
+        if (res && typeof (res as any).then === 'function') {
+          Promise.resolve(res).then(
+            (value) => sendResponse(value),
+            (err) => {
+              console.warn(
+                '[perps-widget rpc] async error',
+                message.method,
+                err
+              );
+              sendResponse(undefined);
+            }
+          );
+          return true;
+        }
+        sendResponse(res);
+      } catch (err) {
+        console.warn('[perps-widget rpc] sync error', message.method, err);
+        sendResponse(undefined);
+      }
     }
   });
 
@@ -334,6 +382,19 @@ keyringService.on('resetPassword', async () => {
 
 // for page provider
 browser.runtime.onConnect.addListener((port) => {
+  // perpsLive owns this port; bypass the generic page-provider routing below
+  if (port.name === PERPS_LIVE_PORT_NAME) {
+    // Fail-closed: only this extension's own content-scripts (which always run
+    // in a tab) may subscribe to the live perps feed. Guards against a future
+    // externally_connectable entry turning this into an open positions/PnL leak.
+    if (port.sender?.id !== browser.runtime.id || !port.sender?.tab) {
+      port.disconnect();
+      return;
+    }
+    perpsLive.attachPort(port);
+    return;
+  }
+
   if (
     port.name === 'popup' ||
     port.name === 'notification' ||
@@ -416,11 +477,15 @@ browser.runtime.onConnect.addListener((port) => {
       });
     }
 
+    feedbackService.setScreenshotContextMenuVisible(true).catch(() => {
+      // Reset the native menu for newly opened extension pages.
+    });
+
     browser.runtime.sendMessage({
       type: 'pageOpened',
     });
     eventBus.addEventListener(EVENTS.broadcastToUI, boardcastCallback);
-    port.onDisconnect.addListener(() => {
+    port.onDisconnect.addListener((p) => {
       browser.runtime.sendMessage({
         type: 'pageClosed',
       });

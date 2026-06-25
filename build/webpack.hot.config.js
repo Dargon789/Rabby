@@ -64,7 +64,13 @@ const commonConfig = {
   devtool: 'inline-cheap-module-source-map',
   watch: !isHot,
   watchOptions: {
-    ignored: ['**/public', '**/node_modules'],
+    ignored: [
+      '**/public',
+      '**/node_modules',
+      '**/dist/**',
+      '**/dist-mv2/**',
+      '**/tmp/**',
+    ],
     followSymlinks: false,
   },
   output: {
@@ -95,6 +101,7 @@ const commonConfig = {
       zlib: require.resolve('browserify-zlib'),
       https: require.resolve('https-browserify'),
       http: require.resolve('stream-http'),
+      vm: false,
     },
     extensions: ['.js', 'jsx', '.ts', '.tsx'],
   },
@@ -308,6 +315,15 @@ const uiConfig = {
           },
           {
             loader: 'postcss-loader',
+            options: {
+              postcssOptions: {
+                plugins: [
+                  require('postcss-nested'),
+                  require('postcss-custom-properties'),
+                  require('autoprefixer'),
+                ],
+              },
+            },
           },
           {
             loader: 'less-loader',

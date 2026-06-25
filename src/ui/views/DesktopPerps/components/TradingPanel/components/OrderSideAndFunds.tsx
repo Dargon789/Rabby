@@ -20,41 +20,42 @@ export const OrderSideAndFunds: React.FC<AvailableFundsProps> = ({
     needDepositFirst,
     needEnableTrading,
     openSwapForCurrentQuote,
+    handleActionApproveStatus,
     openPerpsPopup,
   } = usePerpsTradingGate();
 
   const currentNeedSwap = quoteAsset !== 'USDC';
 
-  const handleDepositClick = () => {
-    // Priority matches TradingButtons: deposit > enable-trading > swap.
-    // Without funds, swapping is meaningless — must deposit first.
-    // While enable-trading is pending, the swap entry is suppressed (the
-    // dedicated enable-trading button handles that step).
+  const showSwapIcon = !needDepositFirst && currentNeedSwap;
+
+  const handleClick = async () => {
     if (needDepositFirst) {
       openPerpsPopup('deposit');
       return;
     }
-    if (needEnableTrading) {
-      openPerpsPopup('deposit');
-      return;
-    }
     if (currentNeedSwap) {
+      if (needEnableTrading) {
+        try {
+          await handleActionApproveStatus();
+        } catch {
+          // handleActionApproveStatus already surfaces toast + Sentry.
+          return;
+        }
+      }
       openSwapForCurrentQuote();
       return;
     }
     openPerpsPopup('deposit');
   };
 
-  const showSwapIcon = !needDepositFirst && !needEnableTrading;
-
   return (
     <div className="flex items-center justify-between">
-      <span className="text-rb-neutral-secondary text-[12px]">
+      <span className="text-rb-neutral-secondary text-12">
         {t('page.perpsPro.tradingPanel.availableFunds')}
       </span>
       <span
-        className="text-rb-neutral-title-1 text-[12px] font-medium flex items-center gap-[4px] cursor-pointer"
-        onClick={handleDepositClick}
+        className="text-rb-neutral-title-1 text-12 flex items-center gap-[4px] cursor-pointer"
+        onClick={handleClick}
       >
         {splitNumberByStep(
           new BigNumber(availableBalance).toFixed(2, BigNumber.ROUND_DOWN)
