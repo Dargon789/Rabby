@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Button, Input, message } from 'antd';
+import { Modal, Button, message } from 'antd';
+import { ThousandsInput } from '../components/ThousandsInput';
 import { useTranslation } from 'react-i18next';
 import BigNumber from 'bignumber.js';
 import clsx from 'clsx';
@@ -25,12 +26,15 @@ import { KEYRING_TYPE } from '@/constant';
 
 interface TransferToPerpsModalProps {
   visible: boolean;
+  /** Stack-aware z-index from usePerpsPopupNav. */
+  zIndex?: number;
   onClose: () => void;
   onSuccess?: () => void;
 }
 
 export const TransferToPerpsModal: React.FC<TransferToPerpsModalProps> = ({
   visible,
+  zIndex,
   onClose,
   onSuccess,
 }) => {
@@ -184,11 +188,12 @@ export const TransferToPerpsModal: React.FC<TransferToPerpsModalProps> = ({
       footer={null}
       centered
       width={400}
+      zIndex={zIndex}
       closable={!submitting}
       closeIcon={<RcIconCloseCC className="w-14 text-r-neutral-title-1" />}
       bodyStyle={{ padding: 0, height: '520px', maxHeight: '520px' }}
       maskStyle={{
-        zIndex: 1000,
+        zIndex: zIndex ?? 1000,
         backdropFilter: 'blur(8px)',
         backgroundColor: 'rgba(0, 0, 0, 0.3)',
       }}
@@ -237,7 +242,7 @@ export const TransferToPerpsModal: React.FC<TransferToPerpsModalProps> = ({
             </div>
             <div className="bg-r-neutral-card1 rounded-[12px] px-16 py-14 mb-16">
               <div className="flex items-center gap-8">
-                <Input
+                <ThousandsInput
                   bordered={false}
                   size="large"
                   value={amount}
