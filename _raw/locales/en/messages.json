@@ -4,7 +4,9 @@
       "title": "Transactions",
       "empty": {
         "title": "No transactions",
-        "desc": " No transactions found on <1>supported chains</1>"
+        "desc": " No transactions found on <1>supported chains</1>",
+        "noTxInThreeMonth": "No Transaction history in 90 Days",
+        "descThreeMonths": "No Transaction history in 90 Days on <2>supported chains</2>"
       },
       "explain": {
         "approve": "Approve {{amount}} {{symbol}} for {{project}}",
@@ -49,7 +51,7 @@
       "slippageTolerance": "Slippage tolerance",
       "singleTransactionGasLimit": "Single Transaction Gas Limit",
       "startConvert": "Start convert",
-      "unsupportedWalletType": "Only private key and seed phrase addresses are supported.",
+      "unsupportedWalletType": "This address type is not supported",
       "stop": "Stop",
       "selectLowValueTokens": "Select Low-Value Tokens",
       "tokenColumn": "Token",
@@ -84,7 +86,144 @@
         "success": "Swap successful"
       },
       "completedTips": "Ongoing swap will continue processing",
-      "priceImpact": "Price Impact Cap"
+      "priceImpact": "Price Impact Cap",
+      "LedgerBtn": {
+        "start": "Start with Ledger",
+        "confirm": "Please confirm with Ledger",
+        "continue": "Continue",
+        "send": "Sending signing request"
+      }
+    },
+    "staking": {
+      "__skip_translation": [
+        "metrics.tvl",
+        "metrics.apr",
+        "metrics.apy",
+        "metrics.lp",
+        "metrics.v2",
+        "metrics.v3"
+      ],
+      "title": "Staking",
+      "searchToken": "Search Token",
+      "myHolding": "My Holding",
+      "holding": "Holding",
+      "protocol": "Protocol",
+      "actions": {
+        "deposit": "Deposit",
+        "withdraw": "Withdraw",
+        "claim": "Claim",
+        "max": "Max",
+        "retry": "Retry"
+      },
+      "filter": {
+        "allProtocol": "All Protocols",
+        "allChains": "All Chains",
+        "selectProtocol": "Select Protocol",
+        "selectChain": "Select Chain",
+        "searchByName": "Search by Name",
+        "searchProtocol": "Search protocol",
+        "searchChain": "Search chain",
+        "all": "All",
+        "clearFilter": "Clear {{filter}}"
+      },
+      "empty": {
+        "noPoolsFound": "No pools found",
+        "noHoldingsFound": "You currently holding no positions.",
+        "noStakingPoolsFound": "No staking pools found",
+        "noProtocols": "No protocols",
+        "noChains": "No chains"
+      },
+      "error": {
+        "failedLoadData": "Failed to load staking data",
+        "failedLoadPools": "Failed to load staking pools",
+        "failedLoadPool": "Failed to load staking pool",
+        "failedLoadChart": "Failed to load staking chart",
+        "failedLoadPosition": "Failed to load position",
+        "transactionFailed": "Staking transaction failed"
+      },
+      "metrics": {
+        "tvl": "TVL",
+        "apr": "APR",
+        "apy": "APY",
+        "yield": "Yield",
+        "lp": "LP",
+        "v2": "V2",
+        "v3": "V3"
+      },
+      "tabs": {
+        "portfolio": "Portfolio",
+        "about": "About",
+        "security": "Security"
+      },
+      "detail": {
+        "poolNotFound": "Staking pool not found",
+        "unsupportedAction": "Unsupported staking action.",
+        "noChartData": "No chart data"
+      },
+      "about": {
+        "pool": "Pool",
+        "address": "Address",
+        "poolAddress": "Pool Address",
+        "uptime": "Uptime",
+        "days": "{{count}} days",
+        "token": "Token",
+        "token1": "Token1",
+        "token2": "Token2",
+        "tokenAddress": "Token address",
+        "token1Address": "Token1 address",
+        "token2Address": "Token2 address",
+        "aboutProtocol": "About {{protocol}}",
+        "noDescription": "No protocol description available.",
+        "showMore": "Show more",
+        "showLess": "Show less",
+        "officialWebsite": "Official Website",
+        "twitter": "X(Twitter)"
+      },
+      "security": {
+        "certifications": "Certifications",
+        "certifiedBy": "Certified by",
+        "certifiedOn": "Certified on",
+        "action": "Action",
+        "view": "View",
+        "noCertificationData": "No certification data"
+      },
+      "portfolio": {
+        "pending": "Pending",
+        "succeed": "Succeeded",
+        "failed": "Failed",
+        "supplied": "Supplied",
+        "rewards": "Rewards",
+        "rewardsWithCount": "Rewards ({{count}})",
+        "priceRange": "Price Range",
+        "noSuppliedAssets": "No supplied assets",
+        "noRewards": "No rewards right now"
+      },
+      "actionModal": {
+        "receive": "Receive",
+        "setPriceRange": "Set Price Range",
+        "range": "Range",
+        "unused": "Unused",
+        "unsupportedPool": "Unsupported pool",
+        "unsupportedErc4626Pool": "Unsupported ERC4626 pool",
+        "unsupportedLpPool": "Unsupported LP pool",
+        "unsupportedChain": "Unsupported chain",
+        "unavailable": "Unavailable",
+        "tokenFallback": "token",
+        "insufficientBalance": "Insufficient {{symbols}} balance",
+        "noWithdrawablePosition": "No withdrawable position",
+        "noClaimableRewards": "No claimable rewards",
+        "submitted": "{{action}} submitted",
+        "submitFailed": "Failed to submit {{action}}",
+        "confirmPoolPriceDifference": "Confirm pool price difference",
+        "poolPriceWarning": "A 10% price impact cap creates arbitrage risks.",
+        "poolPriceTitle": "Pool price: 1 {{token0}} = {{poolPrice}} {{token1}}; Market price: 1 {{token0}} = {{marketPrice}} {{token1}}",
+        "singleAssetDepositOnly": "The market price is outside your specified price range. Single-asset deposit only.",
+        "failedResolveV2Pool": "Failed to resolve V2 pool",
+        "failedResolveV3Pool": "Failed to resolve V3 pool",
+        "noLpPositionToWithdraw": "No LP position to withdraw",
+        "v2RewardsUnsupported": "V2 rewards are not supported",
+        "selectV3PositionToWithdraw": "Select a V3 position to withdraw"
+      }
     },
     "signTx": {
       "nftIn": "NFT in",
@@ -351,7 +490,7 @@
       "safeTx": {
         "selfHostConfirm": {
           "title": "Switch to Rabby's Safe Service",
-          "content": "Safe API is unavailable. Switch to the Safe service deployed by Rabby to keep your Safe functional. <strong>All Safe signers must use Rabby Wallet to authorize transactions.<strong>",
+          "content": "Safe API is unavailable. Switch to the Safe service deployed by Rabby to keep your Safe functional. <strong>All Safe signers must use Rabby Wallet to authorize transactions.</strong>",
           "button": "OK"
         }
       },
@@ -827,9 +966,29 @@
       },
       "cancelAllOrdersPopup": {
         "title": "Confirm Cancel All Orders",
+        "cancelAllOrdersConfirmTitle": "Confirm Cancel ALL Orders",
+        "cancelAllOrdersConfirmMessage": "All your Limit Orders will be canceled",
         "description": "All your open orders will be cancelled."
       },
+      "limitOrders": "Limit Orders",
+      "cancelAll": "Cancel All",
+      "limitOrderDetail": {
+        "title": "Limit {{side}} {{pair}}",
+        "time": "Time",
+        "size": "Size",
+        "filled": "Filled",
+        "currentPrice": "Current Price",
+        "limitPrice": "Limit Price",
+        "marginUsage": "Margin Usage",
+        "cancelLimitOrder": "Cancel Limit Order",
+        "buy": "Buy",
+        "sell": "Sell"
+      },
       "toast": {
+        "cancelLimitOrderSuccess": "Limit order canceled",
+        "cancelLimitOrdersSuccess": "{{count}} limit orders canceled",
+        "cancelLimitOrderError": "Failed to cancel limit order",
+        "limitOrderPlaced": "Limit {{direction}} {{coin}}: Size {{size}} placed at ${{price}}",
         "deposit": "Deposit successful",
         "depositTip": "{{amount}} USDC deposited",
         "success": "Success",
@@ -1059,6 +1218,7 @@
       "currentPrice": "Current Price",
       "settings": "Settings",
       "details": "Details",
+      "info": "Info",
       "liquidationDistanceDown": "Going down <bold>{{percent}}</bold> will trigger liquidation",
       "liquidationDistanceUp": "Going up <bold>{{percent}}</bold> will trigger liquidation",
       "autoClose": "Auto Close",
@@ -1108,6 +1268,9 @@
       "reviewOrder": "Review Order",
       "back": "Back",
       "estimatedLiquidationPrice": "Estimated Liquidation Price",
+      "expectedSlippage": "Estimated Slippage",
+      "lowLiquiditySwitchLimit": " Low liquidity, switch to Limit Order.",
+      "switchToLimit": "Switch",
       "fee": "Fee",
       "leverageRangeMaxError": "The maximum leverage is {{max}}x",
       "leverageRangeMinError": "The minimum leverage is {{min}}x",
@@ -1160,6 +1323,10 @@
         "empty": "No markets found",
         "hasPosition": "Position"
       },
+      "categories": {
+        "favorite": "Favorites",
+        "topVolume": "Top Volume"
+      },
       "fundingRate": "Funding Rate",
       "fundingGains": "Funding Gains",
       "close": "Close",
@@ -1200,6 +1367,9 @@
         "fundingCountdown": "Funding / Countdown",
         "8hrFunding": "8h Funding",
         "categoryAll": "ALL"
+      },
+      "topBar": {
+        "favoriteEmpty": "Your favorite list is empty"
       },
       "userInfo": {
         "tab": {
@@ -1299,7 +1469,15 @@
           "marketCloseBtn": "Market Close",
           "dontShowAgain": "Don't show this again",
           "confirmCloseAllTitle": "Confirm Close All Positions",
-          "confirmCloseAllDesc": "All your open positions will be closed at market price and cancel all orders."
+          "confirmCloseAllDesc": "All your open positions will be closed at market price and cancel all orders.",
+          "positionSize": "Position Size",
+          "orderPrice": "Order Price",
+          "marketPrice": "Market Price",
+          "buy": "Buy",
+          "sell": "Sell",
+          "buyToSell": "Buy to sell",
+          "sellToBuy": "Sell to buy",
+          "reverseAction": "{{side}} {{size}} {{coin}} to Reverse"
         },
         "openOrders": {
           "__skip_translation": [
@@ -1389,6 +1567,7 @@
         "reduceOnly": "Reduce Only",
         "enableTrading": "Enable Trading",
         "addFundsToGetStarted": "Add funds to get started",
+        "notAvailableInRegion": "Not available in your region.",
         "startPrice": "Start Price",
         "endPrice": "End Price",
         "start": "Start",
@@ -1492,12 +1671,18 @@
         "configureMargin": "Configure Margin",
         "longLiquidationTips": "Going down {{percent}} will trigger liquidation",
         "shortLiquidationTips": "Going up {{percent}} will trigger liquidation",
-        "currentPosition": "Current Position"
+        "currentPosition": "Current Position",
+        "currentPrice": "Current Price"
       },
       "editTpSl": {
         "entryPrice": "Entry Price:",
         "markPrice": "Mark Price:",
-        "title": "Configure TP/SL",
+        "entryCurrentPrice": "Entry Price / Current Price",
+        "title": "TP/SL for entire position",
+        "takeProfit": "Take Profit",
+        "stopLoss": "Stop Loss",
+        "triggerPrice": "Trigger Price",
+        "estimatedPnlWillBe": "Your estimated PnL will be",
         "gain": "Gain",
         "loss": "Loss",
         "cancelTp": "Cancel TP",
@@ -1507,7 +1692,11 @@
         "currentPosition": "Current Position",
         "tp": "TP",
         "sl": "SL",
-        "confirm": "Confirm"
+        "confirm": "Confirm",
+        "triggerHigherThanLiquidation": "The trigger price should be higher than the liquidation price {{price}}",
+        "triggerLowerThanLiquidation": "The trigger price should be lower than the liquidation price {{price}}",
+        "tpTriggerInvalid": "The TP trigger price is invalid and will not be set",
+        "slTriggerInvalid": "The SL trigger price is invalid and will not be set"
       },
       "accountInfo": {
         "available": "Available: ",
@@ -1555,7 +1744,10 @@
         "noTrades": "No trades",
         "viewBoth": "Both",
         "viewBids": "Bids",
-        "viewAsks": "Asks"
+        "viewAsks": "Asks",
+        "avgPrice": "Avg. Price",
+        "sumBase": "Sum {{base}}",
+        "sumUsd": "Sum USD"
       }
     },
     "perpsDetail": {
@@ -1569,6 +1761,9 @@
       },
       "PerpsOpenPositionPopup": {
         "newPosition": "Open Position",
+        "openCoinPosition": "Open {{coin}} Position",
+        "checkMarketOrder": "Check Market Order",
+        "checkLimitOrder": "Check Limit Order",
         "margin": "Margin",
         "long": "Long",
         "short": "Short",
@@ -1588,7 +1783,25 @@
         "minimumOrderSize": "The minimum order size is $10",
         "maximumOrderSize": "The maximum order size is {{amount}}",
         "minMargin": "Minimum margin is {{amount}}",
-        "maxMargin": "Maximum margin is {{amount}}"
+        "maxMargin": "Maximum margin is {{amount}}",
+        "orderType": "Order Type",
+        "currentPrice": "Current Price",
+        "check": "Check",
+        "orderTypeMarket": "Market",
+        "orderTypeLimit": "Limit",
+        "limitPrice": "Limit Price",
+        "mayExecuteImmediately": "This limit order may execute immediately",
+        "setLimitOrderBtn": "Set Limit Order"
+      },
+      "PerpEditLimitPriceTag": {
+        "setLimitBuyPrice": "Set Limit Buy Price",
+        "setLimitSellPrice": "Set Limit Sell Price",
+        "mid": "Mid",
+        "set": "Set",
+        "blockError": "Order price exceeds the 10% price protection limit.",
+        "warning": "Limit price is 5%+ away from the market price",
+        "confirmTitle": "Review Limit Price",
+        "confirmMessage": "Limit price is 5%+ away from market price"
       },
       "PerpsEditMarginPopup": {
         "margin": "Margin",
@@ -1633,6 +1846,8 @@
         "EntryAndCurrentPrice": "Entry: ${{entryPrice}} Current: ${{currentPrice}}",
         "priceAbove": "Price above",
         "priceBelow": "Price below",
+        "whenPriceAbove": "When Price Above",
+        "whenPriceBelow": "When Price Below",
         "youGain": "You gain",
         "youLoss": "You lose",
         "takeProfitExpectedPNL": "Take Profit Expected PNL",
@@ -2543,7 +2758,8 @@
           "perpsPositions_other": "{{count}} Positions",
           "lending": "Lending",
           "dragTip": "Long-press feature to reorder",
-          "convertDust": "Convert Dust"
+          "convertDust": "Convert Dust",
+          "staking": "Staking"
         },
         "comingSoon": "Coming soon",
         "soon": "Soon",
@@ -2720,7 +2936,9 @@
           "switchPasswordForNonWhitelistedTx": "Password for non-whitelisted transfers",
           "biometricUnlock": "Unlock with Biometrics",
           "biometricUnlockHint": "Use biometrics to unlock on this device.",
-          "biometricUnlockUnsupported": "This device does not support biometric unlock."
+          "biometricUnlockUnsupported": "This device does not support biometric unlock.",
+          "perpsFloatWidget": "Perps Floating Widget",
+          "dataAnalysis": "Data Analysis"
         },
         "aboutUs": "About us",
         "currentVersion": "Current Version",
@@ -3920,7 +4138,7 @@
       "speedUpDesc": "Gas price increased {{percent}} for a faster speed up"
     },
     "gasAccount": {
-      "gasFee":"Gas fee",
+      "gasFee": "Gas fee",
       "title": "GasAccount",
       "gasDeposit": "Gas Deposit",
       "gasToken": "Gas Token",
@@ -3937,7 +4155,7 @@
       "switchAccount": "Switch Wallet",
       "claimFreeGas": "Claim {{usdValue}} Free Gas",
       "depositFailed": "Deposit failed",
-      "lowBalance": "You don't have enough gas. Deposit gas to ensure future transactions go smoothly.",
+      "lowBalance": "You don't have enough gas(＜$1.00). Deposit gas to ensure future transactions go smoothly.",
       "gasBalance": "Gas Balance",
       "withdrawDisabledIAP": "Withdrawals are disabled because your balance includes fiat funds, which cannot be withdrawn. Contact support to withdraw your token balance",
       "benefitCard": {
@@ -4011,7 +4229,7 @@
         "depositFailed": "Deposit failed, please retry",
         "bridgeDepositFailed": "Bridge deposit failed, please retry",
         "noAvailableToken": "No available token",
-        "InsufficientToken":"Insufficient Token Balance"
+        "InsufficientToken": "Insufficient Token Balance"
       },
       "depositPayPopup": {
         "topUpPayTips": "Gas required: {{topUpUsd}}, Gas remaining est: {{balance}}"
@@ -4801,7 +5019,7 @@
     },
     "DesktopSelectAccountList": {
       "addAddresses": "Add address",
-      "smallSwapDisabledTips": "Currently only private key and seed phrase addresses are supported."
+      "smallSwapDisabledTips": "This address type is not supported"
     },
     "LpTokenTag": {
       "title": "This is a liquidity provider(LP) token",
@@ -4813,6 +5031,19 @@
     },
     "DesktopAccountSelector": {
       "selectAddress": "Select Address"
+    },
+    "UnknownTag": {
+      "label": "Unknown",
+      "tooltip": "Unknown token, please do your own research."
+    },
+    "screenshotModal": {
+      "title": "Screenshot to Feedback",
+      "placeholder": "Describe the issue"
+    },
+    "feedbackPopup": {
+      "title": "Response from Rabby Support",
+      "issueReported": "Here’s the issue you reported:",
+      "issueReplied": "Rabby Support has replied:"
     }
   },
   "global": {
@@ -4851,7 +5082,8 @@
     "tryAgain": "Try Again",
     "notSupportTesntnet": "Not supported for custom network",
     "collapse": "Collapse",
-    "Yes": "Yes"
+    "Yes": "Yes",
+    "Submit": "Submit"
   },
   "background": {
     "error": {
@@ -4881,6 +5113,9 @@
       "txFailedMoreContent": "{{chain}} #{{nonce}} failed. Click to view more.",
       "completed": "Transaction completed",
       "failed": "Transaction failed"
+    },
+    "feedback": {
+      "screenshotContextMenuTitle": "Screenshot to feedback"
     },
     "alias": {
       "HdKeyring": "Seed Phrase",

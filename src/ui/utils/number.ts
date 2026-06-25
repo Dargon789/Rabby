@@ -162,26 +162,71 @@ export const formatUsdValue = (
   return '<$0.01';
 };
 
+export const formatTVL = (
+  value: string | number,
+  roundingMode = BigNumber.ROUND_HALF_UP as BigNumber.RoundingMode
+) => {
+  const bnValue = new BigNumber(value);
+  if (bnValue.isNaN()) {
+    return value.toString();
+  }
+
+  const absoluteValue = bnValue.abs();
+
+  if (absoluteValue.lt(1e6)) {
+    return formatUsdValue(value, roundingMode);
+  }
+
+  const formatCompactValue = (amount: BigNumber) => {
+    if (amount.gte(1e9)) {
+      return `${formatNumber(
+        amount.div(1e9).toFixed(),
+        2,
+        undefined,
+        roundingMode
+      )}B`;
+    }
+    if (amount.gte(1e6)) {
+      return `${formatNumber(
+        amount.div(1e6).toFixed(),
+        2,
+        undefined,
+        roundingMode
+      )}M`;
+    }
+    return `${formatNumber(amount.toFixed(), 2, undefined, roundingMode)}`;
+  };
+
+  if (bnValue.lt(0)) {
+    return `-$${formatCompactValue(absoluteValue)}`;
+  }
+  return `$${formatCompactValue(bnValue)}`;
+};
+
 export type CurrencyLike = {
   code?: string;
   symbol: string;
   logo_url?: string;
   usd_rate: number;
+  is_prefix?: boolean;
 };
 
 const DEFAULT_USD_CURRENCY: CurrencyLike = {
   code: 'USD',
   symbol: '$',
   usd_rate: 1,
+  is_prefix: true,
 };
 
-export const formatCurrency = (
+type FormatCurrencyOptions = {
+  decimal?: number;
+  currency?: CurrencyLike;
+  roundingMode?: BigNumber.RoundingMode;
+};
+
+export const formatCurrencyParts = (
   value: string | number,
-  options?: {
-    decimal?: number;
-    currency?: CurrencyLike;
-    roundingMode?: BigNumber.RoundingMode;
-  }
+  options?: FormatCurrencyOptions
 ) => {
   const {
     decimal = 2,
@@ -191,26 +236,48 @@ export const formatCurrency = (
 
   const bnValue = new BigNumber(value).times(currency.usd_rate || 1);
   const symbol = currency.symbol || '$';
+  const isPrefix = currency.is_prefix !== false;
+  const sign = bnValue.lt(0) ? '-' : '';
+  const absoluteValue = bnValue.absoluteValue();
+  const formatPrefixAmount = (num: BigNumber) =>
+    formatNumber(num.toFixed(), decimal, undefined, roundingMode);
+  const formatPostfixAmount = (num: BigNumber) =>
+    formatTokenAmount(num.toFixed());
 
-  if (bnValue.lt(0)) {
-    return `-${symbol}${formatNumber(
-      bnValue.absoluteValue().toFixed(),
-      decimal,
-      undefined,
-      roundingMode
-    )}`;
+  let amount: string;
+  let isLessThan = false;
+
+  if (!isPrefix) {
+    amount = formatPostfixAmount(absoluteValue);
+  } else if (bnValue.lt(0)) {
+    amount = formatPrefixAmount(absoluteValue);
+  } else if (bnValue.gte(0.01) || bnValue.eq(0)) {
+    amount = formatPrefixAmount(bnValue);
+  } else {
+    amount = '0.01';
+    isLessThan = true;
   }
 
-  if (bnValue.gte(0.01) || bnValue.eq(0)) {
-    return `${symbol}${formatNumber(
-      bnValue.toFixed(),
-      decimal,
-      undefined,
-      roundingMode
-    )}`;
-  }
+  const amountPrefix = `${sign}${isLessThan ? '<' : ''}`;
+  const text = isPrefix
+    ? `${amountPrefix}${symbol}${amount}`
+    : `${amountPrefix}${amount} ${symbol}`;
 
-  return `<${symbol}0.01`;
+  return {
+    amount,
+    isLessThan,
+    isPrefix,
+    sign,
+    symbol,
+    text,
+  };
+};
+
+export const formatCurrency = (
+  value: string | number,
+  options?: FormatCurrencyOptions
+) => {
+  return formatCurrencyParts(value, options).text;
 };
 
 export const formatAmount = (amount: string | number, decimals = 4) => {
