@@ -532,7 +532,13 @@ class GnosisKeyring extends EventEmitter {
     const safeProvider = new SafeProvider({
       provider: {
         request: async ({ method, params }) => {
-          return provider.send(method, params);
+          if (typeof provider.request === 'function') {
+            return provider.request({ method, params });
+          }
+          if (typeof provider.send === 'function') {
+            return provider.send(method, params);
+          }
+          throw new Error('Provider does not support request or send');
         },
       },
     });
