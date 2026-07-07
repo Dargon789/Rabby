@@ -1,3 +1,16 @@
+/* Regular weight on the Perps pro page is 350. Set on the tagged document body
+   so it cascades to the page and every portaled surface (modals / tooltips /
+   toasts); heavier utilities (medium/semibold/bold) still override. Elements
+   should inherit this rather than hardcoding `font-weight: 400`. */
+body.perps-pro-page {
+  font-weight: 350;
+
+  /* Override the token, not the utility: `.font-medium` is `!important` inside
+     `@layer utilities`, so an unlayered override can never win regardless of
+     specificity. Re-pointing the var cascades to every `.font-medium` here. */
+  --font-weight-medium: 450;
+}
+
 .trades-container-no-scrollbar {
   &::-webkit-scrollbar {
     display: none;
@@ -267,9 +280,14 @@ button.desktop-perps-topbar-deposit-button {
   white-space: nowrap;
   font-family: inherit;
   font-size: 12px;
-  font-weight: 400;
   line-height: 14px;
   font-variant-numeric: tabular-nums;
+
+  .desktop-perps-status-item-change,
+  .desktop-perps-status-item-price {
+    display: inline-block;
+    white-space: nowrap;
+  }
 
   .desktop-perps-status-item-price {
     transition: color 0.15s ease;
@@ -374,7 +392,6 @@ button.desktop-perps-topbar-deposit-button {
   gap: 20px;
   color: var(--rb-neutral-foot);
   font-size: 12px;
-  font-weight: 400;
   line-height: 14px;
   white-space: nowrap;
 
@@ -387,7 +404,7 @@ button.desktop-perps-topbar-deposit-button {
 .desktop-perps-modal-surface {
   .ant-modal-content {
     background: var(--rb-neutral-bg-1);
-    border: 2px solid var(--r-neutral-line);
+    border: 1px solid var(--r-neutral-line);
     border-radius: 8px;
     box-shadow: 0 16px 24px rgba(0, 0, 0, 0.1);
     overflow: hidden;

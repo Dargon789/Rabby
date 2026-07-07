@@ -159,7 +159,7 @@ const MarketRowComponent = memo(
           {/* Right: Data columns - 5 columns with custom widths */}
           <div className="flex flex-1">
             {/* Last Price */}
-            <div className="text-[13px] text-r-neutral-title-1 text-start flex-1">
+            <div className="text-[13px] text-r-neutral-body text-start flex-1">
               ${splitNumberByStep(Number(marketItem.markPx))}
             </div>
 
@@ -179,19 +179,19 @@ const MarketRowComponent = memo(
             {/* 8hr Funding */}
             <div
               className={clsx(
-                'text-[13px] text-r-neutral-title-1 text-start flex-1'
+                'text-[13px] text-r-neutral-body text-start flex-1'
               )}
             >
               {formatPercent(Number(marketItem.funding), 4)}
             </div>
 
             {/* Volume */}
-            <div className="text-[13px] text-r-neutral-title-1 text-start flex-1">
+            <div className="text-[13px] text-r-neutral-body text-start flex-1">
               {formatUsdValueKMB(Number(marketItem.dayNtlVlm))}
             </div>
 
             {/* Open Interest */}
-            <div className="text-[13px] text-r-neutral-title-1 text-start flex-1">
+            <div className="text-[13px] text-r-neutral-body text-start flex-1">
               {formatUsdValueKMB(
                 Number(marketItem.openInterest) * Number(marketItem.markPx)
               )}
@@ -438,7 +438,7 @@ export const CoinDropdown: React.FC<CoinDropdownProps> = ({
 
   const dropdownMenu = useMemo(
     () => (
-      <div className="bg-rb-neutral-bg-1 rounded-[8px] shadow-lg border border-solid border-rb-neutral-line w-[850px] h-[480px] overflow-hidden flex flex-col px-16 pt-16">
+      <div className="bg-rb-neutral-bg-1 rounded-[8px] shadow-lg border border-solid border-rb-neutral-line w-[854px] h-[480px] overflow-hidden flex flex-col px-16 pt-16">
         <SearchInput
           prefix={<RcIconSearch className="text-r-neutral-foot" />}
           placeholder={t('page.perpsPro.chatArea.searchMarkets')}
@@ -569,9 +569,9 @@ export const CoinDropdown: React.FC<CoinDropdownProps> = ({
   );
 
   return (
-    <div className="mr-[24px] flex items-center gap-[6px]">
+    <div className="mr-[24px] flex items-center">
       <div
-        className="flex items-center justify-center w-[16px] h-[16px] shrink-0 cursor-pointer"
+        className="flex items-center justify-center w-[24px] h-[24px] mx-[12px] shrink-0 cursor-pointer rounded-[3px] border border-solid border-rb-neutral-line"
         onClick={(e) => handleToggleFavorite(coin, e)}
       >
         {favoritedCoins.includes(coin) ? (
@@ -601,7 +601,7 @@ export const CoinDropdown: React.FC<CoinDropdownProps> = ({
             quoteClassName="text-r-neutral-title-1"
             showDexTag
           />
-          <RcIconArrowDown className="w-[16px] h-[16px] text-r-neutral-secondary" />
+          <RcIconArrowDown className="text-r-neutral-secondary" />
         </div>
       </Dropdown>
     </div>

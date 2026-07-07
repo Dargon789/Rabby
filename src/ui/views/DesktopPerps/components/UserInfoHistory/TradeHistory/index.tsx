@@ -57,7 +57,7 @@ export const TradeHistory: React.FC = () => {
         sorter: (a, b) => a.time - b.time,
         render: (_, record) => {
           return (
-            <div className="text-[13px] leading-[16px]  text-r-neutral-title-1">
+            <div className="text-[13px] leading-[16px]  text-r-neutral-body">
               {dayjs(record.time).format('YYYY/MM/DD HH:mm:ss')}
             </div>
           );
@@ -67,7 +67,7 @@ export const TradeHistory: React.FC = () => {
         title: t('page.perpsPro.userInfo.tab.coin'),
         key: 'coin',
         dataIndex: 'coin',
-        width: '10%',
+        width: '13%',
         sorter: (a, b) => a.coin.localeCompare(b.coin),
         render: (_, record) => {
           return (
@@ -101,7 +101,7 @@ export const TradeHistory: React.FC = () => {
         sorter: (a, b) => Number(a.sz) - Number(b.sz),
         render: (_, record) => {
           return (
-            <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+            <div className="text-[12px] leading-[14px]  text-r-neutral-body">
               {Math.abs(Number(record.sz || 0))} {formatPerpsCoin(record.coin)}
             </div>
           );
@@ -138,7 +138,7 @@ export const TradeHistory: React.FC = () => {
           const pxDecimals = marketDataMap[record.coin]?.pxDecimals || 2;
           const px = new BigNumber(record.px).toFixed(pxDecimals);
           return (
-            <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+            <div className="text-[12px] leading-[14px]  text-r-neutral-body">
               ${splitNumberByStep(px)}
             </div>
           );
@@ -149,14 +149,14 @@ export const TradeHistory: React.FC = () => {
         key: 'tradeValue',
         dataIndex: 'tradeValue',
         // width: 180,
-        width: '15%',
+        width: '14%',
         sorter: (a, b) =>
           new BigNumber(a.px).times(new BigNumber(a.sz).abs()).toNumber() -
           new BigNumber(b.px).times(new BigNumber(b.sz).abs()).toNumber(),
         render: (_, record) => {
           return (
             <div className="space-y-[4px]">
-              <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+              <div className="text-[12px] leading-[14px]  text-r-neutral-body">
                 $
                 {splitNumberByStep(
                   new BigNumber(record.px)
@@ -176,11 +176,11 @@ export const TradeHistory: React.FC = () => {
         title: t('page.perpsPro.userInfo.tab.fee'),
         key: 'fee',
         dataIndex: 'fee',
-        width: '10%',
+        width: '8%',
         sorter: (a, b) => Number(a.fee) - Number(b.fee),
         render: (_, record) => {
           return (
-            <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+            <div className="text-[12px] leading-[14px]  text-r-neutral-body">
               ${splitNumberByStep(Number(record.fee).toFixed(2))}
             </div>
           );
@@ -244,7 +244,7 @@ export const TradeHistory: React.FC = () => {
       defaultSortField="time"
       defaultSortOrder="descend"
       virtual
-      rowHeight={48}
+      rowHeight={44}
     ></CommonTable>
   );
 };

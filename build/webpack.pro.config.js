@@ -1,7 +1,5 @@
 const webpack = require('webpack');
 const TerserPlugin = require('terser-webpack-plugin');
-const { sentryWebpackPlugin } = require('@sentry/webpack-plugin');
-
 const sentrySourceMap = !!process.env.sourcemap || false;
 const SecSDK = require('warden-for-js').WardenPlugin;
 
@@ -17,21 +15,6 @@ const config = {
     new webpack.DefinePlugin({
       'process.env.BUILD_ENV': JSON.stringify('PRO'),
     }),
-    sentrySourceMap &&
-      sentryWebpackPlugin({
-        include: './dist',
-        ignoreFile: '.sentrycliignore',
-        ignore: ['node_modules', 'webpack.config.js'],
-        configFile: 'sentry.properties',
-        release: {
-          name: process.env.VERSION,
-        },
-        org: process.env.SENTRY_ORG,
-        project: process.env.SENTRY_PROJECT,
-
-        authToken: process.env.SENTRY_AUTH_TOKEN,
-      }),
-    ,
     true && new SecSDK(),
   ].filter(Boolean),
 

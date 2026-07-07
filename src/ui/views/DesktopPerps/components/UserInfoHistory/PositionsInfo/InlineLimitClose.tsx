@@ -541,8 +541,8 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
       >
         <ThousandsNativeInput
           className={clsx(
-            'w-[68px] h-[24px] px-[6px] text-[11px] rounded-[4px] outline-none',
-            'bg-transparent text-r-neutral-title-1',
+            'w-[68px] h-[24px] px-[6px] text-[11px] rounded-[3px] outline-none',
+            'bg-transparent text-r-neutral-body',
             'border border-solid',
             !isPriceValid
               ? 'border-rb-red-default'
@@ -585,7 +585,7 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
               {CLOSE_PERCENTAGES.map((pct) => (
                 <span
                   key={pct}
-                  className="text-13 text-rb-neutral-title-1 bg-rb-neutral-line hover:text-rb-brand-default cursor-pointer px-[11px] h-[24px] flex items-center justify-center rounded-[4px]"
+                  className="text-13 text-rb-neutral-title-1 bg-rb-neutral-line hover:text-rb-brand-default cursor-pointer px-[11px] h-[24px] flex items-center justify-center rounded-[3px]"
                   onMouseDown={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
@@ -602,8 +602,8 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
           <ThousandsNativeInput
             ref={sizeInputRef}
             className={clsx(
-              'w-[60px] h-[24px] px-[6px] text-[11px] rounded-[4px] outline-none',
-              'bg-transparent text-r-neutral-title-1',
+              'w-[60px] h-[24px] px-[6px] text-[11px] rounded-[3px] outline-none',
+              'bg-transparent text-r-neutral-body',
               'border border-solid',
               isSizeOverMax || sizeNum <= 0
                 ? 'border-rb-red-default'

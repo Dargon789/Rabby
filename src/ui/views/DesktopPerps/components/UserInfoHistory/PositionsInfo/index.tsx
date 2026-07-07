@@ -313,7 +313,7 @@ export const PositionsInfo: React.FC = () => {
         title: t('page.perpsPro.userInfo.tab.coin'),
         className: 'relative',
         key: 'coin',
-        width: 130,
+        width: 172,
         dataIndex: 'coin',
         sorter: (a, b) => a.coin.localeCompare(b.coin),
         render: (_, record) => {
@@ -376,7 +376,7 @@ export const PositionsInfo: React.FC = () => {
         render: (_, record) => {
           return (
             <div>
-              <div className="text-[12px] leading-[14px]  text-r-neutral-title-1 mb-[4px]">
+              <div className="text-[12px] leading-[14px]  text-r-neutral-body mb-[4px]">
                 {formatUsdValue(record.positionValue || 0)}
               </div>
               <div className="text-[12px] leading-[14px]  text-rb-neutral-secondary">
@@ -395,7 +395,7 @@ export const PositionsInfo: React.FC = () => {
         render: (_, record) => {
           return (
             <div>
-              <div className="text-[12px] leading-[14px]  text-r-neutral-title-1 mb-[4px]">
+              <div className="text-[12px] leading-[14px]  text-r-neutral-body mb-[4px]">
                 ${splitNumberByStep(record.markPx)}
               </div>
               <div className="text-[12px] leading-[14px]  text-rb-neutral-secondary">
@@ -432,7 +432,7 @@ export const PositionsInfo: React.FC = () => {
                   </div>
                 </Tooltip>
               ) : (
-                <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+                <div className="text-[12px] leading-[14px]  text-r-neutral-body">
                   -
                 </div>
               )}
@@ -450,7 +450,7 @@ export const PositionsInfo: React.FC = () => {
           return (
             <div className="flex items-center gap-[12px]">
               <div>
-                <div className="text-[12px] leading-[14px]  text-r-neutral-title-1 mb-[4px]">
+                <div className="text-[12px] leading-[14px]  text-r-neutral-body mb-[4px]">
                   {formatUsdValue(Number(record.marginUsed || 0))}
                 </div>
                 <div className="text-[12px] leading-[14px]  text-rb-neutral-secondary">
@@ -579,10 +579,10 @@ export const PositionsInfo: React.FC = () => {
               <button
                 type="button"
                 className={clsx(
-                  'bg-rb-neutral-bg-5 rounded-[4px] px-12 h-24',
+                  'bg-rb-neutral-bg-5 rounded-[3px] px-12 h-24',
                   'border border-transparent',
                   'hover:border-rb-brand-default',
-                  'text-[12px] leading-[14px]  text-r-neutral-title-1'
+                  'text-12 text-r-neutral-title-1'
                 )}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -648,10 +648,10 @@ export const PositionsInfo: React.FC = () => {
                 <button
                   type="button"
                   className={clsx(
-                    'bg-rb-neutral-bg-5 rounded-[4px] px-[14px] h-[24px]',
+                    'bg-rb-neutral-bg-5 rounded-[3px] px-12 h-24',
                     'border border-transparent',
                     'hover:border-rb-brand-default',
-                    'text-[12px] leading-[14px]  text-r-neutral-title-1'
+                    'text-12 text-r-neutral-title-1'
                   )}
                   onClick={(e) => {
                     e.stopPropagation();
@@ -668,7 +668,7 @@ export const PositionsInfo: React.FC = () => {
           return (
             <div className="flex items-center gap-[6px]">
               <div className="flex flex-col gap-[4px]">
-                <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+                <div className="text-[12px] leading-[14px]  text-r-neutral-body">
                   {tpPrice ? (
                     <div>
                       ${splitNumberByStep(tpPrice)}{' '}
@@ -691,7 +691,7 @@ export const PositionsInfo: React.FC = () => {
                     </div>
                   )}
                 </div>
-                <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+                <div className="text-[12px] leading-[14px]  text-r-neutral-body">
                   {slPrice ? (
                     <div>
                       ${splitNumberByStep(slPrice)}{' '}
