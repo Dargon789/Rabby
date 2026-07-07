@@ -449,6 +449,10 @@ export class WalletController extends BaseController {
     whitelistService.setWhitelist(addresses);
   };
 
+  updateWhitelistOrder = async (addresses: string[]) => {
+    whitelistService.updateWhitelistOrder(addresses);
+  };
+
   addWhitelist = async (password: string, address: string) => {
     await this.verifyPassword(password);
     whitelistService.addWhitelist(address);
@@ -4777,6 +4781,13 @@ export class WalletController extends BaseController {
 
     if (needUnlock) {
       await keyring?.unlock?.();
+      if (
+        !isNew &&
+        type === KEYRING_CLASS.HARDWARE.GRIDPLUS &&
+        keyring?.consumePairingCredsRefreshed?.()
+      ) {
+        await keyringService.persistAllKeyrings();
+      }
     }
 
     return stashKeyringId;
@@ -6948,6 +6959,9 @@ export class WalletController extends BaseController {
   getPerpsWidgetEnabled = () => preferenceService.getPerpsWidgetEnabled();
   setPerpsWidgetEnabled = (v: boolean) =>
     preferenceService.setPerpsWidgetEnabled(v);
+  getPerpsWidgetGuideShown = () => preferenceService.getPerpsWidgetGuideShown();
+  setPerpsWidgetGuideShown = (v: boolean) =>
+    preferenceService.setPerpsWidgetGuideShown(v);
   getPerpsWidgetBlockedHosts = () =>
     preferenceService.getPerpsWidgetBlockedHosts();
   setPerpsWidgetBlockedHosts = (hosts: string[]) =>

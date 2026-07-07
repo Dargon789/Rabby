@@ -18,6 +18,22 @@ import { DashedUnderlineText } from '../../DashedUnderlineText';
 import { formatPerpsOrderStatus } from '@/ui/views/DesktopPerps/utils';
 import { PerpsDisplayCoinName } from '@/ui/views/Perps/components/PerpsDisplayCoinName';
 
+// The order table has many columns. Instead of squeezing them until values
+// overflow, give the whole table a minimum width: above it the columns stretch
+// to fill, below it the entire table (header + virtualized body together)
+// scrolls horizontally. Only one overall min-width is set — no per-column
+// widths — so antd distributes the space across columns automatically.
+const TableScrollX = styled.div`
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+`;
+
+const TableMinWidth = styled.div`
+  height: 100%;
+  min-width: 1300px;
+`;
+
 export const OrderHistory: React.FC = () => {
   const dispatch = useRabbyDispatch();
   const historicalOrders = useRabbySelector((store) => {
@@ -58,7 +74,7 @@ export const OrderHistory: React.FC = () => {
           b.status.localeCompare(a.status),
         render: (_, record) => {
           return (
-            <div className="text-[13px] leading-[16px]  text-r-neutral-title-1">
+            <div className="text-[13px] leading-[16px]  text-r-neutral-body">
               {dayjs(record.statusTimestamp).format('YYYY/MM/DD HH:mm:ss')}
             </div>
           );
@@ -82,7 +98,7 @@ export const OrderHistory: React.FC = () => {
         title: t('page.perpsPro.userInfo.tab.coin'),
         key: 'coin',
         dataIndex: 'coin',
-        // width: 100,
+        width: 142,
         sorter: (a, b) => a.order.coin.localeCompare(b.order.coin),
         render: (_, record) => {
           return (
@@ -146,7 +162,7 @@ export const OrderHistory: React.FC = () => {
         // sorter: (a, b) => Number(a.order.sz) - Number(b.order.sz),
         render: (_, record) => {
           return (
-            <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+            <div className="text-[12px] leading-[14px]  text-r-neutral-body">
               {Number(record.order.origSz) === 0 ? (
                 '-'
               ) : (
@@ -170,7 +186,7 @@ export const OrderHistory: React.FC = () => {
             : Number(record.order.origSz);
 
           return (
-            <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+            <div className="text-[12px] leading-[14px]  text-r-neutral-body">
               {record.status !== 'filled' ? (
                 '-'
               ) : (
@@ -199,7 +215,7 @@ export const OrderHistory: React.FC = () => {
             : record.order.origSz;
           return (
             <div className="space-y-[4px]">
-              <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+              <div className="text-[12px] leading-[14px]  text-r-neutral-body">
                 {record.order.orderType.includes('Market')
                   ? '-'
                   : `$${splitNumberByStep(
@@ -221,7 +237,7 @@ export const OrderHistory: React.FC = () => {
         // sorter: (a, b) => Number(a.order.limitPx) - Number(b.order.limitPx),
         render: (_, record) => {
           return (
-            <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+            <div className="text-[12px] leading-[14px]  text-r-neutral-body">
               {record.order.orderType.includes('Market')
                 ? 'Market'
                 : `$${splitNumberByStep(record.order.limitPx)}`}
@@ -286,18 +302,22 @@ export const OrderHistory: React.FC = () => {
     [marketDataMap]
   );
   return (
-    <CommonTable
-      emptyMessage={t('page.perpsPro.userInfo.emptyMessage.openOrders')}
-      dataSource={list}
-      columns={columns}
-      pagination={false}
-      bordered={false}
-      showSorterTooltip={false}
-      rowKey={(record) => `${record.order.oid}-${record.status}`}
-      defaultSortField="statusTimestamp"
-      defaultSortOrder="descend"
-      virtual
-      rowHeight={32}
-    />
+    <TableScrollX>
+      <TableMinWidth>
+        <CommonTable
+          emptyMessage={t('page.perpsPro.userInfo.emptyMessage.openOrders')}
+          dataSource={list}
+          columns={columns}
+          pagination={false}
+          bordered={false}
+          showSorterTooltip={false}
+          rowKey={(record) => `${record.order.oid}-${record.status}`}
+          defaultSortField="statusTimestamp"
+          defaultSortOrder="descend"
+          virtual
+          rowHeight={28}
+        />
+      </TableMinWidth>
+    </TableScrollX>
   );
 };

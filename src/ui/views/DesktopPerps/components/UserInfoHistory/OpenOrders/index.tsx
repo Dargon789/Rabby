@@ -36,55 +36,6 @@ export const OpenOrders: React.FC = () => {
     );
   });
 
-  const handleClickCloseAll = useMemoizedFn(async () => {
-    const modal = Modal.info({
-      width: 360,
-      closable: false,
-      maskClosable: true,
-      centered: true,
-      title: null,
-      className: clsx(
-        'perps-bridge-swap-modal perps-close-all-position-modal',
-        isDarkTheme
-          ? 'perps-bridge-swap-modal-dark'
-          : 'perps-bridge-swap-modal-light'
-      ),
-      content: (
-        <>
-          <div className="flex items-center justify-center flex-col gap-12 bg-r-neutral-bg2 rounded-lg">
-            <div className="text-[17px] font-bold text-r-neutral-title-1 text-center">
-              {t('page.perps.cancelAllOrdersPopup.title')}
-            </div>
-            <div className="text-15  text-r-neutral-title-1 text-center">
-              {t('page.perps.cancelAllOrdersPopup.description')}
-            </div>
-            <div className="flex items-center justify-center w-full gap-12 mt-20">
-              <PerpsBlueBorderedButton
-                block
-                onClick={() => {
-                  modal.destroy();
-                }}
-              >
-                {t('page.manageAddress.cancel')}
-              </PerpsBlueBorderedButton>
-              <Button
-                size="large"
-                block
-                type="primary"
-                onClick={async () => {
-                  handleCloseAll();
-                  modal.destroy();
-                }}
-              >
-                {t('page.manageAddress.confirm')}
-              </Button>
-            </div>
-          </div>
-        </>
-      ),
-    });
-  });
-
   const columns = useMemo<ColumnType<OpenOrder>[]>(
     () => [
       {
@@ -160,7 +111,7 @@ export const OpenOrders: React.FC = () => {
         render: (_, record) => {
           return Number(record.origSz) === 0 ? (
             <div className="space-y-[4px]">
-              <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+              <div className="text-[12px] leading-[14px]  text-r-neutral-body">
                 -
               </div>
               <div className="text-[12px] leading-[14px]  text-rb-neutral-secondary">
@@ -169,7 +120,7 @@ export const OpenOrders: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-[4px]">
-              <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+              <div className="text-[12px] leading-[14px]  text-r-neutral-body">
                 {record.orderType.includes('Market')
                   ? 'Market'
                   : formatUsdValue(
@@ -194,7 +145,7 @@ export const OpenOrders: React.FC = () => {
         render: (_, record) => {
           // todo
           return (
-            <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+            <div className="text-[12px] leading-[14px]  text-r-neutral-body">
               {Number(record.origSz) === 0 ? (
                 '-'
               ) : (
@@ -216,7 +167,7 @@ export const OpenOrders: React.FC = () => {
         dataIndex: 'limitPx',
         render: (_, record) => {
           return (
-            <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+            <div className="text-[12px] leading-[14px]  text-r-neutral-body">
               {record.orderType.includes('Market')
                 ? 'Market'
                 : `$${splitNumberByStep(record.limitPx)}`}
@@ -294,13 +245,13 @@ export const OpenOrders: React.FC = () => {
 
           return (
             <div className="space-y-[4px]">
-              <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+              <div className="text-[12px] leading-[14px]  text-r-neutral-body">
                 {tpItem?.triggerPx
                   ? `$${splitNumberByStep(tpItem.triggerPx)} `
                   : '-'}
               </div>
 
-              <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+              <div className="text-[12px] leading-[14px]  text-r-neutral-body">
                 {slItem?.triggerPx
                   ? `$${splitNumberByStep(slItem.triggerPx)}`
                   : '-'}
@@ -327,10 +278,10 @@ export const OpenOrders: React.FC = () => {
               <button
                 type="button"
                 className={clsx(
-                  'bg-rb-neutral-bg-5 rounded-[8px] py-[9px] px-[12px] h-[32px] w-[88px]',
+                  'bg-rb-neutral-bg-5 rounded-[3px] px-12 h-24 flex items-center justify-center',
                   'border border-transparent',
                   'hover:border-rb-brand-default',
-                  'text-[12px] leading-[14px]  text-r-neutral-title-1'
+                  'text-12 text-r-neutral-title-1'
                 )}
                 onClick={() => {
                   handleCancelOrder([{ oid: record.oid, coin: record.coin }]);
