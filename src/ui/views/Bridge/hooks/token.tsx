@@ -39,10 +39,9 @@ export interface SelectedBridgeQuote extends Omit<BridgeQuote, 'tx'> {
 }
 
 const isValidBridgeQuote = (quote?: Omit<BridgeQuote, 'tx'>) =>
-  !!quote?.bridge &&
-  !!quote.bridge.id &&
-  !!quote.bridge.logo_url &&
-  !!quote.bridge.name;
+  !!quote?.bridge?.id &&
+  !!quote.bridge?.logo_url &&
+  !!quote.bridge?.name;
 
 const getBridgeQuoteKey = (
   quote: Pick<SelectedBridgeQuote, 'aggregator' | 'bridge_id'>
