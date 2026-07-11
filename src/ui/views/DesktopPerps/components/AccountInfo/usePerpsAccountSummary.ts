@@ -148,15 +148,15 @@ export const usePerpsAccountSummary = (): AccountSummary => {
       const ratio = computeUnifiedAccountRatio({
         clearinghouseState,
         marketDataMap,
-        spotBalancesMap: spotState.balancesMap,
+        spotBalancesMap: spotState?.balancesMap || {},
       });
       const totalCollateral = computeTotalCollateralBalance(
-        spotState.balances,
+        spotState?.balances || [],
         spotAssetCtxs,
         spotMeta
       );
       const portfolioValue = computeSpotPortfolioValue(
-        spotState.balances,
+        spotState?.balances || [],
         spotAssetCtxs,
         spotMeta
       );
