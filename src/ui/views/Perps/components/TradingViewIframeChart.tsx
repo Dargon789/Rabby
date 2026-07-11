@@ -7,6 +7,23 @@ const BRIDGE_CHANNEL = 'rabby-tradingview-bridge-v1';
 const DEFAULT_TRADINGVIEW_URL = process.env.DEBUG
   ? 'https://tradingview-test.vercel.app/'
   : 'https://tradingview.rabby.io/';
+const ALLOWED_EXTERNAL_URL_HOSTS = new Set([
+  'www.tradingview.com',
+  'tradingview.com',
+  'cn.tradingview.com',
+]);
+
+const getSafeExternalUrl = (value: unknown): string | null => {
+  if (typeof value !== 'string' || !value) return null;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'https:') return null;
+    if (!ALLOWED_EXTERNAL_URL_HOSTS.has(parsed.hostname)) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+};
 
 type TradingViewResolution =
   | '1'
@@ -693,9 +710,12 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
           }
         } else if (message.event === 'openExternalUrl') {
           const url = message.payload?.url;
-          if (isTradingViewExternalUrl(url)) {
-            browser.tabs.create({ active: true, url }).catch(() => {
-              window.open(url, '_blank', 'noopener,noreferrer');
+          const safeUrl = isTradingViewExternalUrl(url)
+            ? getSafeExternalUrl(url)
+            : null;
+          if (safeUrl) {
+            browser.tabs.create({ active: true, url: safeUrl }).catch(() => {
+              window.open(safeUrl, '_blank', 'noopener,noreferrer');
             });
           }
         }
