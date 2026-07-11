@@ -1,125 +1,177 @@
 import { Account } from 'background/service/preference';
-import { AccountHistoryItem, MarketData } from '@/ui/models/perps';
-import { Meta, AssetCtx, MarginTable } from '@rabby-wallet/hyperliquid-sdk';
-import { PerpTopToken } from '@rabby-wallet/rabby-api/dist/types';
-import { PERPS_MAX_NTL_VALUE, PERPS_POSITION_RISK_LEVEL } from './constants';
+import { MarketData } from '@/ui/models/perps';
+import { Meta, MarginTable } from '@rabby-wallet/hyperliquid-sdk';
+import { PerpTopTokenV3 } from '@rabby-wallet/rabby-api/dist/types';
+import {
+  PERPS_MAX_NTL_VALUE,
+  PERPS_POSITION_RISK_LEVEL,
+  PERPS_BUILD_FEE_RECEIVE_ADDRESS,
+  PerpsQuoteAsset,
+} from './constants';
 import { useWallet, WalletController } from '@/ui/utils';
 import { KEYRING_CLASS } from '@/constant';
 import { getPerpsSDK } from './sdkManager';
-import { maxBy } from 'lodash';
+import store from '@/ui/store';
 
-const getPxDecimals = (markPx: string) => {
-  const parts = markPx.split('.');
-  if (!parts[1]) return 2;
-  const decimalPart = parts[1];
-  return decimalPart.length;
+// Matches Hyperliquid's "Builder fee has not been approved" order rejection.
+const BUILDER_FEE_NOT_APPROVED_RE = /builder fee has not been approved/i;
+export const isBuilderFeeNotApprovedError = (errorMessage?: string): boolean =>
+  !!errorMessage && BUILDER_FEE_NOT_APPROVED_RE.test(errorMessage);
+
+// self-sign has no agent — only the builder fee can be pending. Shared by both
+// perps init flows; uses store.dispatch so it can live outside the hooks.
+export const checkSelfSignBuilderFee = async () => {
+  try {
+    const maxFee = await getPerpsSDK().info.getMaxBuilderFee(
+      PERPS_BUILD_FEE_RECEIVE_ADDRESS
+    );
+    store.dispatch.perps.setAccountNeedApproveAgent(false);
+    store.dispatch.perps.setAccountNeedApproveBuilderFee(!maxFee);
+  } catch (e) {
+    // best-effort; keep current flags
+    console.error('Failed to check self-sign builder fee:', e);
+  }
 };
 
-export const normalizeHyperliquidCoinForLogo = (coin: string) => {
-  if (!coin) {
-    return '';
-  }
-  // Keep km:* untouched, but drop k-prefix for meme perps like kPEPE -> PEPE.
-  if (coin.startsWith('k') && !coin.startsWith('km:')) {
-    return coin.slice(1);
-  }
-  return coin;
+/**
+ * Wait until both the user clearinghouseState and the global asset ticker
+ * have arrived via WS for the current account. Resolves immediately if both
+ * are already ready, or after `timeoutMs` to avoid hanging init forever
+ * (e.g. brand-new account with no positions, flaky WS).
+ */
+export const waitForInitialWsData = (timeoutMs = 5000): Promise<void> => {
+  return new Promise((resolve) => {
+    const isReady = () => {
+      const s = store.getState().perps;
+      return s.isUserDataReady && s.isMarketTickerReady;
+    };
+    if (isReady()) {
+      resolve();
+      return;
+    }
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      unsubscribe();
+      clearTimeout(timer);
+      resolve();
+    };
+    const unsubscribe = store.subscribe(() => {
+      if (isReady()) finish();
+    });
+    const timer = setTimeout(finish, timeoutMs);
+  });
 };
 
-export const getHyperliquidCoinLogoUrl = (coin: string) => {
-  const iconKey = normalizeHyperliquidCoinForLogo(coin);
-  if (!iconKey) {
-    return '';
-  }
-  return `https://app.hyperliquid.xyz/coins/${iconKey}.svg`;
+// Hyperliquid price-axis precision, ported from the official app bundle:
+// decimals = clamp(4 - floor(log10(0.95 * px)), 0, cap) — i.e. 5
+// significant figures derived from the price magnitude (BTC at 64,026 →
+// whole numbers; 0.123456 → 5 decimals). The ×0.95 is HL's hysteresis:
+// prices just above a power of ten keep the finer precision, so the axis
+// doesn't flap when hovering around a boundary (it also keeps log10 away
+// from exact powers of ten where floats have edges). We cap by
+// 6 - szDecimals (the perp tick bound) where HL's chart caps by a flat 6;
+// ours is never looser. Recomputed per tick but only changes when the
+// price crosses a magnitude.
+export const getPxDecimals = (szDecimals: number, refPx?: string | number) => {
+  const maxBySz = Math.max(0, 6 - Number(szDecimals ?? 0));
+  const px = Math.abs(Number(refPx));
+  if (!Number.isFinite(px) || px === 0) return maxBySz;
+  const sigDecimals = 4 - Math.floor(Math.log10(0.95 * px));
+  return Math.max(0, Math.min(sigDecimals, maxBySz));
+};
+
+import { getQuoteAssetFromMeta } from '@/utils/perps/quoteAsset';
+import {
+  normalizeHyperliquidCoinForLogo,
+  getHyperliquidCoinLogoUrl,
+} from '@/utils/perps/coinLogo';
+export {
+  getQuoteAssetFromMeta,
+  normalizeHyperliquidCoinForLogo,
+  getHyperliquidCoinLogoUrl,
 };
 
 export const formatMarkData = (
-  marketData: [Meta, AssetCtx[]],
-  topAssets: PerpTopToken[],
-  xyzMarketData: [Meta, AssetCtx[]]
+  allMetas: Meta[],
+  topAssets: PerpTopTokenV3[],
+  dexIdMap: Record<number, string>
 ): MarketData[] => {
   try {
-    if (!Array.isArray(marketData) || marketData.length < 2) {
-      console.error(
-        'Failed to format market data: marketData is not an array or has less than 2 items'
-      );
+    if (!Array.isArray(allMetas) || allMetas.length === 0) {
+      console.error('Failed to format market data: allMetas is empty');
       return [];
     }
 
-    const meta = marketData[0];
-    const metrics = marketData[1];
-    if (!meta || !Array.isArray(meta.universe) || !Array.isArray(metrics)) {
-      console.error(
-        'Failed to format market data: meta or metrics is not an array'
-      );
-      return [];
-    }
-
-    const marginTableMap: Record<number, MarginTable> = {};
-    if (Array.isArray(meta.marginTables)) {
-      for (const entry of meta.marginTables) {
-        const [id, table] = entry || [];
-        if (id != null) marginTableMap[id] = table;
+    // Build a lookup: dexId → { meta, marginTableMap, quoteAsset }
+    const dexLookup: Record<
+      string,
+      {
+        meta: Meta;
+        marginTableMap: Record<number, MarginTable>;
+        quoteAsset: PerpsQuoteAsset;
       }
-    }
+    > = {};
 
-    const xyzMarginTableMap: Record<number, MarginTable> = {};
-    if (
-      xyzMarketData?.[0]?.marginTables &&
-      Array.isArray(xyzMarketData[0].marginTables)
-    ) {
-      for (const entry of xyzMarketData[0].marginTables) {
-        const [id, table] = entry || [];
-        if (id != null) xyzMarginTableMap[id] = table;
+    allMetas.forEach((meta, idx) => {
+      const dexId = dexIdMap[idx] ?? String(idx);
+      const marginTableMap: Record<number, MarginTable> = {};
+      if (Array.isArray(meta.marginTables)) {
+        for (const entry of meta.marginTables) {
+          const [id, table] = entry || [];
+          if (id != null) marginTableMap[id] = table;
+        }
       }
-    }
+      dexLookup[dexId] = {
+        meta,
+        marginTableMap,
+        quoteAsset: getQuoteAssetFromMeta(meta),
+      };
+    });
 
     const result: MarketData[] = topAssets
       .map((topAsset) => {
-        const index = topAsset.id;
-        const dexId = topAsset.dex_id;
-        const meta = dexId === 'xyz' ? xyzMarketData[0] : marketData[0];
-        const metrics = dexId === 'xyz' ? xyzMarketData[1] : marketData[1];
-        const tableMap = dexId === 'xyz' ? xyzMarginTableMap : marginTableMap;
+        const index = topAsset.token_id;
+        const dexId = topAsset.dex_id ?? '';
+        const dexInfo = dexLookup[dexId] ?? dexLookup[''];
+        if (!dexInfo) return null;
+
+        const { meta, marginTableMap, quoteAsset } = dexInfo;
         const hlDataAsset = meta.universe[index];
+        if (!hlDataAsset || hlDataAsset.isDelisted) return null;
 
-        if (!hlDataAsset) return null;
-
-        if (hlDataAsset.isDelisted) return null;
-
-        const m = metrics[index] || {};
-        const table = tableMap[hlDataAsset?.marginTableId];
+        const table = marginTableMap[hlDataAsset.marginTableId];
         const tiers = table?.marginTiers || [];
-        const firstTier =
-          Array.isArray(tiers) && tiers.length > 0 ? tiers[0] : undefined;
-        const nextTier =
-          Array.isArray(tiers) && tiers.length > 1 ? tiers[1] : undefined;
+        const firstTier = tiers[0];
+        const nextTier = tiers[1];
 
         const item: MarketData = {
           index,
-          dexId: topAsset.dex_id,
+          dexId: topAsset.dex_id ?? '',
           name: String(topAsset.name ?? ''),
-          // 取保证金表第一档的最大杠杆；若无表则回退 asset.maxLeverage
+          quoteAsset,
+          displayName: topAsset.display_name || topAsset.name,
+          category: topAsset.category || '',
+          categoryId: topAsset.category_id || topAsset.category || '',
           maxLeverage: Number(
             firstTier?.maxLeverage ?? hlDataAsset?.maxLeverage
           ),
           minLeverage: 1,
-          // 第一档的最大名义值 = 下一档的 lowerBound；若不存在下一档则为兜底1000000
           maxUsdValueSize: String(nextTier?.lowerBound ?? PERPS_MAX_NTL_VALUE),
           szDecimals: Number(hlDataAsset.szDecimals ?? 0),
-          // 根据 markPx 推断价格精度
-          pxDecimals: getPxDecimals(m?.markPx ?? ''),
-          dayBaseVlm: String(m?.dayBaseVlm ?? '0'),
-          dayNtlVlm: String(m?.dayNtlVlm ?? '0'),
-          funding: String(m?.funding ?? '0'),
-          markPx: String(m?.markPx ?? ''),
-          midPx: String(m?.midPx ?? ''),
-          openInterest: String(m?.openInterest ?? '0'),
-          oraclePx: String(m?.oraclePx ?? ''),
-          premium: String(m?.premium ?? '0'),
-          prevDayPx: String(m?.prevDayPx ?? ''),
           onlyIsolated: hlDataAsset.onlyIsolated,
+          pxDecimals: getPxDecimals(Number(hlDataAsset.szDecimals ?? 0)),
+          // Price fields initialized empty; filled by WebSocket AssetCtx updates.
+          dayBaseVlm: '0',
+          dayNtlVlm: '0',
+          funding: '0',
+          markPx: '',
+          midPx: '',
+          openInterest: '0',
+          oraclePx: '',
+          premium: '0',
+          prevDayPx: '',
           logoUrl:
             topAsset.full_logo_url || getHyperliquidCoinLogoUrl(topAsset.name),
         };
@@ -147,6 +199,13 @@ export const calLiquidationPrice = (
   // const nationalValue = margin * leverage;
   const maintenance_margin_required = nationalValue * MMR;
   const margin_available = margin - maintenance_margin_required;
+  // When margin_available <= 0 (account hasn't loaded, or an abstraction mode
+  // we haven't mapped surfaces 0 collateral) the formula below produces a
+  // sign-inverted price — short below entry, long above. Bail out so callers
+  // hide the value rather than show a misleading number.
+  if (!Number.isFinite(margin_available) || margin_available <= 0) {
+    return 0;
+  }
   const liq_price =
     markPrice - (side * margin_available) / positionSize / (1 - MMR * side);
   // liq_price = price - side * margin_available / position_size / (1 - l * side)
@@ -384,20 +443,4 @@ export const checkPerpsReference = async ({
     console.error('checkPerpsReference error', e);
     return false;
   }
-};
-
-export const getMaxTimeFromAccountHistory = (
-  historyList: AccountHistoryItem[]
-) => {
-  const depositList = historyList.filter((item) => item.type === 'deposit');
-  const withdrawList = historyList.filter((item) => item.type === 'withdraw');
-  const receiveList = historyList.filter((item) => item.type === 'receive');
-  const depositMaxTime = maxBy(depositList, 'time')?.time || 0;
-  const withdrawMaxTime = maxBy(withdrawList, 'time')?.time || 0;
-  const receiveMaxTime = maxBy(receiveList, 'time')?.time || 0;
-  return {
-    depositMaxTime,
-    withdrawMaxTime,
-    receiveMaxTime,
-  };
 };

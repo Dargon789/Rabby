@@ -61,7 +61,7 @@ export const hex2Text = (hex: string) => {
   try {
     return hex.startsWith('0x')
       ? decodeURIComponent(
-          hex.replace(/^0x/, '').replace(/[0-9a-f]{2}/g, '%$&')
+          hex.replace(/^0x/, '').replace(/[0-9a-fA-F]{2}/g, '%$&')
         )
       : hex;
   } catch {
@@ -179,10 +179,7 @@ export const isStringOrNumber = (data) => {
 
 export const hasConnectedLedgerDevice = async () => {
   const devices = await navigator.hid?.getDevices();
-  return (
-    devices?.filter((device) => device.vendorId === ledgerUSBVendorId).length >
-    0
-  );
+  return !!devices?.some((device) => device.vendorId === ledgerUSBVendorId);
 };
 
 export const hasConnectedImKeyDevice = async () => {

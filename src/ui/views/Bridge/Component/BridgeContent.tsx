@@ -27,6 +27,7 @@ import { useTranslation } from 'react-i18next';
 import pRetry, { AbortError } from 'p-retry';
 import stats from '@/stats';
 import { useMemoizedFn, useRequest } from 'ahooks';
+import { buildTx as buildBridgeTx } from '@rabby-wallet/rabby-bridge';
 import { useCurrentAccount } from '@/ui/hooks/backgroundState/useAccount';
 import { CHAINS_ENUM, DBK_CHAIN_ID } from '@/constant';
 import { useHistory } from 'react-router-dom';
@@ -42,12 +43,23 @@ import {
   ExternalSwapBridgeDappTips,
   SwapBridgeDappPopup,
 } from '@/ui/component/ExternalSwapBridgeDappPopup';
-import { DirectSignToConfirmBtn } from '@/ui/component/ToConfirmButton';
+import {
+  DirectSignToConfirmBtn,
+  RiskTipsWrapper,
+} from '@/ui/component/ToConfirmButton';
 import { supportedDirectSign } from '@/ui/hooks/useMiniApprovalDirectSign';
 import { DbkButton } from '../../Ecology/dbk-chain/components/DbkButton';
 import { useMiniSigner } from '@/ui/hooks/useSigner';
 import { MINI_SIGN_ERROR } from '@/ui/component/MiniSignV2/state/SignatureManager';
 import { BridgePendingTxItem } from './PendingTxItem';
+import {
+  FormAmountMode,
+  FormValuesOnSubmit,
+  createAmountComparer,
+  shouldIgnoreAmountChangeInMaxMode,
+} from '@/ui/utils/form';
+import { useGasAccountDepositFlowActive } from '@/ui/views/GasAccount/hooks/runtime';
+import { buildFingerprint } from '@/ui/component/MiniSignV2/domain/ctx';
 
 const isTab = getUiType().isTab;
 const isDesktop = getUiType().isDesktop;
@@ -58,7 +70,14 @@ const getContainer = isTab
   ? '.js-rabby-desktop-swap-container'
   : undefined;
 
+const BUILD_BRIDGE_TXS_DEBOUNCE_MS = 500;
+
 export const BridgeContent = () => {
+  interface BridgeTopUpSnapshot {
+    amount: string;
+    amountMode?: FormAmountMode;
+  }
+
   const { userAddress } = useRabbySelector((state) => ({
     userAddress: state.account.currentAccount?.address || '',
   }));
@@ -83,6 +102,8 @@ export const BridgeContent = () => {
 
     openQuotesList,
     quoteLoading,
+    allQuotesLoaded,
+    quoteRequestId,
     quoteList,
     setQuotesList,
 
@@ -97,13 +118,13 @@ export const BridgeContent = () => {
     setSlippageChanged,
     isSlippageHigh,
     isSlippageLow,
+    setReloadTxRefreshPaused,
 
     autoSlippage,
     isCustomSlippage,
     setAutoSlippage,
     setIsCustomSlippage,
 
-    clearExpiredTimer,
     maxNativeTokenGasPrice,
     setMaxNativeTokenGasPrice,
     inSufficientCanGetQuote,
@@ -161,6 +182,7 @@ export const BridgeContent = () => {
   // } = usePollBridgePendingNumber();
 
   const [fetchingBridgeQuote, setFetchingBridgeQuote] = useState(false);
+  const history = useHistory();
 
   const gotoBridge = useCallback(async () => {
     if (
@@ -173,25 +195,26 @@ export const BridgeContent = () => {
         setFetchingBridgeQuote(true);
         const tx = await pRetry(
           () =>
-            wallet.openapi
-              .buildBridgeTx({
-                aggregator_id: selectedBridgeQuote.aggregator.id,
-                bridge_id: selectedBridgeQuote.bridge_id,
-                from_token_id: fromToken.id,
-                user_addr: userAddress,
-                from_chain_id: fromToken.chain,
-                from_token_raw_amount: new BigNumber(amount)
+            buildBridgeTx(
+              selectedBridgeQuote.aggregator.id,
+              {
+                bridgeId: selectedBridgeQuote.bridge_id,
+                userAddress,
+                fromChainId: fromToken.chain,
+                fromTokenId: fromToken.id,
+                fromTokenRawAmount: new BigNumber(amount)
                   .times(10 ** fromToken.decimals)
                   .toFixed(0, 1)
                   .toString(),
-                to_chain_id: toToken.chain,
-                to_token_id: toToken.id,
+                toChainId: toToken.chain,
+                toTokenId: toToken.id,
                 slippage: new BigNumber(slippageState).div(100).toString(10),
-                quote_key: JSON.stringify(selectedBridgeQuote.quote_key || {}),
-              })
-              .catch((e) => {
-                throw new AbortError(e?.message || String(e));
-              }),
+                quoteKey: selectedBridgeQuote.quote_key || {},
+              },
+              wallet.openapi
+            ).catch((e) => {
+              throw new AbortError(e?.message || String(e));
+            }),
           { retries: 1 }
         );
         stats.report('bridgeQuoteResult', {
@@ -303,36 +326,84 @@ export const BridgeContent = () => {
     maxNativeTokenGasPrice,
   ]);
 
-  const buildTxs = useMemoizedFn(async () => {
+  const selectedBridgeQuoteBuildKey = useMemo(() => {
+    if (!selectedBridgeQuote || !fromToken || !toToken) {
+      return '';
+    }
+
+    return [
+      fromToken.chain,
+      fromToken.id,
+      toToken.chain,
+      toToken.id,
+      amount,
+      slippageState,
+      selectedBridgeQuote.aggregator.id,
+      selectedBridgeQuote.bridge_id,
+      selectedBridgeQuote.shouldApproveToken ? '1' : '0',
+      selectedBridgeQuote.shouldTwoStepApprove ? '1' : '0',
+      selectedBridgeQuote.to_token_amount,
+      selectedBridgeQuote.approve_contract_id || '',
+      selectedBridgeQuote.tx?.to || '',
+      selectedBridgeQuote.tx?.value || '',
+      selectedBridgeQuote.tx?.data || '',
+      JSON.stringify(selectedBridgeQuote.quote_key || {}),
+      maxNativeTokenGasPrice || '',
+    ].join('|');
+  }, [
+    amount,
+    fromToken,
+    maxNativeTokenGasPrice,
+    selectedBridgeQuote,
+    slippageState,
+    toToken,
+  ]);
+  const selectedBridgeQuoteBuildKeyRef = useRef(selectedBridgeQuoteBuildKey);
+
+  useEffect(() => {
+    selectedBridgeQuoteBuildKeyRef.current = selectedBridgeQuoteBuildKey;
+  }, [selectedBridgeQuoteBuildKey]);
+
+  const buildTxs = useMemoizedFn(async (expectedBuildKey?: string) => {
     if (
       !inSufficient &&
       fromToken &&
       toToken &&
       selectedBridgeQuote?.bridge_id
     ) {
+      const buildKey =
+        expectedBuildKey || selectedBridgeQuoteBuildKeyRef.current;
+      if (
+        expectedBuildKey &&
+        buildKey !== selectedBridgeQuoteBuildKeyRef.current
+      ) {
+        return;
+      }
+
       try {
         // setFetchingBridgeQuote(true);
         const tx = await pRetry(
           () =>
-            wallet.openapi
-              .buildBridgeTx({
-                aggregator_id: selectedBridgeQuote.aggregator.id,
-                bridge_id: selectedBridgeQuote.bridge_id,
-                from_chain_id: fromToken.chain,
-                from_token_id: fromToken.id,
-                user_addr: userAddress,
-                from_token_raw_amount: new BigNumber(amount)
+            buildBridgeTx(
+              selectedBridgeQuote.aggregator.id,
+              {
+                bridgeId: selectedBridgeQuote.bridge_id,
+                userAddress,
+                fromChainId: fromToken.chain,
+                fromTokenId: fromToken.id,
+                fromTokenRawAmount: new BigNumber(amount)
                   .times(10 ** fromToken.decimals)
                   .toFixed(0, 1)
                   .toString(),
-                to_chain_id: toToken.chain,
-                to_token_id: toToken.id,
+                toChainId: toToken.chain,
+                toTokenId: toToken.id,
                 slippage: new BigNumber(slippageState).div(100).toString(10),
-                quote_key: JSON.stringify(selectedBridgeQuote.quote_key || {}),
-              })
-              .catch((e) => {
-                throw new AbortError(e?.message || String(e));
-              }),
+                quoteKey: selectedBridgeQuote.quote_key || {},
+              },
+              wallet.openapi
+            ).catch((e) => {
+              throw new AbortError(e?.message || String(e));
+            }),
           { retries: 1 }
         );
         stats.report('bridgeQuoteResult', {
@@ -344,7 +415,15 @@ export const BridgeContent = () => {
           toChainId: toToken.chain,
           status: tx ? 'success' : 'fail',
         });
-        return wallet.buildBridgeToken(
+
+        if (
+          expectedBuildKey &&
+          buildKey !== selectedBridgeQuoteBuildKeyRef.current
+        ) {
+          return;
+        }
+
+        const result = await wallet.buildBridgeToken(
           {
             approveId: selectedBridgeQuote.approve_contract_id,
             to: tx.to,
@@ -396,6 +475,14 @@ export const BridgeContent = () => {
             },
           }
         );
+        if (
+          expectedBuildKey &&
+          buildKey !== selectedBridgeQuoteBuildKeyRef.current
+        ) {
+          return;
+        }
+        builtBridgeTxsKeyRef.current = buildKey;
+        return result;
       } catch (error) {
         setQuotesList((pre) =>
           pre?.filter(
@@ -425,11 +512,14 @@ export const BridgeContent = () => {
 
   const {
     data: txs,
-    runAsync: runBuildSwapTxs,
+    loading: buildTxsLoading,
+    runAsync: runBuildBridgeTxs,
     mutate: mutateTxs,
   } = useRequest(buildTxs, {
     manual: true,
   });
+  const runBuildBridgeTxsRef = useRef<ReturnType<typeof runBuildBridgeTxs>>();
+  const runBuildBridgeTxsKeyRef = useRef('');
 
   const currentAccount = useCurrentAccount();
 
@@ -443,7 +533,71 @@ export const BridgeContent = () => {
     return !!impact?.showLoss;
   }, [fromToken, amount, selectedBridgeQuote?.to_token_amount, toToken]);
 
-  const runBuildSwapTxsRef = useRef<ReturnType<typeof runBuildSwapTxs>>();
+  const selectedBridgeQuoteIsBestQuote =
+    !!bestQuoteId &&
+    !!selectedBridgeQuote &&
+    bestQuoteId.aggregatorId === selectedBridgeQuote.aggregator.id &&
+    bestQuoteId.bridgeId === selectedBridgeQuote.bridge_id;
+  const selectedBridgeQuoteIsManualQuote = !!selectedBridgeQuote?.manualClick;
+  const shouldPreExecSelectedBridgeQuote =
+    selectedBridgeQuoteIsBestQuote || selectedBridgeQuoteIsManualQuote;
+
+  const buildBridgeTxsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const builtBridgeTxsKeyRef = useRef('');
+  const prefetchedBridgeTxsKeyRef = useRef('');
+  const bridgeAutoPreExecRef = useRef({
+    requestId: 0,
+    earlyBuildKey: '',
+    finalBuildKey: '',
+  });
+  const quoteRequestIdRef = useRef(quoteRequestId);
+  const allQuotesLoadedRef = useRef(allQuotesLoaded);
+  const submitTxRef = useRef(false);
+
+  useEffect(() => {
+    quoteRequestIdRef.current = quoteRequestId;
+  }, [quoteRequestId]);
+
+  useEffect(() => {
+    allQuotesLoadedRef.current = allQuotesLoaded;
+  }, [allQuotesLoaded]);
+
+  useEffect(() => {
+    if (submitTxRef.current) {
+      return;
+    }
+
+    quoteRequestIdRef.current = quoteRequestId;
+    bridgeAutoPreExecRef.current = {
+      requestId: quoteRequestId,
+      earlyBuildKey: '',
+      finalBuildKey: '',
+    };
+    builtBridgeTxsKeyRef.current = '';
+    prefetchedBridgeTxsKeyRef.current = '';
+    mutateTxs([]);
+    runBuildBridgeTxsRef.current = undefined;
+    runBuildBridgeTxsKeyRef.current = '';
+    if (buildBridgeTxsTimerRef.current) {
+      clearTimeout(buildBridgeTxsTimerRef.current);
+      buildBridgeTxsTimerRef.current = null;
+    }
+  }, [quoteRequestId]);
+
+  const runBuildBridgeTxsForKey = useMemoizedFn((buildKey: string) => {
+    const buildPromise = runBuildBridgeTxs(buildKey);
+    runBuildBridgeTxsRef.current = buildPromise;
+    runBuildBridgeTxsKeyRef.current = buildKey;
+    buildPromise.finally(() => {
+      if (runBuildBridgeTxsRef.current === buildPromise) {
+        runBuildBridgeTxsRef.current = undefined;
+        runBuildBridgeTxsKeyRef.current = '';
+      }
+    });
+    return buildPromise;
+  });
 
   const noQuote =
     inSufficientCanGetQuote &&
@@ -477,46 +631,166 @@ export const BridgeContent = () => {
     !showLoss;
 
   const showRiskTips = isSlippageHigh || isSlippageLow || showLoss;
+  const bridgeButtonDisabled =
+    !isSupportedChain && externalDapps.length > 0 ? false : btnDisabled;
 
   const [miniSignLoading, setMiniSignLoading] = useState(false);
+  const topUpFormValuesRef = useRef(
+    new FormValuesOnSubmit<BridgeTopUpSnapshot>({
+      comparers: {
+        amount: createAmountComparer<string>(),
+      },
+    })
+  );
+  const [awaitingTopUpResume, setAwaitingTopUpResume] = useState(false);
+  const depositFlowActive = useGasAccountDepositFlowActive();
+  const canBuildBridgeTxs =
+    !btnDisabled &&
+    !!selectedBridgeQuote &&
+    !awaitingTopUpResume &&
+    !depositFlowActive;
+  const canPrepareDirectSign = canUseDirectSubmitTx && canBuildBridgeTxs;
+  const directSignTxPreparing =
+    canPrepareDirectSign &&
+    !submitTxRef.current &&
+    (buildTxsLoading || !txs?.length);
+  const buildTopUpSnapshot = useCallback(
+    (): BridgeTopUpSnapshot => ({
+      amount: amount || '',
+      amountMode: 'exact',
+    }),
+    [amount]
+  );
+  const persistBridgePageState = useCallback(async () => {
+    await wallet.setPageStateCache({
+      path: '/bridge',
+      search: history.location.search,
+      params: {},
+      states: {
+        fromChain,
+        fromToken,
+        toChain,
+        toToken,
+        amount,
+        slippageState,
+        fromGasAccountRedirect: true,
+        topUpSnapshot: topUpFormValuesRef.current.getSnapshot(),
+      },
+    });
+  }, [
+    wallet,
+    history.location.search,
+    fromChain,
+    fromToken,
+    toChain,
+    toToken,
+    amount,
+    slippageState,
+  ]);
 
-  const { openDirect, prefetch, close: closeSign } = useMiniSigner({
+  const { instance, openDirect, prefetch, close: closeSign } = useMiniSigner({
     account: currentAccount!,
     chainServerId: findChainByEnum(fromChain)?.serverId || '',
     autoResetGasStoreOnChainChange: true,
   });
+  const consumeTopUpResumeGuard = useCallback(() => {
+    const snapshot = topUpFormValuesRef.current.getSnapshot();
+    if (!snapshot) {
+      setAwaitingTopUpResume(false);
+      return false;
+    }
+
+    const currentValues = buildTopUpSnapshot();
+    const comparison = topUpFormValuesRef.current.compare(currentValues);
+    const shouldIgnore = shouldIgnoreAmountChangeInMaxMode(
+      comparison,
+      snapshot,
+      currentValues
+    );
+
+    topUpFormValuesRef.current.clear();
+    setAwaitingTopUpResume(false);
+
+    if (comparison.isChanged && !shouldIgnore) {
+      closeSign();
+      if (buildBridgeTxsTimerRef.current) {
+        clearTimeout(buildBridgeTxsTimerRef.current);
+        buildBridgeTxsTimerRef.current = null;
+      }
+      builtBridgeTxsKeyRef.current = '';
+      prefetchedBridgeTxsKeyRef.current = '';
+      runBuildBridgeTxsRef.current = undefined;
+      runBuildBridgeTxsKeyRef.current = '';
+      return true;
+    }
+
+    return false;
+  }, [buildTopUpSnapshot, closeSign]);
 
   const handleBridge = useMemoizedFn(async () => {
+    submitTxRef.current = true;
+    setReloadTxRefreshPaused(true);
     if (canUseDirectSubmitTx) {
       setMiniSignLoading(true);
-      setFetchingBridgeQuote(true);
       try {
-        const buildPromise = runBuildSwapTxsRef.current || runBuildSwapTxs();
-        runBuildSwapTxsRef.current = buildPromise;
-        const builtTxs = await buildPromise;
-        setFetchingBridgeQuote(false);
-        if (!builtTxs?.length) {
-          throw MINI_SIGN_ERROR.PREFETCH_FAILURE;
+        if (buildBridgeTxsTimerRef.current) {
+          clearTimeout(buildBridgeTxsTimerRef.current);
+          buildBridgeTxsTimerRef.current = null;
         }
-        clearExpiredTimer();
+        const currentBuildKey = selectedBridgeQuoteBuildKeyRef.current;
+        const canReuseCurrentTxs =
+          !!currentBuildKey &&
+          builtBridgeTxsKeyRef.current === currentBuildKey &&
+          !!txs?.length;
+        let txsForSigning = canReuseCurrentTxs ? txs : undefined;
+        const formChangedDuringTopUp = consumeTopUpResumeGuard();
+        if (formChangedDuringTopUp || !txsForSigning?.length) {
+          setFetchingBridgeQuote(true);
+          const reusableBuildPromise =
+            runBuildBridgeTxsKeyRef.current === currentBuildKey
+              ? runBuildBridgeTxsRef.current
+              : undefined;
+          const buildPromise =
+            reusableBuildPromise || runBuildBridgeTxsForKey(currentBuildKey);
+          const builtTxs = await buildPromise;
+          setFetchingBridgeQuote(false);
+          if (!builtTxs?.length) {
+            throw MINI_SIGN_ERROR.PREFETCH_FAILURE;
+          }
+          txsForSigning = builtTxs;
+        }
         await openDirect({
-          txs: builtTxs,
+          txs: txsForSigning,
           getContainer,
           ga: {
             category: 'Bridge',
             source: 'bridge',
             trigger: rbiSource,
           },
+          onRedirectToDeposit: () => {
+            topUpFormValuesRef.current.save(buildTopUpSnapshot());
+            setAwaitingTopUpResume(true);
+            persistBridgePageState().catch((error) => {
+              console.error(
+                '[Bridge] persist page state before gas account deposit failed',
+                error
+              );
+            });
+          },
           onPreExecError: () => {
             gotoBridge();
           },
         });
+        builtBridgeTxsKeyRef.current = '';
+        prefetchedBridgeTxsKeyRef.current = '';
         mutateTxs([]);
         handleAmountChange('');
       } catch (error) {
         setFetchingBridgeQuote(false);
         if (error == MINI_SIGN_ERROR.USER_CANCELLED) {
           refresh((e) => e + 1);
+          builtBridgeTxsKeyRef.current = '';
+          prefetchedBridgeTxsKeyRef.current = '';
           mutateTxs([]);
         } else if (error === MINI_SIGN_ERROR.CANT_PROCESS) {
           setTimeout(() => {
@@ -528,13 +802,52 @@ export const BridgeContent = () => {
         console.error('bridge direct sign error', error);
       } finally {
         setMiniSignLoading(false);
+        submitTxRef.current = false;
+        setReloadTxRefreshPaused(false);
       }
     } else {
-      gotoBridge();
+      try {
+        await gotoBridge();
+      } finally {
+        submitTxRef.current = false;
+        setReloadTxRefreshPaused(false);
+      }
     }
   });
 
-  const history = useHistory();
+  useEffect(() => {
+    wallet.getPageStateCache().then((cache) => {
+      if (
+        cache?.path !== '/bridge' ||
+        !cache.states?.fromGasAccountRedirect ||
+        !cache.states?.fromToken ||
+        !cache.states?.toToken
+      ) {
+        return;
+      }
+
+      if (cache.states?.fromGasAccountRedirect && cache.states?.topUpSnapshot) {
+        topUpFormValuesRef.current.save(cache.states.topUpSnapshot);
+        setAwaitingTopUpResume(true);
+      }
+
+      switchFromChain(cache.states.fromChain);
+      setFromToken(cache.states.fromToken);
+      setToChain(cache.states.toChain);
+      setToToken(cache.states.toToken);
+      handleAmountChange(cache.states.amount || '');
+      setSlippage(cache.states.slippageState);
+      wallet.clearPageStateCache();
+    });
+  }, [
+    wallet,
+    switchFromChain,
+    setFromToken,
+    setToChain,
+    setToToken,
+    handleAmountChange,
+    setSlippage,
+  ]);
 
   const twoStepApproveCn = useCss({
     '& .ant-modal-content': {
@@ -559,15 +872,138 @@ export const BridgeContent = () => {
   });
 
   useEffect(() => {
-    if (!btnDisabled && selectedBridgeQuote) {
-      mutateTxs([]);
-      runBuildSwapTxsRef.current = runBuildSwapTxs();
+    const clearBuildTimer = () => {
+      if (buildBridgeTxsTimerRef.current) {
+        clearTimeout(buildBridgeTxsTimerRef.current);
+        buildBridgeTxsTimerRef.current = null;
+      }
+    };
+
+    if (
+      !canUseDirectSubmitTx ||
+      btnDisabled ||
+      !selectedBridgeQuoteBuildKey ||
+      !shouldPreExecSelectedBridgeQuote ||
+      submitTxRef.current ||
+      awaitingTopUpResume ||
+      depositFlowActive
+    ) {
+      return clearBuildTimer;
     }
-  }, [canUseDirectSubmitTx, btnDisabled, selectedBridgeQuote]);
+
+    if (
+      builtBridgeTxsKeyRef.current === selectedBridgeQuoteBuildKey ||
+      runBuildBridgeTxsKeyRef.current === selectedBridgeQuoteBuildKey
+    ) {
+      return clearBuildTimer;
+    }
+
+    builtBridgeTxsKeyRef.current = '';
+    prefetchedBridgeTxsKeyRef.current = '';
+    mutateTxs([]);
+    runBuildBridgeTxsRef.current = undefined;
+    runBuildBridgeTxsKeyRef.current = '';
+
+    const tracker = bridgeAutoPreExecRef.current;
+    if (tracker.requestId !== quoteRequestId) {
+      tracker.requestId = quoteRequestId;
+      tracker.earlyBuildKey = '';
+      tracker.finalBuildKey = '';
+    }
+
+    const isManualPreExec = selectedBridgeQuoteIsManualQuote;
+    const phase = allQuotesLoaded ? 'final' : 'early';
+
+    if (!isManualPreExec) {
+      if (!allQuotesLoaded && tracker.earlyBuildKey) {
+        return clearBuildTimer;
+      }
+      if (allQuotesLoaded) {
+        if (
+          tracker.finalBuildKey === selectedBridgeQuoteBuildKey ||
+          tracker.earlyBuildKey === selectedBridgeQuoteBuildKey
+        ) {
+          tracker.finalBuildKey = selectedBridgeQuoteBuildKey;
+          return clearBuildTimer;
+        }
+      }
+    }
+
+    const scheduledBuildKey = selectedBridgeQuoteBuildKey;
+    const scheduledQuoteRequestId = quoteRequestId;
+    buildBridgeTxsTimerRef.current = setTimeout(() => {
+      buildBridgeTxsTimerRef.current = null;
+      const latestTracker = bridgeAutoPreExecRef.current;
+      if (
+        submitTxRef.current ||
+        quoteRequestIdRef.current !== scheduledQuoteRequestId ||
+        latestTracker.requestId !== scheduledQuoteRequestId ||
+        selectedBridgeQuoteBuildKeyRef.current !== scheduledBuildKey
+      ) {
+        return;
+      }
+
+      if (isManualPreExec) {
+        if (
+          builtBridgeTxsKeyRef.current === scheduledBuildKey ||
+          runBuildBridgeTxsKeyRef.current === scheduledBuildKey
+        ) {
+          return;
+        }
+      } else {
+        if (phase === 'early') {
+          if (allQuotesLoadedRef.current || latestTracker.earlyBuildKey) {
+            return;
+          }
+          latestTracker.earlyBuildKey = scheduledBuildKey;
+        } else {
+          if (
+            !allQuotesLoadedRef.current ||
+            latestTracker.finalBuildKey === scheduledBuildKey
+          ) {
+            return;
+          }
+          latestTracker.finalBuildKey = scheduledBuildKey;
+        }
+      }
+
+      runBuildBridgeTxsForKey(scheduledBuildKey);
+    }, BUILD_BRIDGE_TXS_DEBOUNCE_MS);
+
+    return clearBuildTimer;
+  }, [
+    canUseDirectSubmitTx,
+    btnDisabled,
+    selectedBridgeQuoteBuildKey,
+    shouldPreExecSelectedBridgeQuote,
+    selectedBridgeQuoteIsManualQuote,
+    allQuotesLoaded,
+    quoteRequestId,
+    awaitingTopUpResume,
+    depositFlowActive,
+  ]);
 
   useEffect(() => {
     if (!canUseDirectSubmitTx) return;
-    closeSign();
+    if (submitTxRef.current || awaitingTopUpResume || depositFlowActive) {
+      return;
+    }
+    const canPrefetchCurrentTxs =
+      !!txs?.length &&
+      shouldPreExecSelectedBridgeQuote &&
+      !!builtBridgeTxsKeyRef.current &&
+      builtBridgeTxsKeyRef.current === selectedBridgeQuoteBuildKeyRef.current;
+    if (!canPrefetchCurrentTxs) {
+      return;
+    }
+    const prefetchKey = [
+      builtBridgeTxsKeyRef.current,
+      buildFingerprint(txs || []),
+    ].join('|');
+    if (prefetchedBridgeTxsKeyRef.current === prefetchKey) {
+      return;
+    }
+    prefetchedBridgeTxsKeyRef.current = prefetchKey;
     prefetch({
       txs: txs || [],
       getContainer,
@@ -576,8 +1012,57 @@ export const BridgeContent = () => {
         source: 'bridge',
         trigger: rbiSource,
       },
+    }).catch(() => {
+      if (prefetchedBridgeTxsKeyRef.current === prefetchKey) {
+        prefetchedBridgeTxsKeyRef.current = '';
+      }
     });
-  }, [closeSign, prefetch, txs, canUseDirectSubmitTx, rbiSource]);
+  }, [
+    awaitingTopUpResume,
+    prefetch,
+    txs,
+    canUseDirectSubmitTx,
+    depositFlowActive,
+    selectedBridgeQuoteBuildKey,
+    shouldPreExecSelectedBridgeQuote,
+    rbiSource,
+  ]);
+
+  useEffect(() => {
+    if (!awaitingTopUpResume) {
+      return;
+    }
+
+    const snapshot = topUpFormValuesRef.current.getSnapshot();
+    if (!snapshot) {
+      setAwaitingTopUpResume(false);
+      return;
+    }
+
+    const currentValues = buildTopUpSnapshot();
+    const comparison = topUpFormValuesRef.current.compare(currentValues);
+    const shouldIgnore = shouldIgnoreAmountChangeInMaxMode(
+      comparison,
+      snapshot,
+      currentValues
+    );
+
+    if (!comparison.isChanged || shouldIgnore) {
+      return;
+    }
+
+    topUpFormValuesRef.current.clear();
+    setAwaitingTopUpResume(false);
+    closeSign();
+    if (buildBridgeTxsTimerRef.current) {
+      clearTimeout(buildBridgeTxsTimerRef.current);
+      buildBridgeTxsTimerRef.current = null;
+    }
+    builtBridgeTxsKeyRef.current = '';
+    prefetchedBridgeTxsKeyRef.current = '';
+    runBuildBridgeTxsRef.current = undefined;
+    runBuildBridgeTxsKeyRef.current = '';
+  }, [awaitingTopUpResume, buildTopUpSnapshot, closeSign]);
 
   const [showMoreOpen, setShowMoreOpen] = useState(false);
 
@@ -717,6 +1202,7 @@ export const BridgeContent = () => {
             <BridgeShowMore
               insufficient={inSufficient}
               supportDirectSign={canUseDirectSubmitTx}
+              signatureInstance={instance}
               openFeePopup={openFeePopup}
               open={showMoreOpen}
               setOpen={setShowMoreOpen}
@@ -735,6 +1221,7 @@ export const BridgeContent = () => {
               toAmount={selectedBridgeQuote?.to_token_amount}
               openQuotesList={openQuotesList}
               quoteLoading={quoteLoading}
+              gasFeeLoading={directSignTxPreparing}
               slippageError={isSlippageHigh || isSlippageLow}
               autoSlippage={autoSlippage}
               isCustomSlippage={isCustomSlippage}
@@ -811,67 +1298,70 @@ export const BridgeContent = () => {
                   onConfirm={handleBridge}
                   showRiskTips={showRiskTips && !btnDisabled}
                   accountType={currentAccount?.type}
+                  signatureInstance={instance}
                   riskReset={btnDisabled}
                   loading={miniSignLoading}
                 />
               ) : (
-                <Button
-                  loading={fetchingBridgeQuote}
-                  type="primary"
-                  block
-                  size="large"
-                  className="h-[48px] text-white text-[16px] font-medium"
-                  onClick={() => {
-                    if (showExternalDappTips && externalDapps.length > 0) {
-                      setExternalDappOpen(true);
-                      return;
-                    }
-                    if (fetchingBridgeQuote) return;
-                    if (!selectedBridgeQuote) {
-                      refresh((e) => e + 1);
-
-                      return;
-                    }
-                    if (selectedBridgeQuote?.shouldTwoStepApprove) {
-                      return Modal.confirm({
-                        width: 360,
-                        closable: true,
-                        centered: true,
-                        className: twoStepApproveCn,
-                        title: null,
-                        content: (
-                          <>
-                            <div className="text-[16px] font-medium text-r-neutral-title-1 mb-18 text-center">
-                              Sign 2 transactions to change allowance
-                            </div>
-                            <div className="text-13 leading-[17px]  text-r-neutral-body">
-                              Token USDT requires 2 transactions to change
-                              allowance. First you would need to reset allowance
-                              to zero, and only then set new allowance value.
-                            </div>
-                          </>
-                        ),
-                        okText: 'Proceed with two step approve',
-
-                        onOk() {
-                          // gotoBridge();
-                          handleBridge();
-                        },
-                      });
-                    }
-                    // gotoBridge();
-                    handleBridge();
-                  }}
-                  disabled={
-                    !isSupportedChain && externalDapps.length > 0
-                      ? false
-                      : canUseDirectSubmitTx
-                      ? btnDisabled
-                      : btnDisabled
-                  }
+                <RiskTipsWrapper
+                  showRiskTips={showRiskTips && !bridgeButtonDisabled}
+                  riskReset={bridgeButtonDisabled}
                 >
-                  {btnText}
-                </Button>
+                  {({ riskDisabled }) => (
+                    <Button
+                      loading={fetchingBridgeQuote}
+                      type="primary"
+                      block
+                      size="large"
+                      className="h-[48px] text-white text-[16px] font-medium"
+                      onClick={() => {
+                        if (showExternalDappTips && externalDapps.length > 0) {
+                          setExternalDappOpen(true);
+                          return;
+                        }
+                        if (fetchingBridgeQuote) return;
+                        if (!selectedBridgeQuote) {
+                          refresh((e) => e + 1);
+
+                          return;
+                        }
+                        if (selectedBridgeQuote?.shouldTwoStepApprove) {
+                          return Modal.confirm({
+                            width: 360,
+                            closable: true,
+                            centered: true,
+                            className: twoStepApproveCn,
+                            title: null,
+                            content: (
+                              <>
+                                <div className="text-[16px] font-medium text-r-neutral-title-1 mb-18 text-center">
+                                  Sign 2 transactions to change allowance
+                                </div>
+                                <div className="text-13 leading-[17px]  text-r-neutral-body">
+                                  Token USDT requires 2 transactions to change
+                                  allowance. First you would need to reset
+                                  allowance to zero, and only then set new
+                                  allowance value.
+                                </div>
+                              </>
+                            ),
+                            okText: 'Proceed with two step approve',
+
+                            onOk() {
+                              // gotoBridge();
+                              handleBridge();
+                            },
+                          });
+                        }
+                        // gotoBridge();
+                        handleBridge();
+                      }}
+                      disabled={bridgeButtonDisabled || riskDisabled}
+                    >
+                      {btnText}
+                    </Button>
+                  )}
+                </RiskTipsWrapper>
               )}
             </TooltipWithMagnetArrow>
           )}
@@ -879,6 +1369,11 @@ export const BridgeContent = () => {
         {fromToken && toToken ? (
           <QuoteList
             list={quoteList}
+            activeName={
+              selectedBridgeQuote
+                ? `${selectedBridgeQuote.aggregator.id}-${selectedBridgeQuote.bridge_id}`
+                : undefined
+            }
             loading={quoteLoading}
             visible={visible}
             onClose={() => {

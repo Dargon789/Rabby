@@ -14,7 +14,7 @@ import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
 import { findChainByEnum } from '@/utils/chain';
 import { useCurrentAccount } from '@/ui/hooks/backgroundState/useAccount';
 import { useDesktopBalanceView } from './hooks/useDesktopBalanceView';
-import { useMemoizedFn } from 'ahooks';
+import { useMemoizedFn, useMount } from 'ahooks';
 import { SendNftModal } from './components/SendNftModal';
 import { ReceiveTokenModal } from './components/ReceiveTokenModal';
 import { SignatureRecordModal } from './components/SignatureRecordModal';
@@ -24,10 +24,11 @@ import { GnosisQueueModal } from './components/GnosisQueueModal';
 import { ApprovalsTabPane } from './components/ApprovalsTabPane';
 import { AddressDetailModal } from './components/AddressDetailModal';
 import { AddressBackupModal } from './components/AddressBackupModal';
-import { AddAddressModal } from './components/AddAddressModal';
-import { RcIconBackTopCC } from '@/ui/assets/desktop/profile';
-import { ReachedEnd } from './components/ReachedEnd';
-import ThemeIcon from '@/ui/component/ThemeMode/ThemeIcon';
+import {
+  RcIconBackTopCC,
+  RcIconQueueCC,
+  RcIconSpinCC,
+} from '@/ui/assets/desktop/profile';
 import TopShortcut, {
   PORTFOLIO_LIST_ID,
   TOP_SHORTCUT_SLOT_ID,
@@ -35,14 +36,14 @@ import TopShortcut, {
 import { AbstractProject } from '@/ui/utils/portfolio/types';
 import { NFTTabPane } from './components/NFTTabPane';
 import { useEventBusListener } from '@/ui/hooks/useEventBusListener';
-import { matomoRequestEvent } from '@/utils/matomo-request';
-import { ga4 } from '@/utils/ga4';
 import { DesktopPending } from './components/DesktopPending';
 import { TokenTab } from './components/TokensTabPane/TokenTab';
 import { DIFITab } from './components/TokensTabPane/DifiTab';
-import { useTokenAndDIFIData } from './components/TokensTabPane/hook';
+import { useTokenAndDefiData } from './components/TokensTabPane/hook';
 import { DesktopPageWrap } from '@/ui/component/DesktopPageWrap';
-import { SwitchThemeBtn } from './components/SwitchThemeBtn';
+import { reportWebPageView } from '@/ui/utils/ga-event';
+import { expiredNft } from '@/db/utils/expired';
+
 const DESKTOP_NAV_HEIGHT = 0;
 
 const StickyBorderTop = () => (
@@ -73,6 +74,11 @@ export const DesktopProfile: React.FC<{
 }> = ({ isActive = true, style }) => {
   const { t } = useTranslation();
   const currentAccount = useCurrentAccount();
+
+  const isGnosis = useMemo(
+    () => currentAccount?.type === KEYRING_TYPE.GnosisKeyring,
+    [currentAccount?.type]
+  );
 
   const history = useHistory();
   const location = useLocation();
@@ -137,23 +143,13 @@ export const DesktopProfile: React.FC<{
   const [searchValue, setSearchValue] = React.useState('');
 
   const {
-    // useQueryProjects
     isTokensLoading,
     isAllTokenLoading,
     isPortfoliosLoading,
-    portfolios,
-    tokenList,
     hasTokens,
     removeProtocol,
-    portfolioNetWorth,
-    // useQueryProjects end
-    // useAppChain
-    appPortfolios,
-    appPortfolioNetWorth,
     isAppPortfoliosLoading,
-    // useAppChain end
     currentPortfolioNetWorth,
-    displayTokenList,
     displayPortfolios,
     sortTokens,
     lpTokenMode,
@@ -162,12 +158,16 @@ export const DesktopProfile: React.FC<{
     isNoResults,
     refreshPositions,
     refreshTokens,
-  } = useTokenAndDIFIData({
+  } = useTokenAndDefiData({
     selectChainId: chainInfo?.serverId,
     allTokenMode: !!searchValue,
   });
 
   const handleUpdate = useMemoizedFn(async () => {
+    if (activeTab === 'nft' && currentAccount?.address) {
+      expiredNft(currentAccount.address);
+    }
+
     setRefreshKey((prev) => prev + 1);
     refreshPositions();
     refreshBalance();
@@ -200,6 +200,12 @@ export const DesktopProfile: React.FC<{
     handleUpdate();
   });
 
+  useMount(() => {
+    if (!action) {
+      reportWebPageView(location.pathname);
+    }
+  });
+
   return (
     <>
       <DesktopPageWrap
@@ -209,7 +215,6 @@ export const DesktopProfile: React.FC<{
       >
         <div className="main-content flex-1 pb-[20px]">
           <div className="layout-container">
-            {/* <DesktopNav /> */}
             <div
               className="sticky z-10 pt-[0px] overflow-scroll flex-initial px-1 w-auto"
               style={{
@@ -254,6 +259,25 @@ export const DesktopProfile: React.FC<{
                       right: (
                         <>
                           <div className="flex items-center gap-[16px] pr-[20px]">
+                            {isGnosis ? (
+                              <div
+                                className={clsx(
+                                  'min-w-[88px] h-[32px] px-[10px] rounded-[8px]',
+                                  'flex items-center justify-center gap-[4px] cursor-pointer',
+                                  'text-rb-brand-default text-[14px] leading-[16px] font-medium',
+                                  'border-[0.5px] border-solid border-rb-brand-default',
+                                  'hover:bg-r-blue-light-1'
+                                )}
+                                onClick={() => {
+                                  history.replace(
+                                    `${history.location.pathname}?action=gnosis-queue`
+                                  );
+                                }}
+                              >
+                                <RcIconQueueCC />
+                                {t('page.desktopProfile.button.queue')}
+                              </div>
+                            ) : null}
                             <DesktopPending />
                             <DesktopChainSelector
                               value={chain}
@@ -279,7 +303,7 @@ export const DesktopProfile: React.FC<{
                         }
                         isNoResults={isNoResults}
                         sortTokens={sortTokens}
-                        hasTokens={hasTokens}
+                        hasTokens={!!hasTokens}
                         lpTokenMode={lpTokenMode}
                         setLpTokenMode={setLpTokenMode}
                         selectChainId={chainInfo?.serverId}
@@ -359,13 +383,11 @@ export const DesktopProfile: React.FC<{
           </div>
         </div>
         <aside
-          className={clsx(
-            'flex-shrink-0 sticky z-20 top-0 h-full flex flex-col'
-          )}
+          className={clsx('shrink-0 sticky z-20 top-0 h-full flex flex-col')}
           // style={{ top: DESKTOP_NAV_HEIGHT }}
         >
           {/* <div
-            className="flex items-center justify-end flex-shrink-0"
+            className="flex items-center justify-end shrink-0"
             style={{ height: `${DESKTOP_NAV_HEIGHT}px` }}
           >
             <SwitchThemeBtn />

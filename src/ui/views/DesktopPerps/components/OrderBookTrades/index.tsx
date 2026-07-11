@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 import { OrderBook } from './components/OrderBook';
@@ -14,14 +14,20 @@ export interface Trade {
 
 export const OrderBookTrades: React.FC = () => {
   const { t } = useTranslation();
-  const { selectedCoin } = useRabbySelector((state) => state.perps);
+  const selectedCoin = useRabbySelector((state) => state.perps.selectedCoin);
   const [activeTab, setActiveTab] = useState<'orderbook' | 'trades'>(
     'orderbook'
   );
 
   const [trades, setTrades] = useState<Trade[]>([]);
+  // Buffer trades and flush once per frame: the WS snapshot burst fires this
+  // callback (unbatched, outside React) many times in a row, and >50 sync
+  // setStates trip React's max update-depth guard.
+  const tradesBufferRef = useRef<Trade[]>([]);
+  const flushRafRef = useRef<number | null>(null);
 
   useEffect(() => {
+    tradesBufferRef.current = [];
     setTrades([]);
   }, [selectedCoin]);
 
@@ -41,16 +47,27 @@ export const OrderBookTrades: React.FC = () => {
           side: (trade.side === 'B' ? 'buy' : 'sell') as 'buy' | 'sell',
         }));
 
-        setTrades((prevTrades) => {
-          // Add new trades to the beginning and keep only the latest 300
-          const combined = [...newTrades, ...prevTrades];
-          return combined.slice(0, 300);
-        });
+        // Newest first, keep only the latest 300 — accumulate across burst calls.
+        tradesBufferRef.current = [
+          ...newTrades,
+          ...tradesBufferRef.current,
+        ].slice(0, 300);
+
+        if (flushRafRef.current == null) {
+          flushRafRef.current = requestAnimationFrame(() => {
+            flushRafRef.current = null;
+            setTrades(tradesBufferRef.current);
+          });
+        }
       }
     });
 
     return () => {
       unsubscribe();
+      if (flushRafRef.current != null) {
+        cancelAnimationFrame(flushRafRef.current);
+        flushRafRef.current = null;
+      }
     };
   }, [selectedCoin]);
 
@@ -61,13 +78,13 @@ export const OrderBookTrades: React.FC = () => {
   return (
     <div className="h-full w-full bg-rb-neutral-bg-1 flex flex-col overflow-hidden">
       {/* Tabs */}
-      <div className="relative flex border-b border-solid border-rb-neutral-line flex-shrink-0 h-40">
+      <div className="relative flex border-b border-solid border-rb-neutral-line shrink-0 h-[38px]">
         <button
           className={clsx(
-            'flex-1 px-[16px] items-center justify-center text-[12px] font-medium transition-colors',
+            'flex-1 px-[16px] items-center justify-center text-12 font-medium transition-colors',
             activeTab === 'orderbook'
-              ? 'text-r-blue-default'
-              : 'text-r-neutral-foot hover:text-r-blue-default'
+              ? 'text-rb-neutral-title-1'
+              : 'text-rb-neutral-secondary hover:text-rb-neutral-title-1'
           )}
           onClick={() => setActiveTab('orderbook')}
         >
@@ -75,25 +92,24 @@ export const OrderBookTrades: React.FC = () => {
         </button>
         <button
           className={clsx(
-            'flex-1 px-[16px] items-center justify-center text-[12px] font-medium transition-colors',
+            'flex-1 px-[16px] items-center justify-center text-12 font-medium transition-colors',
             activeTab === 'trades'
-              ? 'text-r-blue-default'
-              : 'text-r-neutral-foot hover:text-r-blue-default'
+              ? 'text-rb-neutral-title-1'
+              : 'text-rb-neutral-secondary hover:text-rb-neutral-title-1'
           )}
           onClick={() => setActiveTab('trades')}
         >
           {t('page.perpsPro.orderBook.trades')}
         </button>
-        {/* Sliding indicator */}
+        {/* Sliding indicator: fixed 20px length, centered under the active tab */}
         <div
           className={clsx(
-            'absolute bottom-0 h-[2px] bg-rb-brand-default transition-transform duration-300 ease-out',
-            'w-1/2'
+            'absolute bottom-0 h-[2px] w-[20px] bg-rb-brand-default -translate-x-1/2',
+            'transition-[left] duration-300 ease-out'
           )}
           style={{
-            transform: `translateX(${
-              activeTab === 'orderbook' ? '0%' : '100%'
-            })`,
+            // Each tab is half the width, so its center sits at 25% / 75%.
+            left: activeTab === 'orderbook' ? '25%' : '75%',
           }}
         />
       </div>

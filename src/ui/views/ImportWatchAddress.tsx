@@ -23,7 +23,6 @@ import { resolveEnsAddressByName } from '@/ui/utils/ens';
 import WatchLogo from 'ui/assets/watch-only-hero.svg';
 import { useCreateAddressActions } from './AddAddress/useCreateAddress';
 import { RcWatchAddressScan } from '../assets/add-address';
-import { is } from 'immer/dist/internal';
 
 const ImportWatchAddress: React.FC<{
   isInModal?: boolean;
@@ -228,6 +227,7 @@ const ImportWatchAddress: React.FC<{
       disableKeyDownEvent={disableKeydown}
       onBackClick={handleClickBack}
       NextButtonContent={t('global.confirm')}
+      footerClassName="lg:bottom-0"
       nextDisabled={!isValidAddr}
     >
       {contextHolder}

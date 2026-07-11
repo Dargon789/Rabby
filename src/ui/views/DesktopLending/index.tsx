@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useCallback } from 'react';
 import clsx from 'clsx';
 import styled from 'styled-components';
 import { useSceneAccount } from '@/ui/hooks/backgroundState/useAccount';
-import { DesktopNav } from '@/ui/component/DesktopNav';
 import { DesktopAccountSelector } from '@/ui/component/DesktopAccountSelector';
 import { LendingList } from './components/LendingList';
 import { SummaryBar } from './components/SummaryBar';
@@ -51,7 +50,6 @@ const DesktopLendingContent: React.FC = () => {
   return (
     <Wrap>
       <div className="flex items-center justify-between mt-20">
-        {/* <DesktopNav showRightItems={false} /> */}
         <div className="flex items-center gap-[6px] text-rb-neutral-title-1">
           <RcIconRabbyCC />
           <span className="text-[20px] leading-[24px] font-bold">
@@ -78,7 +76,7 @@ const DesktopLendingContent: React.FC = () => {
         <div className="flex-1 min-h-0 overflow-y-auto pb-20">
           <LendingList />
         </div>
-        <div className="flex-shrink-0">
+        <div className="shrink-0">
           <SummaryBar
             netWorth={iUserSummary?.netWorthUSD || ''}
             supplied={iUserSummary?.totalLiquidityUSD || ''}

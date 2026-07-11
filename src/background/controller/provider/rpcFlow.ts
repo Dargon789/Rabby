@@ -23,6 +23,7 @@ import { hexToNumber } from 'viem';
 import BigNumber from 'bignumber.js';
 import { Chain } from '@debank/common';
 import { shouldAutoConnect, shouldAutoPersonalSign } from './autoConnect';
+import { ga4 } from '@/utils/ga4';
 
 const isSignApproval = (type: string) => {
   const SIGN_APPROVALS = ['SignText', 'SignTypedData', 'SignTx'];
@@ -198,6 +199,11 @@ const flowContext = flow
           });
           ctx.request.account =
             defaultAccount || preferenceService.getCurrentAccount();
+
+          ga4.fireEvent('Dapp_Connected', {
+            event_category: 'Dapp Usage',
+            event_label: origin,
+          });
         } catch (e) {
           console.error(e);
           connectOrigins.delete(origin);
@@ -213,7 +219,7 @@ const flowContext = flow
     const {
       request: {
         data: { params, method },
-        session: { origin, name, icon },
+        session: { origin, name, icon, isFromRabby },
         isFromDesktopDapp,
       },
       mapMethod,
@@ -285,7 +291,7 @@ const flowContext = flow
               $ctx: ctx?.request?.data?.$ctx,
               method,
               data: ctx.request.data.params,
-              session: { origin, name, icon },
+              session: { origin, name, icon, isFromRabby },
             },
             account: ctx.request.account,
             origin,

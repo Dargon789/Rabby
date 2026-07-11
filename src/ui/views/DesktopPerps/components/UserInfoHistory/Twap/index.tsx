@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { usePerpsProPosition } from '../../../hooks/usePerpsProPosition';
 import { DashedUnderlineText } from '../../DashedUnderlineText';
 import { formatPerpsCoin } from '../../../utils';
+import { PerpsDisplayCoinName } from '@/ui/views/Perps/components/PerpsDisplayCoinName';
 
 type TwapOrder = {
   twapId: number;
@@ -143,7 +144,7 @@ export const Twap: React.FC = () => {
       return '-';
     }
 
-    const pxDecimals = marketDataMap[order.coin]?.pxDecimals || 2;
+    const pxDecimals = marketDataMap[order.coin]?.pxDecimals ?? 2;
 
     return `$${splitNumberByStep(
       totalNotional.dividedBy(totalSize).toFixed(pxDecimals)
@@ -182,7 +183,7 @@ export const Twap: React.FC = () => {
         width: 180,
         sorter: (a, b) => a.fill.time - b.fill.time,
         render: (_, record) => (
-          <div className="text-[13px] leading-[16px] text-r-neutral-title-1">
+          <div className="text-[13px] leading-[16px] text-r-neutral-body">
             {dayjs(record.fill.time).format('YYYY/MM/DD HH:mm:ss')}
           </div>
         ),
@@ -190,23 +191,29 @@ export const Twap: React.FC = () => {
       {
         title: t('page.perpsPro.userInfo.tab.coin'),
         key: 'coin',
-        width: 60,
+        width: 120,
         dataIndex: 'coin',
         sorter: (a, b) => a.fill.coin.localeCompare(b.fill.coin),
-        render: (_, record) => (
-          <div
-            className={`text-[12px] leading-[14px] text-r-neutral-title-1 ${
-              record.fill.side === 'B'
-                ? 'text-rb-green-default'
-                : 'text-rb-red-default'
-            } cursor-pointer hover:font-bold hover:text-rb-brand-default`}
-            onClick={() => {
-              dispatch.perps.updateSelectedCoin(record.fill.coin);
-            }}
-          >
-            {formatPerpsCoin(record.fill.coin)}
-          </div>
-        ),
+        render: (_, record) => {
+          return (
+            <div
+              className={'group text-[12px] leading-[14px] cursor-pointer'}
+              onClick={() => {
+                dispatch.perps.updateSelectedCoin(record.fill.coin);
+              }}
+            >
+              <PerpsDisplayCoinName
+                item={
+                  marketDataMap[record.fill.coin] || { name: record.fill.coin }
+                }
+                separator="-"
+                showDexTag
+                baseClassName="group-hover:text-rb-brand-default group-hover:font-bold"
+                quoteClassName="text-r-neutral-title-1 group-hover:text-rb-brand-default group-hover:font-bold"
+              />
+            </div>
+          );
+        },
       },
       {
         title: t('page.perpsPro.userInfo.tab.direction'),
@@ -235,10 +242,10 @@ export const Twap: React.FC = () => {
         dataIndex: 'px',
         sorter: (a, b) => Number(a.fill.px) - Number(b.fill.px),
         render: (_, record) => {
-          const pxDecimals = marketDataMap[record.fill.coin]?.pxDecimals || 2;
+          const pxDecimals = marketDataMap[record.fill.coin]?.pxDecimals ?? 2;
           const px = new BigNumber(record.fill.px).toFixed(pxDecimals);
           return (
-            <div className="text-[12px] leading-[14px] text-r-neutral-title-1">
+            <div className="text-[12px] leading-[14px] text-r-neutral-body">
               {splitNumberByStep(px)}
             </div>
           );
@@ -251,7 +258,7 @@ export const Twap: React.FC = () => {
         dataIndex: 'sz',
         sorter: (a, b) => Number(a.fill.sz) - Number(b.fill.sz),
         render: (_, record) => (
-          <div className="text-[12px] leading-[14px] text-r-neutral-title-1">
+          <div className="text-[12px] leading-[14px] text-r-neutral-body">
             {splitNumberByStep(Number(record.fill.sz))}{' '}
             {formatPerpsCoin(record.fill.coin)}
           </div>
@@ -266,13 +273,13 @@ export const Twap: React.FC = () => {
           new BigNumber(a.fill.px).times(a.fill.sz).toNumber() -
           new BigNumber(b.fill.px).times(b.fill.sz).toNumber(),
         render: (_, record) => (
-          <div className="text-[12px] leading-[14px] text-r-neutral-title-1">
+          <div className="text-[12px] leading-[14px] text-r-neutral-body">
             {splitNumberByStep(
               new BigNumber(record.fill.px)
                 .times(new BigNumber(record.fill.sz).abs())
                 .toFixed(2)
             )}{' '}
-            USDC
+            USD
           </div>
         ),
       },
@@ -291,8 +298,8 @@ export const Twap: React.FC = () => {
             );
           }
           return (
-            <div className="text-[12px] leading-[14px] text-r-neutral-title-1">
-              {splitNumberByStep(Number(fee).toFixed(2))} USDC
+            <div className="text-[12px] leading-[14px] text-r-neutral-body">
+              {splitNumberByStep(Number(fee).toFixed(2))} USD
             </div>
           );
         },
@@ -326,7 +333,7 @@ export const Twap: React.FC = () => {
               )}
             >
               {pnlValue >= 0 ? '+' : ''}
-              {splitNumberByStep(pnlValue.toFixed(2))} USDC
+              {splitNumberByStep(pnlValue.toFixed(2))} USD
             </div>
           );
         },
@@ -345,7 +352,7 @@ export const Twap: React.FC = () => {
           return (
             <div className="flex items-center">
               <div
-                className="text-[12px] px-[16px] h-[28px] flex items-center justify-center bg-rb-red-light-1 text-rb-red-default cursor-pointer rounded-[8px]"
+                className="text-12 px-12 h-24 flex items-center justify-center bg-rb-red-light-1 text-rb-red-default cursor-pointer rounded-[3px]"
                 onClick={() =>
                   handleCancelTWAPOrder({
                     coin: record.coin,
@@ -375,19 +382,18 @@ export const Twap: React.FC = () => {
           const sideName = record.side === 'B' ? 'Long' : 'Short';
           const sliceCount = record.slices.length;
           const canExpand = record.slices.length > 0;
-
           return (
             <div
               className={clsx(
                 'absolute top-0 left-0 right-0 bottom-0',
                 'flex flex-col justify-center',
-                'pl-[16px] py-[8px]',
+                'pl-[12px] py-[8px]',
                 record.side === 'B' ? 'is-long-bg' : 'is-short-bg'
               )}
             >
               <div
                 className={clsx(
-                  'flex items-center gap-[4px]',
+                  'flex gap-[4px]',
                   canExpand && 'cursor-pointer'
                 )}
                 onClick={() => {
@@ -404,30 +410,38 @@ export const Twap: React.FC = () => {
                   );
                 }}
               >
-                <div className="flex flex-row items-center gap-[4px]">
-                  <div className="text-[13px] leading-[16px] font-semibold text-r-neutral-title-1">
+                <div className="flex flex-col gap-[4px]">
+                  <div className="text-[13px] leading-[16px] text-r-neutral-title-1 gap-6 flex items-center flex-row">
                     <span
-                      className="cursor-pointer hover:font-bold hover:text-rb-brand-default"
+                      className="group cursor-pointer"
                       onClick={(e) => {
                         e.stopPropagation();
                         dispatch.perps.updateSelectedCoin(record.coin);
                       }}
                     >
-                      {formatPerpsCoin(record.coin)}{' '}
+                      <PerpsDisplayCoinName
+                        item={
+                          marketDataMap[record.coin] || { name: record.coin }
+                        }
+                        separator="-"
+                        showDexTag
+                        baseClassName="group-hover:text-rb-brand-default group-hover:font-bold"
+                        quoteClassName="text-r-neutral-title-1 group-hover:text-rb-brand-default group-hover:font-bold"
+                      />
                     </span>
+                    {canExpand && (
+                      <RcIconArrowDown
+                        className={clsx(
+                          'text-r-neutral-body',
+                          isExpanded && 'rotate-180'
+                        )}
+                      />
+                    )}
                   </div>
-                  <div className="text-[12px] leading-[14px] text-r-neutral-foot">
-                    {sideName} · ({sliceCount} slices)
+                  <div className="text-[12px] leading-[14px] text-rb-neutral-secondary">
+                    {sideName} ({sliceCount} slices)
                   </div>
                 </div>
-                {canExpand && (
-                  <RcIconArrowDown
-                    className={clsx(
-                      'text-r-neutral-body',
-                      isExpanded && 'rotate-180'
-                    )}
-                  />
-                )}
               </div>
             </div>
           );
@@ -446,16 +460,16 @@ export const Twap: React.FC = () => {
             .toFixed(1);
 
           return (
-            <div className="text-[12px] leading-[14px]  flex flex-col gap-[4px] text-rb-neutral-title-1">
+            <div className="text-[12px] leading-[14px]  flex flex-col gap-[4px] text-rb-neutral-body">
               <div className="flex items-center gap-[4px]">
                 {record.executedSz}
                 {record.randomize && (
-                  <span className="text-rb-orange-default text-[12px] leading-[14px] font-normal">
+                  <span className="text-rb-orange-default text-[12px] leading-[14px]">
                     {t('page.perpsPro.userInfo.randomized')}
                   </span>
                 )}
               </div>
-              <div className="text-rb-neutral-foot">
+              <div className="text-rb-neutral-secondary">
                 {record.executedSz} / {Number(record.sz)}
               </div>
             </div>
@@ -468,7 +482,7 @@ export const Twap: React.FC = () => {
         width: 130,
         render: (_, record) => {
           return (
-            <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+            <div className="text-[12px] leading-[14px]  text-r-neutral-body">
               {calculateAveragePrice(record)}
             </div>
           );
@@ -480,7 +494,7 @@ export const Twap: React.FC = () => {
         width: 180,
         render: (_, record) => {
           return (
-            <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+            <div className="text-[12px] leading-[14px]  text-r-neutral-body">
               {calculateRunningTime(record)}
             </div>
           );
@@ -538,7 +552,7 @@ export const Twap: React.FC = () => {
         sorter: (a, b) => a.timestamp - b.timestamp,
         render: (_, record) => {
           return (
-            <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+            <div className="text-[12px] leading-[14px]  text-r-neutral-body">
               {dayjs(record.timestamp).format('YYYY/MM/DD HH:mm:ss')}
             </div>
           );
@@ -572,7 +586,8 @@ export const Twap: React.FC = () => {
         width: 150,
         render: (_, slice) => (
           <div className="text-[12px] leading-[14px] text-rb-neutral-foot">
-            {splitNumberByStep(Number(slice.fill.sz))} {record.coin}
+            {splitNumberByStep(Number(slice.fill.sz))}{' '}
+            {formatPerpsCoin(record.coin)}
           </div>
         ),
       },
@@ -645,6 +660,7 @@ export const Twap: React.FC = () => {
         columns={sliceColumns}
         pagination={false}
         showHeader={false}
+        rowHeight={28}
         rowKey={(slice) =>
           `${record.twapId}-${record.status}-${slice.fill.tid}`
         }
@@ -655,16 +671,13 @@ export const Twap: React.FC = () => {
   return (
     <div className="flex flex-col h-full">
       {/* Tabs */}
-      <div
-        className="flex bg-rb-neutral-bg-4 p-[2px] rounded-[8px] ml-16 mt-10"
-        style={{ width: 'fit-content' }}
-      >
+      <div className="flex items-center gap-[6px] ml-12 my-6 font-medium">
         <div
           className={clsx(
-            'px-[8px] py-[6px] text-[12px]  cursor-pointer',
+            'px-[12px] py-[6px] text-12 rounded-[6px] cursor-pointer',
             activeTab === 'active'
-              ? 'text-rb-neutral-body bg-rb-neutral-bg-1 rounded-[8px]'
-              : 'text-r-neutral-foot bg-rb-neutral-bg-4'
+              ? 'text-rb-neutral-body bg-rb-neutral-bg-2'
+              : 'text-rb-neutral-foot hover:text-rb-neutral-body'
           )}
           onClick={() => setActiveTab('active')}
         >
@@ -672,10 +685,10 @@ export const Twap: React.FC = () => {
         </div>
         <div
           className={clsx(
-            'px-[8px] py-[6px] text-[12px]  cursor-pointer',
+            'px-[12px] py-[6px] text-12 rounded-[6px] cursor-pointer',
             activeTab === 'history'
-              ? 'text-rb-neutral-body bg-rb-neutral-bg-1 rounded-[8px]'
-              : 'text-r-neutral-foot bg-rb-neutral-bg-4'
+              ? 'text-rb-neutral-body bg-rb-neutral-bg-2'
+              : 'text-rb-neutral-foot hover:text-rb-neutral-body'
           )}
           onClick={() => setActiveTab('history')}
         >
@@ -683,10 +696,10 @@ export const Twap: React.FC = () => {
         </div>
         <div
           className={clsx(
-            'px-[8px] py-[6px] text-[12px]  cursor-pointer',
+            'px-[12px] py-[6px] text-12 rounded-[6px] cursor-pointer',
             activeTab === 'filled'
-              ? 'text-rb-neutral-body bg-rb-neutral-bg-1 rounded-[8px]'
-              : 'text-r-neutral-foot bg-rb-neutral-bg-4'
+              ? 'text-rb-neutral-body bg-rb-neutral-bg-2'
+              : 'text-rb-neutral-foot hover:text-rb-neutral-body'
           )}
           onClick={() => setActiveTab('filled')}
         >
@@ -708,7 +721,7 @@ export const Twap: React.FC = () => {
             defaultSortField="time"
             defaultSortOrder="descend"
             virtual
-            rowHeight={32}
+            rowHeight={28}
           />
         ) : (
           <CommonTable

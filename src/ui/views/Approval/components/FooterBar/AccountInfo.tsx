@@ -9,6 +9,7 @@ import { Chain } from '@debank/common';
 import { Tooltip } from 'antd';
 import { useTranslation } from 'react-i18next';
 import { useBrandIcon } from '@/ui/hooks/useBrandIcon';
+import { useRabbyDispatch } from '@/ui/store';
 
 export interface Props {
   account: Account;
@@ -26,6 +27,7 @@ export const AccountInfo: React.FC<Props> = ({
   const displayBalance = splitNumberByStep((balance || 0).toFixed(2));
   const wallet = useWallet();
   const { t } = useTranslation();
+  const rDispatch = useRabbyDispatch();
 
   const init = async () => {
     const result = await wallet.getAlianName(
@@ -49,6 +51,10 @@ export const AccountInfo: React.FC<Props> = ({
   React.useEffect(() => {
     init();
   }, [account]);
+
+  React.useEffect(() => {
+    rDispatch.accountToDisplay.getAllAccountsToDisplay();
+  }, [rDispatch]);
 
   const brandIcon = useBrandIcon({
     address: account?.address,
@@ -90,7 +96,7 @@ export const AccountInfo: React.FC<Props> = ({
               ref={nicknameRef}
               className={clsx(
                 'text-r-neutral-body text-[15px]',
-                'overflow-ellipsis whitespace-nowrap overflow-hidden',
+                'text-ellipsis whitespace-nowrap overflow-hidden',
                 'leading-[20px]'
               )}
             >

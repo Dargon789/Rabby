@@ -1,4 +1,6 @@
 import { matomoRequestEvent } from '@/utils/matomo-request';
+import type { UserFeedbackItem } from '@rabby-wallet/rabby-api/dist/types';
+import { Button } from 'antd';
 import clsx from 'clsx';
 import {
   KEYRING_CLASS,
@@ -6,30 +8,32 @@ import {
   KEYRING_TYPE,
   WALLET_BRAND_CONTENT,
 } from 'consts';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useHistory } from 'react-router-dom';
 import { useInterval } from 'react-use';
 import { ReactComponent as RcIconCopy } from 'ui/assets/icon-copy-1.svg';
 import WatchLogo from 'ui/assets/waitcup.svg';
 
-import { AddressViewer } from 'ui/component';
+import { AddressViewer, Popup } from 'ui/component';
 import { useRabbyDispatch, useRabbySelector } from 'ui/store';
-import { useWallet } from 'ui/utils';
+import { formatUsdValue, useWallet } from 'ui/utils';
 
 import { getKRCategoryByType } from '@/utils/transaction';
 
-import {
-  RcIconAddWalletCC,
-  RcIconFullscreen1CC,
-  RcIconFullscreenCC,
-  RcIconQrCodeCC,
-  RcIconSettingCC,
-} from '@/ui/assets/dashboard';
+import { RcIconSettingCC } from '@/ui/assets/dashboard';
+import { ReactComponent as RcIconGasFullCC } from '@/ui/assets/gas-full-cc.svg';
+import { ReactComponent as RcIconGasLowCC } from '@/ui/assets/gas-low-cc.svg';
 import { CommonSignal } from '@/ui/component/ConnectStatus/CommonSignal';
+import { SeedPhraseBackupAlert } from '@/ui/component/SeedPhraseBackupAlert';
 import { useWalletConnectIcon } from '@/ui/component/WalletConnect/useWalletConnectIcon';
 import { useCurrentAccount } from '@/ui/hooks/backgroundState/useAccount';
 import { copyAddress } from '@/ui/utils/clipboard';
+import {
+  useGasAccountInfo,
+  useGasAccountInfoV2,
+  useGasAccountLogin,
+} from '@/ui/views/GasAccount/hooks';
 import { ga4 } from '@/utils/ga4';
 import { useMemoizedFn } from 'ahooks';
 import styled from 'styled-components';
@@ -38,9 +42,14 @@ import { BalanceView } from '../BalanceView/BalanceView';
 import { useHomeBalanceViewOuterPrefetch } from '../BalanceView/useHomeBalanceView';
 import PendingTxs from '../PendingTxs';
 import Queue from '../Queue';
-import { Popover } from 'antd';
-import QRCode from 'qrcode.react';
-import { SeedPhraseBackupAlert } from '@/ui/component/SeedPhraseBackupAlert';
+import Tooltip from 'antd/es/tooltip';
+import { LOW_GAS_ACCOUNT_BALANCE } from '@/constant/gas-account';
+import { ReactComponent as RcIconFeedbackCC } from '@/ui/assets/icon-feedback-cc.svg';
+import { RcIconSuccessCC } from '@/ui/assets/desktop/common';
+import {
+  useLatestRepliedFeedbacks,
+  useViewingFeedback,
+} from '@/ui/component/ScreenshotContextMenu/hooks';
 
 const Container = styled.div`
   width: 100%;
@@ -107,53 +116,25 @@ export const DashboardHeader: React.FC<{ onSettingClick?(): void }> = ({
     history.push('/switch-address');
   });
 
-  const handleAddAddress = useMemoizedFn(() => {
-    // matomoRequestEvent({
-    //   category: 'Front Page Click',
-    //   action: 'Click',
-    //   label: 'Add Address',
-    // });
-
-    // ga4.fireEvent('Click_AddAddress', {
-    //   event_category: 'Front Page Click',
-    // });
-
-    history.push('/add-address');
-  });
-
-  const handleOpenDesktop = useMemoizedFn(() => {
-    // matomoRequestEvent({
-    //   category: 'Front Page Click',
-    //   action: 'Click',
-    //   label: 'Open Desktop App',
-    // });
-
-    // ga4.fireEvent('Click_OpenDesktopApp', {
-    //   event_category: 'Front Page Click',
-    // });
-
-    wallet.openInDesktop('/desktop/profile');
-    window.close();
-  });
-
   const brandIcon = useWalletConnectIcon(currentAccount);
   const { t } = useTranslation();
 
   return (
     <Container>
       {currentAccount && (
-        <div className={clsx('flex mb-[8px] items-center gap-[16px] relative')}>
-          <div className="flex items-center gap-[8px]">
+        <div className={clsx('flex mb-[8px] items-center gap-[24px] relative')}>
+          <div className="min-w-0 flex items-center gap-[4px]">
             <div
               className={clsx(
-                'flex items-center gap-[6px] px-[8px] py-[6px] rounded-[6px] cursor-pointer',
+                'flex-1 min-w-0 flex items-center justify-end',
+                'gap-[6px] pl-[12px] pr-[8px] py-[7px] rounded-[6px] cursor-pointer',
                 'bg-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.1)]'
               )}
               onClick={handleSwitchAddress}
             >
               <div className="relative">
                 <img
-                  className={clsx('w-[20px] h-[20px] min-w-[20px]')}
+                  className={clsx('w-[16px] h-[16px] min-w-[16px]')}
                   src={
                     brandIcon ||
                     WALLET_BRAND_CONTENT[currentAccount.brandName]?.image ||
@@ -181,7 +162,7 @@ export const DashboardHeader: React.FC<{ onSettingClick?(): void }> = ({
                   className="text-[12px] leading-[14px] text-r-neutral-title2 opacity-60"
                 />
               )}
-              <IconArrowRight />
+              <IconArrowRight className="shrink-0" />
             </div>
 
             <RcIconCopy
@@ -203,33 +184,15 @@ export const DashboardHeader: React.FC<{ onSettingClick?(): void }> = ({
                 });
               }}
             />
-
-            {/* <Popover
-              trigger={'click'}
-              content={
-                <div className="mx-[-4px]">
-                  <QRCode value={currentAccount.address} size={190}></QRCode>
-                </div>
-              }
-            >
-              <RcIconQrCodeCC className="w-[16px] h-[16px] text-r-neutral-title2 cursor-pointer opacity-60 hover:opacity-80" />
-            </Popover> */}
           </div>
 
-          <div className="ml-auto flex items-center gap-[8px]">
-            {/* <div
-              className={clsx(
-                'py-[6px] px-[8px] rounded-[5px] cursor-pointer text-r-neutral-title-2',
-                'bg-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.1)]'
-              )}
-              onClick={handleAddAddress}
-            >
-              <RcIconAddWalletCC />
-            </div> */}
+          <div className="shrink-0 min-w-0 ml-auto flex items-center gap-[4px]">
+            <FeedbackEntry />
+            <GasAccountEntry />
 
             <div
               className={clsx(
-                'p-[6px] rounded-[5px] cursor-pointer text-r-neutral-title-2',
+                'p-[6px] rounded-[5px] cursor-pointer text-r-neutral-title-2 shrink-0',
                 'bg-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.1)]'
               )}
               onClick={onSettingClick}
@@ -256,5 +219,217 @@ export const DashboardHeader: React.FC<{ onSettingClick?(): void }> = ({
       )}
       <SeedPhraseBackupAlert className="absolute left-0 right-0 bottom-0" />
     </Container>
+  );
+};
+
+const FeedbackEntry = () => {
+  const { t } = useTranslation();
+  const { lastRepliedFeedback } = useLatestRepliedFeedbacks();
+  const { startViewingFeedback } = useViewingFeedback();
+
+  const handleClick = useCallback(
+    (evt: React.MouseEvent<HTMLDivElement>) => {
+      evt.preventDefault();
+      evt.stopPropagation();
+
+      if (!lastRepliedFeedback) return;
+
+      startViewingFeedback(lastRepliedFeedback);
+
+      // matomoRequestEvent({
+      //   category: 'Click_Header',
+      //   action: 'Click_Setting',
+      // });
+
+      // ga4.fireEvent('Click_Setting', {
+      //   event_category: 'Click_Header',
+      // });
+    },
+    [lastRepliedFeedback, startViewingFeedback]
+  );
+
+  if (lastRepliedFeedback?.status !== 'complete') {
+    return null;
+  }
+
+  return (
+    <>
+      <div
+        className={clsx(
+          'p-[6px] rounded-[5px] cursor-pointer text-r-neutral-title-2 shrink-0',
+          'bg-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.1)]'
+        )}
+        onClick={handleClick}
+      >
+        <RcIconFeedbackCC className="w-[20px] h-[20px]" />
+      </div>
+      <FeedbackResponsePopup lastRepliedFeedback={lastRepliedFeedback} />
+    </>
+  );
+};
+
+const FeedbackResponsePopup = ({
+  lastRepliedFeedback,
+}: {
+  lastRepliedFeedback: UserFeedbackItem;
+}) => {
+  const { viewingFeedback, finishViewFeedback } = useViewingFeedback();
+  const feedback = viewingFeedback || lastRepliedFeedback;
+  const visible = !!viewingFeedback && feedback?.status === 'complete';
+  const imageUrl = feedback?.image_url_list?.[0];
+  const comment = feedback?.comment;
+  const { t } = useTranslation();
+
+  return (
+    <Popup
+      open={visible}
+      title={t('component.feedbackPopup.title')}
+      height={'fit-content'}
+      closable={false}
+      onCancel={finishViewFeedback}
+      onClose={finishViewFeedback}
+      bodyStyle={{ padding: '20px 24px 24px 24px' }}
+    >
+      <div className="flex max-h-[460px] flex-col">
+        <div className="relative flex-1 min-h-0 pl-[8px] overflow-auto">
+          <div className="relative pb-[28px] pl-[16px] pr-[2px]">
+            <div className="absolute left-0 top-0 h-[16px] w-[16px] rounded-full bg-r-blue-default translate-x-[-50%]" />
+            <div className="absolute left-0 top-[0] bottom-[0px] w-[1px] bg-r-blue-default" />
+            <div className="relative top-[-2px]">
+              <div className="text-[16px] leading-[19px] font-medium text-r-neutral-title1">
+                {t('component.feedbackPopup.issueReported')}
+              </div>
+              <div className="mt-[12px] rounded-[12px] bg-r-neutral-card2 p-[12px]">
+                {feedback?.content ? (
+                  <div className="mb-[8px] whitespace-pre-wrap break-words text-[14px] leading-[16px] text-r-neutral-body">
+                    {feedback.content}
+                  </div>
+                ) : null}
+                {imageUrl ? (
+                  <div className="w-[96px] h-[96px] rounded-[12px] overflow-hidden">
+                    <img
+                      src={imageUrl}
+                      alt="Feedback screenshot"
+                      className="w-full"
+                    />
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
+          <div className="relative pl-[16px] pr-[2px]">
+            <RcIconSuccessCC
+              viewBox="0 0 24 24"
+              className="absolute left-0 top-0 w-[16px] h-[16px] text-r-green-default translate-x-[-50%]"
+            />
+            <div className="relative top-[-2px]">
+              <div className="text-[16px] leading-[19px] font-medium text-r-neutral-title1">
+                {t('component.feedbackPopup.issueReplied')}
+              </div>
+              <div className="mt-[12px] rounded-[12px] bg-r-neutral-card2 p-[12px]">
+                <div className="whitespace-pre-wrap break-words text-[14px] leading-[16px] text-r-neutral-body">
+                  {comment}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <Button
+          type="primary"
+          block
+          className="mt-[24px] h-[48px] shrink-0"
+          onClick={finishViewFeedback}
+        >
+          {t('global.ok')}
+        </Button>
+      </div>
+    </Popup>
+  );
+};
+
+const GasAccountEntry = () => {
+  const history = useHistory();
+  const pendingHardwareAccount = useRabbySelector(
+    (state) => state.gasAccount.pendingHardwareAccount
+  );
+
+  const { value: gasAccount, loading: gasAccountLoading } = useGasAccountInfo();
+  const { isLogin: isGasAccountLogin } = useGasAccountLogin({
+    value: gasAccount,
+    loading: gasAccountLoading,
+  });
+  const {
+    value: pendingHardwareGasAccountInfo,
+    loading: pendingHardwareGasAccountLoading,
+  } = useGasAccountInfoV2({
+    address: pendingHardwareAccount?.address,
+  });
+
+  const gasAccountBalance = gasAccount?.account?.balance || 0;
+  const pendingHardwareGasBalance =
+    pendingHardwareGasAccountInfo?.account?.balance || 0;
+  const visibleGasAccountBalance = Number(
+    isGasAccountLogin
+      ? gasAccountBalance
+      : pendingHardwareAccount
+      ? pendingHardwareGasBalance
+      : 0
+  );
+  const isGasAccountBalanceLoading = isGasAccountLogin
+    ? gasAccountLoading && !gasAccount
+    : pendingHardwareAccount
+    ? pendingHardwareGasAccountLoading && !pendingHardwareGasAccountInfo
+    : gasAccountLoading;
+  const isLowGasAccountBalance =
+    !isGasAccountBalanceLoading &&
+    visibleGasAccountBalance < LOW_GAS_ACCOUNT_BALANCE;
+
+  const handleClick = useCallback(
+    (evt: React.MouseEvent<HTMLDivElement>) => {
+      evt.preventDefault();
+      evt.stopPropagation();
+      history.push('/gas-account');
+    },
+    [history]
+  );
+  const { t } = useTranslation();
+
+  return (
+    <Tooltip
+      title={t('page.gasAccount.title')}
+      placement="bottom"
+      overlayClassName="rectangle"
+      align={{
+        offset: [0, -6],
+      }}
+    >
+      <div
+        className={clsx(
+          'group h-[32px] min-w-[32px] max-w-[32px] hover:max-w-[100px] px-[6px] rounded-[5px]',
+          'cursor-pointer overflow-hidden transition-all duration-200 shrink-0',
+          'flex items-center gap-[2px]',
+          'bg-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.1)]',
+          'text-r-neutral-title-2'
+        )}
+        onClick={handleClick}
+      >
+        {isLowGasAccountBalance ? (
+          <RcIconGasLowCC className="shrink-0" />
+        ) : (
+          <RcIconGasFullCC className="shrink-0" />
+        )}
+        <div
+          className={clsx(
+            'max-w-0 opacity-0 overflow-hidden whitespace-nowrap truncate',
+            'text-[13px] leading-[16px] font-medium',
+            'transition-all duration-200 group-hover:max-w-[100px] group-hover:opacity-100'
+          )}
+        >
+          {formatUsdValue(visibleGasAccountBalance || 0)}
+        </div>
+      </div>
+    </Tooltip>
   );
 };

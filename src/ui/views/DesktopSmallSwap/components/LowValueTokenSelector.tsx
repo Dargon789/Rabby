@@ -5,7 +5,10 @@ import IconUnknown from '@/ui/assets/token-default.svg';
 import ThemeIcon from '@/ui/component/ThemeMode/ThemeIcon';
 import { TooltipWithMagnetArrow } from '@/ui/component/Tooltip/TooltipWithMagnetArrow';
 import { formatAmount, formatUsdValue } from '@/ui/utils';
-import { defaultTokenFilter } from '@/ui/utils/portfolio/lpToken';
+import {
+  defaultTokenFilter,
+  isUnknownToken,
+} from '@/ui/utils/portfolio/lpToken';
 import { getTokenSymbol } from '@/ui/utils/token';
 import { Chain } from '@debank/common';
 import { TokenItem } from '@rabby-wallet/rabby-api/dist/types';
@@ -22,6 +25,7 @@ import { ReactComponent as RcIconEmptyCC } from 'ui/assets/small-swap/empty-cc.s
 import { PANEL_WIDTH, PANEL_WIDTH_DELTA } from '../constant';
 import { BatchSwapTaskType } from '../hooks/useBatchSwapTask';
 import { CheckboxV2 } from './Checkbox';
+import { UnknownTag } from '@/ui/component';
 
 const Container = styled.section`
   .token-list {
@@ -65,6 +69,10 @@ const Container = styled.section`
     line-height: 17px;
   }
 
+  .token-list-cell--amount {
+    padding-left: 4px;
+  }
+
   .token-list-row {
     background: transparent;
     cursor: pointer;
@@ -92,8 +100,8 @@ const Container = styled.section`
 
 const COLUMN_WIDTH = {
   select: 52,
-  token: 142,
-  amount: 112,
+  token: 154,
+  amount: 100,
   value: 112,
   status: 112,
 } as const;
@@ -103,6 +111,7 @@ const thresholds = [
   { label: '<$1', value: 1 },
   { label: '<$10', value: 10 },
   { label: '<$100', value: 100 },
+  { label: '<$1000', value: 1000 },
 ];
 type LowValueTokenSelectorProps = {
   chain?: Chain | null;
@@ -223,11 +232,11 @@ export const LowValueTokenSelector: React.FC<LowValueTokenSelectorProps> = ({
             : PANEL_WIDTH + PANEL_WIDTH_DELTA,
       }}
     >
-      <div className="mb-[32px] text-[24px] leading-[29px] font-medium text-r-neutral-title1 flex-shrink-0">
+      <div className="mb-[32px] text-[24px] leading-[29px] font-medium text-r-neutral-title1 shrink-0">
         {t('page.desktopSmallSwap.selectLowValueTokens')}
       </div>
 
-      <div className="flex items-center gap-[12px] mb-[16px] flex-shrink-0">
+      <div className="flex items-center gap-[12px] mb-[16px] shrink-0">
         {thresholds.map((item) => {
           const active = item.value === currentThreshold;
           return (
@@ -273,7 +282,7 @@ export const LowValueTokenSelector: React.FC<LowValueTokenSelectorProps> = ({
             {t('page.desktopSmallSwap.tokenColumn')}
           </div>
           <div
-            className="token-list-cell flex items-center justify-end"
+            className="token-list-cell token-list-cell--amount flex items-center justify-end"
             style={{ width: COLUMN_WIDTH.amount }}
           >
             {t('page.desktopSmallSwap.amountColumn')}
@@ -341,11 +350,11 @@ export const LowValueTokenSelector: React.FC<LowValueTokenSelectorProps> = ({
                   </div>
 
                   <div
-                    className="token-list-cell flex-1 min-w-0 flex items-center"
-                    style={{ width: COLUMN_WIDTH.amount }}
+                    className="token-list-cell pr-0 flex-1 min-w-0 flex items-center"
+                    style={{ width: COLUMN_WIDTH.token }}
                   >
                     <div className="flex items-center gap-[10px] min-w-0">
-                      <div className="relative w-[24px] h-[24px] flex-shrink-0">
+                      <div className="relative w-[24px] h-[24px] shrink-0">
                         <Image
                           className="w-full h-full block rounded-full"
                           src={record.logo_url || IconUnknown}
@@ -364,14 +373,18 @@ export const LowValueTokenSelector: React.FC<LowValueTokenSelectorProps> = ({
                           />
                         </TooltipWithMagnetArrow>
                       </div>
-                      <div className="text-[14px] leading-[17px] text-r-neutral-title1 truncate">
+                      <div
+                        title={getTokenSymbol(record)}
+                        className="text-[14px] leading-[17px] text-r-neutral-title1 truncate"
+                      >
                         {getTokenSymbol(record)}
                       </div>
                     </div>
+                    {isUnknownToken(record) && <UnknownTag className="ml-8" />}
                   </div>
 
                   <div
-                    className="token-list-cell flex items-center justify-end"
+                    className="token-list-cell token-list-cell--amount flex items-center justify-end"
                     style={{ width: COLUMN_WIDTH.amount }}
                   >
                     <div className="text-r-neutral-title1">

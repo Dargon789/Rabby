@@ -24,6 +24,9 @@ import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
 import { FixedSizeList } from 'react-window';
 import { formatPerpsCoin } from '../../../utils';
+import { PerpsDisplayCoinName } from '@/ui/views/Perps/components/PerpsDisplayCoinName';
+
+const CATEGORY_ALL_ID = 'all';
 
 const SearchInput = styled(Input)`
   background-color: var(--r-neutral-card1, #fff) !important;
@@ -125,9 +128,9 @@ const MarketRowComponent = memo(
           }}
         >
           {/* Left: Star + Logo + Symbol */}
-          <div className="flex items-center gap-[8px] w-[180px] flex-shrink-0">
+          <div className="flex items-center gap-[8px] w-[250px] shrink-0">
             <div
-              className="flex items-center justify-center w-[16px] h-[16px] flex-shrink-0"
+              className="flex items-center justify-center w-[16px] h-[16px] shrink-0"
               onClick={(e) => onToggleFavorite(marketItem.name, e)}
             >
               {isFavorited ? (
@@ -142,9 +145,11 @@ const MarketRowComponent = memo(
               size={20}
             />
             <div>
-              <span className="text-[13px] font-medium text-r-neutral-title-1">
-                {formatPerpsCoin(marketItem.name)}
-              </span>
+              <PerpsDisplayCoinName
+                item={marketItem}
+                showDexTag
+                className="text-[13px] font-medium"
+              />
               <span className="text-[13px] text-r-neutral-foot ml-4">
                 {marketItem.maxLeverage}x
               </span>
@@ -154,7 +159,7 @@ const MarketRowComponent = memo(
           {/* Right: Data columns - 5 columns with custom widths */}
           <div className="flex flex-1">
             {/* Last Price */}
-            <div className="text-[13px] text-r-neutral-title-1 text-start flex-1">
+            <div className="text-[13px] text-r-neutral-body text-start flex-1">
               ${splitNumberByStep(Number(marketItem.markPx))}
             </div>
 
@@ -174,19 +179,19 @@ const MarketRowComponent = memo(
             {/* 8hr Funding */}
             <div
               className={clsx(
-                'text-[13px] text-r-neutral-title-1 text-start flex-1'
+                'text-[13px] text-r-neutral-body text-start flex-1'
               )}
             >
               {formatPercent(Number(marketItem.funding), 4)}
             </div>
 
             {/* Volume */}
-            <div className="text-[13px] text-r-neutral-title-1 text-start flex-1">
+            <div className="text-[13px] text-r-neutral-body text-start flex-1">
               {formatUsdValueKMB(Number(marketItem.dayNtlVlm))}
             </div>
 
             {/* Open Interest */}
-            <div className="text-[13px] text-r-neutral-title-1 text-start flex-1">
+            <div className="text-[13px] text-r-neutral-body text-start flex-1">
               {formatUsdValueKMB(
                 Number(marketItem.openInterest) * Number(marketItem.markPx)
               )}
@@ -229,17 +234,23 @@ export const CoinDropdown: React.FC<CoinDropdownProps> = ({
   onSelectCoin,
 }) => {
   const dispatch = useRabbyDispatch();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [dropdownVisible, setDropdownVisible] = useState(false);
   const [searchText, setSearchText] = useState('');
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(
+    CATEGORY_ALL_ID
+  );
   const [sortField, setSortField] = useState<SortField>('dayNtlVlm');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<InputRef | null>(null);
   const listRef = useRef<FixedSizeList>(null);
-  const { marketData, favoritedCoins, marketDataMap } = useRabbySelector(
-    (state) => state.perps
-  );
+  const {
+    marketData,
+    favoritedCoins,
+    marketDataMap,
+    marketDataCategories,
+  } = useRabbySelector((state) => state.perps);
 
   const marketItem = marketDataMap[coin];
 
@@ -272,12 +283,57 @@ export const CoinDropdown: React.FC<CoinDropdownProps> = ({
     [sortField, sortOrder]
   );
 
+  const visibleCategories = useMemo(() => {
+    const presentCategoryIds = new Set<string>();
+    marketData.forEach((item) => {
+      if (item.categoryId) presentCategoryIds.add(item.categoryId);
+    });
+    const backendTabs = (marketDataCategories || [])
+      .filter((c) => !c.is_disable && presentCategoryIds.has(c.id))
+      .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        label: c.translations?.[i18n.language] || c.name,
+      }));
+    return [
+      {
+        id: CATEGORY_ALL_ID,
+        name: '',
+        label: t('page.perpsPro.chatArea.categoryAll'),
+      },
+      ...backendTabs,
+    ];
+  }, [marketDataCategories, marketData, i18n.language, t]);
+
+  // Reset to ALL if the selected tab disappears from visible categories
+  useEffect(() => {
+    if (
+      selectedCategoryId !== CATEGORY_ALL_ID &&
+      !visibleCategories.some((c) => c.id === selectedCategoryId)
+    ) {
+      setSelectedCategoryId(CATEGORY_ALL_ID);
+    }
+  }, [visibleCategories, selectedCategoryId]);
+
   const sortedAndFilteredData = useMemo(() => {
-    const filtered = searchText
-      ? marketData.filter((item) =>
-          item.name.toLowerCase().includes(searchText.toLowerCase())
-        )
-      : [...marketData];
+    const selectedCategory = visibleCategories.find(
+      (c) => c.id === selectedCategoryId
+    );
+    const categoryFiltered =
+      selectedCategoryId === CATEGORY_ALL_ID || !selectedCategory
+        ? marketData
+        : marketData.filter((item) => item.categoryId === selectedCategory.id);
+
+    const q = searchText.trim().toLowerCase();
+    const filtered = q
+      ? categoryFiltered.filter((item) => {
+          if (item.name.toLowerCase().includes(q)) return true;
+          if ((item.displayName || '').toLowerCase().includes(q)) return true;
+          if ((item.quoteAsset || '').toLowerCase().includes(q)) return true;
+          return false;
+        })
+      : [...categoryFiltered];
 
     filtered.sort((a, b) => {
       let aValue: number | string;
@@ -334,7 +390,15 @@ export const CoinDropdown: React.FC<CoinDropdownProps> = ({
 
     // Merge into single list (favorited first, then others)
     return [...favorited, ...others];
-  }, [marketData, searchText, sortField, sortOrder, favoritedCoins]);
+  }, [
+    marketData,
+    searchText,
+    sortField,
+    sortOrder,
+    favoritedCoins,
+    selectedCategoryId,
+    visibleCategories,
+  ]);
 
   // Calculate last favorited index for border display
   const lastFavoritedIndex = useMemo(() => {
@@ -374,7 +438,7 @@ export const CoinDropdown: React.FC<CoinDropdownProps> = ({
 
   const dropdownMenu = useMemo(
     () => (
-      <div className="bg-rb-neutral-bg-1 rounded-[8px] shadow-lg border border-solid border-rb-neutral-line w-[800px] h-[480px] overflow-hidden flex flex-col px-16 pt-16">
+      <div className="bg-rb-neutral-bg-1 rounded-[8px] shadow-lg border border-solid border-rb-neutral-line w-[854px] h-[480px] overflow-hidden flex flex-col px-16 pt-16">
         <SearchInput
           prefix={<RcIconSearch className="text-r-neutral-foot" />}
           placeholder={t('page.perpsPro.chatArea.searchMarkets')}
@@ -385,10 +449,32 @@ export const CoinDropdown: React.FC<CoinDropdownProps> = ({
           allowClear
         />
 
+        {visibleCategories.length > 1 && (
+          <div className="flex items-center gap-[16px] px-[8px] pt-[12px]">
+            {visibleCategories.map((c) => {
+              const active = c.id === selectedCategoryId;
+              return (
+                <div
+                  key={c.id}
+                  className={clsx(
+                    'text-[13px] cursor-pointer transition-colors',
+                    active
+                      ? 'text-r-blue-default font-medium'
+                      : 'text-r-neutral-foot hover:text-r-neutral-title-1'
+                  )}
+                  onClick={() => setSelectedCategoryId(c.id)}
+                >
+                  {c.label}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         <div className="flex items-center gap-[12px] px-[8px] py-[12px]">
           <div
             className={clsx(
-              'text-[13px] text-r-neutral-foot cursor-pointer hover:text-r-neutral-title-1 hover:font-medium transition-colors w-[180px] flex-shrink-0',
+              'text-[13px] text-r-neutral-foot cursor-pointer hover:text-r-neutral-title-1 hover:font-medium transition-colors w-[250px] shrink-0',
               sortField === 'name' && 'text-r-neutral-title-1 font-medium'
             )}
             onClick={() => handleSort('name')}
@@ -477,13 +563,15 @@ export const CoinDropdown: React.FC<CoinDropdownProps> = ({
       renderSortIcon,
       handleSort,
       t,
+      visibleCategories,
+      selectedCategoryId,
     ]
   );
 
   return (
-    <div className="mr-32 flex items-center gap-[8px] py-[4px]">
+    <div className="mr-[24px] flex items-center">
       <div
-        className="flex items-center justify-center w-[16px] h-[16px] flex-shrink-0 cursor-pointer"
+        className="flex items-center justify-center w-[24px] h-[24px] mr-[12px] shrink-0 cursor-pointer rounded-[3px] border border-solid border-rb-neutral-line"
         onClick={(e) => handleToggleFavorite(coin, e)}
       >
         {favoritedCoins.includes(coin) ? (
@@ -500,15 +588,19 @@ export const CoinDropdown: React.FC<CoinDropdownProps> = ({
         onVisibleChange={setDropdownVisible}
         placement="bottomLeft"
       >
-        <div className="flex items-center gap-[8px] cursor-pointer transition-colors rounded-[6px] min-w-[90px] justify-center">
+        <div className="flex items-center gap-[6px] cursor-pointer transition-colors rounded-[6px]">
           <TokenImg
             logoUrl={marketItem?.logoUrl || ''}
             withDirection={false}
-            size={24}
+            size={20}
           />
-          <div className="text-[20px] leading-[24px] font-bold text-r-neutral-title-1">
-            {formatPerpsCoin(coin)}
-          </div>
+          <PerpsDisplayCoinName
+            item={marketItem}
+            separator="-"
+            className="text-[20px] leading-[24px] font-medium"
+            quoteClassName="text-r-neutral-title-1"
+            showDexTag
+          />
           <RcIconArrowDown className="text-r-neutral-secondary" />
         </div>
       </Dropdown>

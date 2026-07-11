@@ -31,6 +31,11 @@ import { ReactComponent as RcIconLoginLoading } from 'ui/assets/perps/IconLoginL
 import { Skeleton } from 'antd';
 import { getCustomClearinghouseState } from '@/ui/views/DesktopPerps/utils';
 
+// Debug-only toggle: when truthy in localStorage, the WATCH-only filter below
+// is bypassed so QA can pick watch-mode addresses inside Perps for testing.
+// Flipped from the Settings → Debug Kits panel.
+export const PERPS_TEST_INCLUDE_WATCH_KEY = '__perps_test_include_watch__';
+
 export const SelectAddressList = ({
   currentAccount,
   onChange,
@@ -55,15 +60,26 @@ export const SelectAddressList = ({
     }
   }, [wallet, visible]);
 
+  // Production builds must never honor this flag even if a stale value sits in
+  // localStorage — gate the read with the same DEBUG check that hides the
+  // toggle in Settings.
+  const includeWatchForTest = useMemo(
+    () =>
+      !!process.env.DEBUG &&
+      localStorage.getItem(PERPS_TEST_INCLUDE_WATCH_KEY) === '1',
+    []
+  );
+
   const accountsList = React.useMemo(
     () =>
       sortAccountsByBalance(
         [...accounts].filter(
           (a) =>
-            a.type !== KEYRING_CLASS.WATCH && a.type !== KEYRING_CLASS.GNOSIS
+            (includeWatchForTest || a.type !== KEYRING_CLASS.WATCH) &&
+            a.type !== KEYRING_CLASS.GNOSIS
         )
       ),
-    [accounts]
+    [accounts, includeWatchForTest]
   );
 
   const dispatch = useRabbyDispatch();
@@ -307,22 +323,22 @@ function AccountItem(props: {
     return (
       <div className="flex flex-col gap-[4px] items-end ml-auto">
         <div className="text-[13px] leading-[16px] text-r-neutral-body font-medium">
-          {info
-            ? formatUsdValue(Number(info?.withdrawable || 0))
-            : formatUsdValue(account.balance || 0)}
+          {info ? formatUsdValue(Number(info?.withdrawable || 0)) : ''}
         </div>
-        {positionCount > 0 ? (
-          <div className="text-[12px] leading-[14px] font-medium text-r-neutral-foot">
-            {positionCount}{' '}
-            {positionCount > 1
-              ? t('page.perps.accountSelector.positions')
-              : t('page.perps.accountSelector.position')}
-          </div>
-        ) : (
-          <div className="text-[12px] leading-[14px] font-normal text-r-neutral-foot">
-            {t('page.perps.accountSelector.noPosition')}
-          </div>
-        )}
+        {info ? (
+          positionCount > 0 ? (
+            <div className="text-[12px] leading-[14px] font-medium text-r-neutral-foot">
+              {positionCount}{' '}
+              {positionCount > 1
+                ? t('page.perps.accountSelector.positions')
+                : t('page.perps.accountSelector.position')}
+            </div>
+          ) : (
+            <div className="text-[12px] leading-[14px] font-normal text-r-neutral-foot">
+              {t('page.perps.accountSelector.noPosition')}
+            </div>
+          )
+        ) : null}
       </div>
     );
   }, [loading, info, positionCount, account.balance, t]);

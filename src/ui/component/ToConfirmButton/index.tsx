@@ -8,7 +8,12 @@ import { useClickAway } from 'react-use';
 import { ReactComponent as RcIconCloseCC } from 'ui/assets/component/close-cc.svg';
 import Checkbox from '../Checkbox';
 import { ReactComponent as RcIconCCLoading } from 'ui/assets/loading-cc.svg';
-import { useSignatureStore } from '@/ui/component/MiniSignV2/state';
+import {
+  shallowEqual,
+  useSignatureStoreOf,
+} from '@/ui/component/MiniSignV2/state';
+import type { SignatureManager } from '@/ui/component/MiniSignV2/state/SignatureManager';
+
 export const ToConfirmBtn = (props: {
   title: React.ReactNode;
   onConfirm: () => void;
@@ -142,80 +147,30 @@ export const ToConfirmBtn = (props: {
   );
 };
 
-export const DirectSignToConfirmBtn = ({
+export const RiskTipsWrapper = ({
   showRiskTips,
   riskLabel,
   riskReset,
-  overwriteDisabled,
-  accountType,
-  onCancel: propOnCancel,
   containerClassName,
-  ...props
+  children,
 }: {
   showRiskTips?: boolean;
   riskLabel?: React.ReactNode;
   riskReset?: boolean;
-  overwriteDisabled?: boolean;
-  accountType?: string;
-  onCancel?: () => void;
   containerClassName?: string;
-} & React.ComponentProps<typeof ToConfirmBtn>) => {
-  const { ctx, config, status } = useSignatureStore();
-
-  const gasMethod = ctx?.gasMethod;
-  const gasAccountCanPay =
-    ctx?.gasMethod === 'gasAccount' &&
-    // isSupportedAddr &&
-    ctx?.noCustomRPC &&
-    !!ctx?.gasAccount?.balance_is_enough &&
-    !ctx?.gasAccount.chain_not_support &&
-    !!ctx?.gasAccount.is_gas_account &&
-    !(ctx?.gasAccount as any).err_msg;
-
-  const canUseGasLess = !!ctx?.gasless?.is_gasless;
-  let gasLessConfig =
-    canUseGasLess && ctx?.gasless?.promotion
-      ? ctx?.gasless?.promotion?.config
-      : undefined;
-  if (
-    gasLessConfig &&
-    ctx?.gasless?.promotion?.id === '0ca5aaa5f0c9217e6f45fe1d109c24fb'
-  ) {
-    gasLessConfig = { ...gasLessConfig, dark_color: '', theme_color: '' };
-  }
-
-  const useGasLess =
-    (ctx?.isGasNotEnough || !!gasLessConfig) &&
-    !!canUseGasLess &&
-    !!ctx?.useGasless;
-  const loading =
-    status === 'prefetching' || status === 'signing' || !ctx?.txsCalc?.length;
-
-  const disabledProcess = ctx?.txsCalc?.length
-    ? gasMethod === 'gasAccount'
-      ? !gasAccountCanPay
-      : useGasLess
-      ? false
-      : !!loading ||
-        !ctx?.txsCalc?.length ||
-        !!ctx.checkErrors?.some((e) => e.level === 'forbidden')
-    : false;
-
+  children: (options: {
+    riskDisabled: boolean;
+    resetRiskChecked: () => void;
+  }) => React.ReactNode;
+}) => {
   const { t } = useTranslation();
   const [riskChecked, setRiskChecked] = useState(false);
 
-  const riskDisabled = showRiskTips ? !riskChecked : false;
-
-  const isHardWallet = useMemo(() => {
-    return supportedHardwareDirectSign(accountType || '');
-  }, [accountType]);
-
-  const onCancel = useCallback(() => {
+  const resetRiskChecked = useCallback(() => {
     setRiskChecked(false);
-    if (propOnCancel) {
-      propOnCancel();
-    }
-  }, [propOnCancel]);
+  }, []);
+
+  const riskDisabled = showRiskTips ? !riskChecked : false;
 
   useEffect(() => {
     if (riskReset) {
@@ -268,16 +223,116 @@ export const DirectSignToConfirmBtn = ({
           </Checkbox>
         </div>
       ) : null}
-      <ToConfirmBtn
-        {...props}
-        isHardWallet={isHardWallet}
-        onCancel={onCancel}
-        disabled={
-          (overwriteDisabled
-            ? props.disabled
-            : props.disabled || disabledProcess) || riskDisabled
-        }
-      />
+      {children({ riskDisabled, resetRiskChecked })}
     </div>
+  );
+};
+
+export const DirectSignToConfirmBtn = ({
+  showRiskTips,
+  riskLabel,
+  riskReset,
+  overwriteDisabled,
+  accountType,
+  signatureInstance,
+  onCancel: propOnCancel,
+  containerClassName,
+  ...props
+}: {
+  showRiskTips?: boolean;
+  riskLabel?: React.ReactNode;
+  riskReset?: boolean;
+  overwriteDisabled?: boolean;
+  accountType?: string;
+  signatureInstance: SignatureManager;
+  onCancel?: () => void;
+  containerClassName?: string;
+} & React.ComponentProps<typeof ToConfirmBtn>) => {
+  const {
+    status,
+    txsCalcLength,
+    gasMethod,
+    noCustomRPC,
+    gasAccountBalanceEnough,
+    gasAccountChainNotSupport,
+    gasAccountIsGasAccount,
+    gasAccountErrMsg,
+    isGasNotEnough,
+    gaslessIsGasless,
+    hasGaslessPromotion,
+    useGaslessEnabled,
+    hasForbiddenCheckError,
+  } = useSignatureStoreOf(
+    signatureInstance,
+    (state) => ({
+      status: state.status,
+      txsCalcLength: state.ctx?.txsCalc?.length || 0,
+      gasMethod: state.ctx?.gasMethod,
+      noCustomRPC: !!state.ctx?.noCustomRPC,
+      gasAccountBalanceEnough: !!state.ctx?.gasAccount?.balance_is_enough,
+      gasAccountChainNotSupport: !!state.ctx?.gasAccount?.chain_not_support,
+      gasAccountIsGasAccount: !!state.ctx?.gasAccount?.is_gas_account,
+      gasAccountErrMsg: (state.ctx?.gasAccount as any)?.err_msg,
+      isGasNotEnough: !!state.ctx?.isGasNotEnough,
+      gaslessIsGasless: !!state.ctx?.gasless?.is_gasless,
+      hasGaslessPromotion: !!state.ctx?.gasless?.promotion,
+      useGaslessEnabled: !!state.ctx?.useGasless,
+      hasForbiddenCheckError: !!state.ctx?.checkErrors?.some(
+        (error) => error.level === 'forbidden'
+      ),
+    }),
+    shallowEqual
+  );
+
+  const gasAccountCanPay =
+    gasMethod === 'gasAccount' &&
+    noCustomRPC &&
+    gasAccountBalanceEnough &&
+    !gasAccountChainNotSupport &&
+    gasAccountIsGasAccount &&
+    !gasAccountErrMsg;
+
+  const useGasLess =
+    (isGasNotEnough || hasGaslessPromotion) &&
+    gaslessIsGasless &&
+    useGaslessEnabled;
+  const loading =
+    status === 'prefetching' || status === 'signing' || !txsCalcLength;
+
+  const disabledProcess = txsCalcLength
+    ? gasMethod === 'gasAccount'
+      ? !gasAccountCanPay
+      : useGasLess
+      ? false
+      : !!loading || !txsCalcLength || hasForbiddenCheckError
+    : false;
+
+  const isHardWallet = useMemo(() => {
+    return supportedHardwareDirectSign(accountType || '');
+  }, [accountType]);
+
+  return (
+    <RiskTipsWrapper
+      showRiskTips={showRiskTips}
+      riskLabel={riskLabel}
+      riskReset={riskReset}
+      containerClassName={containerClassName}
+    >
+      {({ riskDisabled, resetRiskChecked }) => (
+        <ToConfirmBtn
+          {...props}
+          isHardWallet={isHardWallet}
+          onCancel={() => {
+            resetRiskChecked();
+            propOnCancel?.();
+          }}
+          disabled={
+            (overwriteDisabled
+              ? props.disabled
+              : props.disabled || disabledProcess) || riskDisabled
+          }
+        />
+      )}
+    </RiskTipsWrapper>
   );
 };

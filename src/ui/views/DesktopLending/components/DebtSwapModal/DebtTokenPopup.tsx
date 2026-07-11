@@ -6,9 +6,12 @@ import { ReactComponent as RcIconWalletCC } from '@/ui/assets/swap/wallet-cc.svg
 import Popup from '@/ui/component/Popup';
 
 import { SwappableToken } from '../../types/swap';
-import { formatApy, formatListNetWorth } from '../../utils/format';
+import {
+  formatApy,
+  formatListNetWorth,
+  formatUsdValue,
+} from '../../utils/format';
 import SymbolIcon from '../SymbolIcon';
-import { formatUsdValue } from '@/ui/utils';
 
 interface DebtTokenPopupProps {
   visible: boolean;
@@ -93,10 +96,10 @@ const DebtTokenPopup = ({
                       </div>
                     </div>
                   </div>
-                  <span className="w-[76px] flex-shrink-0 pr-[4px] text-right text-[14px] leading-[17px] font-medium text-r-neutral-title-1">
+                  <span className="w-[76px] shrink-0 pr-[4px] text-right text-[14px] leading-[17px] font-medium text-r-neutral-title-1">
                     {formatApy(Number(token.variableBorrowAPY || '0'))}
                   </span>
-                  <span className="w-[96px] flex-shrink-0 pr-[0px] text-right text-[14px] leading-[17px] font-medium text-r-neutral-foot">
+                  <span className="w-[96px] shrink-0 pr-[0px] text-right text-[14px] leading-[17px] font-medium text-r-neutral-foot">
                     {token.totalBorrowsUSD === '0'
                       ? '$0'
                       : formatListNetWorth(

@@ -1,7 +1,7 @@
 import { PositionAndOpenOrder } from '@/ui/models/perps';
 import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
 import { formatUsdValue, splitNumberByStep } from '@/ui/utils';
-import { Table, Tooltip } from 'antd';
+import { message, Table, Tooltip } from 'antd';
 import { ColumnType } from 'antd/lib/table';
 import clsx from 'clsx';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -16,6 +16,7 @@ import { useTranslation } from 'react-i18next';
 import { getPerpsSDK } from '@/ui/views/Perps/sdkManager';
 import { DashedUnderlineText } from '../../DashedUnderlineText';
 import { formatPerpsCoin } from '@/ui/views/DesktopPerps/utils';
+import { PerpsDisplayCoinName } from '@/ui/views/Perps/components/PerpsDisplayCoinName';
 
 export const TradeHistory: React.FC = () => {
   const dispatch = useRabbyDispatch();
@@ -52,11 +53,11 @@ export const TradeHistory: React.FC = () => {
         title: t('page.perpsPro.userInfo.tab.time'),
         key: 'time',
         dataIndex: 'time',
-        width: '20%',
+        width: '17%',
         sorter: (a, b) => a.time - b.time,
         render: (_, record) => {
           return (
-            <div className="text-[13px] leading-[16px]  text-r-neutral-title-1">
+            <div className="text-[13px] leading-[16px]  text-r-neutral-body">
               {dayjs(record.time).format('YYYY/MM/DD HH:mm:ss')}
             </div>
           );
@@ -66,21 +67,27 @@ export const TradeHistory: React.FC = () => {
         title: t('page.perpsPro.userInfo.tab.coin'),
         key: 'coin',
         dataIndex: 'coin',
-        width: '7%',
+        width: '13%',
         sorter: (a, b) => a.coin.localeCompare(b.coin),
         render: (_, record) => {
           return (
             <div
-              className={`text-[12px] leading-[14px]  text-r-neutral-title-1 ${
-                record.side === 'B'
-                  ? 'text-rb-green-default'
-                  : 'text-rb-red-default'
-              } cursor-pointer hover:font-bold hover:text-rb-brand-default`}
+              className={'group text-[12px] leading-[14px] cursor-pointer'}
               onClick={() => {
+                if (record.coin.startsWith('@')) {
+                  message.error('Not support to trade spot coin');
+                  return;
+                }
                 dispatch.perps.updateSelectedCoin(record.coin);
               }}
             >
-              {formatPerpsCoin(record.coin)}
+              <PerpsDisplayCoinName
+                item={marketDataMap[record.coin] || { name: record.coin }}
+                separator="-"
+                showDexTag
+                baseClassName="group-hover:text-rb-brand-default group-hover:font-bold"
+                quoteClassName="text-r-neutral-title-1 group-hover:text-rb-brand-default group-hover:font-bold"
+              />
             </div>
           );
         },
@@ -94,7 +101,7 @@ export const TradeHistory: React.FC = () => {
         sorter: (a, b) => Number(a.sz) - Number(b.sz),
         render: (_, record) => {
           return (
-            <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+            <div className="text-[12px] leading-[14px]  text-r-neutral-body">
               {Math.abs(Number(record.sz || 0))} {formatPerpsCoin(record.coin)}
             </div>
           );
@@ -128,10 +135,10 @@ export const TradeHistory: React.FC = () => {
         width: '10%',
         sorter: (a, b) => Number(a.px) - Number(b.px),
         render: (_, record) => {
-          const pxDecimals = marketDataMap[record.coin]?.pxDecimals || 2;
+          const pxDecimals = marketDataMap[record.coin]?.pxDecimals ?? 2;
           const px = new BigNumber(record.px).toFixed(pxDecimals);
           return (
-            <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+            <div className="text-[12px] leading-[14px]  text-r-neutral-body">
               ${splitNumberByStep(px)}
             </div>
           );
@@ -142,14 +149,14 @@ export const TradeHistory: React.FC = () => {
         key: 'tradeValue',
         dataIndex: 'tradeValue',
         // width: 180,
-        width: '15%',
+        width: '14%',
         sorter: (a, b) =>
           new BigNumber(a.px).times(new BigNumber(a.sz).abs()).toNumber() -
           new BigNumber(b.px).times(new BigNumber(b.sz).abs()).toNumber(),
         render: (_, record) => {
           return (
             <div className="space-y-[4px]">
-              <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+              <div className="text-[12px] leading-[14px]  text-r-neutral-body">
                 $
                 {splitNumberByStep(
                   new BigNumber(record.px)
@@ -157,7 +164,7 @@ export const TradeHistory: React.FC = () => {
                     .toFixed(2)
                 )}{' '}
               </div>
-              <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+              <div className="text-[12px] leading-[14px]  text-rb-neutral-secondary">
                 {Math.abs(Number(record.sz || 0))}{' '}
                 {formatPerpsCoin(record.coin)}
               </div>
@@ -169,11 +176,11 @@ export const TradeHistory: React.FC = () => {
         title: t('page.perpsPro.userInfo.tab.fee'),
         key: 'fee',
         dataIndex: 'fee',
-        width: '10%',
+        width: '8%',
         sorter: (a, b) => Number(a.fee) - Number(b.fee),
         render: (_, record) => {
           return (
-            <div className="text-[12px] leading-[14px]  text-r-neutral-title-1">
+            <div className="text-[12px] leading-[14px]  text-r-neutral-body">
               ${splitNumberByStep(Number(record.fee).toFixed(2))}
             </div>
           );
@@ -237,7 +244,7 @@ export const TradeHistory: React.FC = () => {
       defaultSortField="time"
       defaultSortOrder="descend"
       virtual
-      rowHeight={48}
+      rowHeight={44}
     ></CommonTable>
   );
 };

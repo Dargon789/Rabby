@@ -22,6 +22,7 @@ import { useCreateAddressActions } from './useCreateAddress';
 import { RcBulkImportArrowCC } from '@/ui/assets/add-address';
 import { privateKeyToAddress } from 'viem/accounts';
 import { ellipsisAddress } from '@/ui/utils/address';
+import { useHideScreenshotContextMenu } from '@/ui/hooks/useScreenshotContextMenuVisible';
 
 type ImportTab = 'privateKey' | 'seedPhrase';
 
@@ -374,6 +375,8 @@ const ImportKeyOrSeed: React.FC<{
     !currentValue?.trim?.() ||
     (!isPrivateKeyTab && isSlip39 && secretShares.length < slip39GroupNumber);
 
+  useHideScreenshotContextMenu();
+
   return (
     <>
       {contextHolder}
@@ -470,7 +473,7 @@ const ImportKeyOrSeed: React.FC<{
                     />
                   </Form.Item>
                   {pkOnPrivateKey ? (
-                    <div className="mt-12 flex justify-between items-center text-[13px] font-medium text-r-neutral-title-1">
+                    <div className="mt-12 flex justify-between items-center text-[13px] font-medium text-r-neutral-foot">
                       <div>{t('page.addressDetail.address')}</div>
                       <div>{ellipsisAddress(pkOnPrivateKey)}</div>
                     </div>
@@ -490,7 +493,10 @@ const ImportKeyOrSeed: React.FC<{
                       slip39GroupNumber={slip39GroupNumber}
                       isSlip39={isSlip39}
                       onSlip39Change={setIsSlip39}
-                      onModeChange={clearSeedPhraseErrors}
+                      onModeChange={() => {
+                        clearSeedPhraseErrors();
+                        formContentRef.current?.scrollTo(0, 0);
+                      }}
                       onPassphrase={setNeedPassphrase}
                       errMsgs={errMsgs}
                       onChange={checkSlip39Mnemonics}

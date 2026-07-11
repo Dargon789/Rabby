@@ -1,6 +1,6 @@
 import { sleep, useWallet } from '@/ui/utils';
 import { playSound } from '@/ui/utils/sound';
-import { getPerpsSDK } from '../../Perps/sdkManager';
+import { getPerpsSDK, isSelfSignPerpsAccount } from '../../Perps/sdkManager';
 import {
   PERPS_BUILDER_INFO,
   PERPS_BUILDER_INFO_PRO,
@@ -20,7 +20,10 @@ import { useTranslation } from 'react-i18next';
 import { LimitOrderType, MarginMode } from '../types';
 import { removeTrailingZeros } from '../components/TradingPanel/utils';
 import BigNumber from 'bignumber.js';
-import { formatTpOrSlPrice } from '../../Perps/utils';
+import {
+  formatTpOrSlPrice,
+  isBuilderFeeNotApprovedError,
+} from '../../Perps/utils';
 import { SignAction, usePerpsProState } from './usePerpsProState';
 import { useMemo } from 'react';
 import { KEYRING_CLASS } from '@/constant';
@@ -84,6 +87,10 @@ export const usePerpsProPosition = () => {
       if (!masterAddress) {
         return false;
       }
+      // self-sign master signs its own orders — there is no agent to expire.
+      if (isSelfSignPerpsAccount(currentPerpsAccount?.type)) {
+        return false;
+      }
 
       const agentWalletPreference = await wallet.getAgentWalletPreference(
         masterAddress
@@ -122,6 +129,15 @@ export const usePerpsProPosition = () => {
         if (isExpired) {
           return;
         }
+        // builder fee not approved yet — flag for re-prompt, skip Sentry.
+        if (isBuilderFeeNotApprovedError(error?.message)) {
+          dispatch.perps.setAccountNeedApproveBuilderFee(true);
+          perpsToast.error({
+            title: 'Builder fee not approved',
+            description: 'Please try again',
+          });
+          return;
+        }
         console.error('PERPS', errorMessage, error);
         perpsToast.error({
           title: errorMessage,
@@ -143,6 +159,7 @@ export const usePerpsProPosition = () => {
   const handleOpenMarketOrder = useMemoizedFn(
     async (params: {
       coin: string;
+      dex: string;
       isBuy: boolean;
       size: string;
       midPx: string;
@@ -156,6 +173,7 @@ export const usePerpsProPosition = () => {
           const sdk = getPerpsSDK();
           const {
             coin,
+            dex,
             isBuy,
             size,
             midPx,
@@ -194,6 +212,7 @@ export const usePerpsProPosition = () => {
                 price: avgPx,
               }),
             });
+            dispatch.perps.fetchClearinghouseState({ dex });
             return results?.response?.data?.statuses[0]?.filled as {
               totalSz: string;
               avgPx: string;
@@ -213,6 +232,7 @@ export const usePerpsProPosition = () => {
   const handleOpenLimitOrder = useMemoizedFn(
     async (params: {
       coin: string;
+      dex: string;
       isBuy: boolean;
       size: string;
       limitPx: string;
@@ -226,6 +246,7 @@ export const usePerpsProPosition = () => {
           const sdk = getPerpsSDK();
           const {
             coin,
+            dex,
             isBuy,
             size,
             limitPx,
@@ -271,6 +292,8 @@ export const usePerpsProPosition = () => {
                 }),
               });
             }
+            // Refresh on both resting and filled: isolated limit reserves margin.
+            dispatch.perps.fetchClearinghouseState({ dex });
             return resting?.oid || filled?.oid;
           } else {
             const msg = res?.response?.data?.statuses[0]?.error;
@@ -648,6 +671,7 @@ export const usePerpsProPosition = () => {
   const handleCloseWithMarketOrder = useMemoizedFn(
     async (params: {
       coin: string;
+      dex: string;
       size: string;
       midPx: string;
       isBuy: boolean;
@@ -656,7 +680,7 @@ export const usePerpsProPosition = () => {
       return withErrorHandler(
         async (p) => {
           const sdk = getPerpsSDK();
-          const { coin, isBuy, midPx, size, reduceOnly } = p;
+          const { coin, dex, isBuy, midPx, size, reduceOnly } = p;
           const res = await sdk.exchange?.marketOrderClose({
             coin,
             isBuy,
@@ -679,6 +703,7 @@ export const usePerpsProPosition = () => {
                 price: avgPx,
               }),
             });
+            dispatch.perps.fetchClearinghouseState({ dex });
             return res?.response?.data?.statuses[0]?.filled as {
               totalSz: string;
               avgPx: string;
@@ -711,6 +736,8 @@ export const usePerpsProPosition = () => {
               title: t('page.perps.toast.orderFilled'),
               description: t('page.perps.toast.closeAllPositionsSuccess'),
             });
+            // Close-all spans every dex, so refresh the full set.
+            dispatch.perps.fetchClearinghouseState();
             return true;
           }
         },
@@ -721,7 +748,12 @@ export const usePerpsProPosition = () => {
   );
 
   const handleUpdateMargin = useMemoizedFn(
-    async (coin: string, action: 'add' | 'reduce', margin: number) => {
+    async (
+      coin: string,
+      dex: string,
+      action: 'add' | 'reduce',
+      margin: number
+    ) => {
       return withErrorHandler(
         async (p) => {
           const sdk = getPerpsSDK();
@@ -739,12 +771,13 @@ export const usePerpsProPosition = () => {
                   : 'page.perpsDetail.PerpsEditMarginPopup.reduceMarginSuccess'
               ),
             });
+            dispatch.perps.fetchClearinghouseState({ dex: p.dex });
           } else {
             const msg = res?.response?.data?.statuses[0];
             throw new Error(msg || 'Update margin failed');
           }
         },
-        { coin, action, margin },
+        { coin, dex, action, margin },
         'Update margin failed'
       );
     }
@@ -846,8 +879,37 @@ export const usePerpsProPosition = () => {
     }
   );
 
+  const handleStableCoinOrder = useMemoizedFn(
+    async (params: {
+      coin: 'USDT' | 'USDH' | 'USDE';
+      isBuy: boolean;
+      size: string;
+      limitPx: string;
+    }) => {
+      return withErrorHandler(
+        async (p) => {
+          const sdk = getPerpsSDK();
+          if (!sdk.exchange) throw new Error('Hyperliquid no exchange client');
+          await sdk.exchange.stableCoinOrder(p);
+          // Spot balance refresh comes from the existing subscribeToSpotState WS push.
+          return true;
+        },
+        params,
+        'stableCoinOrder error'
+      );
+    }
+  );
+
   const handleCancelOrder = useMemoizedFn(
-    async (params: CancelOrderParams[]) => {
+    async (
+      params: CancelOrderParams[],
+      options?: {
+        successToast?: {
+          title: string;
+          description?: string;
+        };
+      }
+    ) => {
       return withErrorHandler(
         async () => {
           const sdk = getPerpsSDK();
@@ -858,18 +920,20 @@ export const usePerpsProPosition = () => {
             )
           ) {
             const num = params.length;
-            perpsToast.success({
-              title:
-                num > 1
-                  ? t('page.perps.toast.ordersCancelled')
-                  : t('page.perps.toast.orderCancelled'),
-              description:
-                num > 1
-                  ? t('page.perps.toast.cancelAllOrderSuccess', {
-                      count: num,
-                    })
-                  : t('page.perps.toast.cancelOrderSuccess'),
-            });
+            perpsToast.success(
+              options?.successToast || {
+                title:
+                  num > 1
+                    ? t('page.perps.toast.ordersCancelled')
+                    : t('page.perps.toast.orderCancelled'),
+                description:
+                  num > 1
+                    ? t('page.perps.toast.cancelAllOrderSuccess', {
+                        count: num,
+                      })
+                    : t('page.perps.toast.cancelOrderSuccess'),
+              }
+            );
             setTimeout(() => {
               dispatch.perps.fetchPositionOpenOrders();
             }, 100);
@@ -902,6 +966,7 @@ export const usePerpsProPosition = () => {
     handleModifyTpSlOrders,
     handleUpdateMarginModeLeverage,
     handleCancelOrder,
+    handleStableCoinOrder,
 
     needEnableTrading,
     handleActionApproveStatus,

@@ -2,17 +2,28 @@ import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
 import { Account } from '@/background/service/preference';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { sleep, useWallet } from '@/ui/utils';
-import { destroyPerpsSDK, getPerpsSDK } from '../sdkManager';
+import {
+  destroyPerpsSDK,
+  getPerpsSDK,
+  applyPerpsSigner,
+  isSelfSignPerpsAccount,
+  initPerpsAgentAccount,
+} from '../sdkManager';
+import { waitForInitialWsData, checkSelfSignBuilderFee } from '../utils';
 import * as Sentry from '@sentry/browser';
-import { UserAbstractionResp } from '@rabby-wallet/hyperliquid-sdk';
+import {
+  Abstraction,
+  UserAbstractionResp,
+} from '@rabby-wallet/hyperliquid-sdk';
 import {
   PERPS_AGENT_NAME,
   PERPS_BUILD_FEE,
   PERPS_BUILD_FEE_RECEIVE_ADDRESS,
   PERPS_REFERENCE_CODE,
   DELETE_AGENT_EMPTY_ADDRESS,
-  HYPE_EVM_BRIDGE_ADDRESS,
-  HYPE_SEND_ASSET_TOKEN,
+  HYPE_EVM_BRIDGE_ADDRESS_MAP,
+  HYPE_SEND_ASSET_TOKEN_MAP,
+  PerpsQuoteAsset,
 } from '../constants';
 import { isSameAddress } from '@/ui/utils';
 import { findAccountByPriority } from '@/utils/account';
@@ -49,30 +60,6 @@ export const usePerpsInitial = () => {
     isLogin,
     accountSummary,
   } = perpsState;
-
-  // return bool if can use approveSignatures
-  const restoreApproveSignatures = useMemoizedFn(
-    async (payload: { address: string }) => {
-      const approveSignatures = await wallet.getSendApproveAfterDeposit(
-        payload.address
-      );
-
-      console.log('getSendApproveAfterDeposit res', approveSignatures);
-      if (approveSignatures?.length) {
-        const item = approveSignatures[0];
-        const expiredTime = item.nonce + 1000 * 60 * 60 * 24;
-        const now = Date.now();
-        if (expiredTime > now) {
-          dispatch.perps.setApproveSignatures(approveSignatures);
-          return true;
-        } else {
-          return false;
-        }
-      } else {
-        return false;
-      }
-    }
-  );
 
   const safeCheckBuilderFee = useMemoizedFn(async () => {
     try {
@@ -176,6 +163,10 @@ export const usePerpsState = ({
       if (!masterAddress) {
         return false;
       }
+      // self-sign master signs its own orders — there is no agent to expire.
+      if (isSelfSignPerpsAccount(currentPerpsAccount?.type)) {
+        return false;
+      }
 
       const agentWalletPreference = await wallet.getAgentWalletPreference(
         masterAddress
@@ -211,6 +202,13 @@ export const usePerpsState = ({
 
   const checkExtraAgent = useMemoizedFn(
     async (account, agentAddress: string) => {
+      // self-sign: master signs its own orders, there is no agent to expire.
+      if (
+        isSelfSignPerpsAccount(account.type) ||
+        account.type === KEYRING_CLASS.WATCH
+      ) {
+        return { isExpired: false };
+      }
       const sdk = getPerpsSDK();
       const extraAgents = await sdk.info.extraAgents(account.address);
       const item = extraAgents.find((agent) =>
@@ -225,7 +223,7 @@ export const usePerpsState = ({
           deleteAgentCbRef.current = async () => {
             const deleteItem = minBy(extraAgents, (agent) => agent.validUntil);
             if (deleteItem) {
-              sdk.initAccount(
+              initPerpsAgentAccount(
                 account.address,
                 DELETE_AGENT_EMPTY_ADDRESS,
                 DELETE_AGENT_EMPTY_ADDRESS,
@@ -328,6 +326,9 @@ export const usePerpsState = ({
       // await dispatch.account.changeAccountAsync(account);
 
       if (supportedDirectSign(account.type)) {
+        const isLocalWallet =
+          account.type === KEYRING_TYPE.SimpleKeyring ||
+          account.type === KEYRING_TYPE.HdKeyring;
         typedDataSignatureStore.close();
         result = await typedDataSignatureStore.start(
           {
@@ -340,6 +341,7 @@ export const usePerpsState = ({
             }),
             config: {
               account: account,
+              mode: isLocalWallet ? undefined : 'UI',
             },
             wallet,
           },
@@ -347,18 +349,19 @@ export const usePerpsState = ({
         );
         typedDataSignatureStore.close();
       } else {
-        for (const actionObj of actions) {
-          const signature = await wallet.sendRequest<string>(
-            {
-              method: 'eth_signTypedDataV4',
-              params: [account.address, JSON.stringify(actionObj)],
-            },
-            {
-              account,
-            }
-          );
-          result.push(signature);
-        }
+        result = await Promise.all(
+          actions.map((actionObj) =>
+            wallet.sendRequest<string>(
+              {
+                method: 'eth_signTypedDataV4',
+                params: [account.address, JSON.stringify(actionObj)],
+              },
+              {
+                account,
+              }
+            )
+          )
+        );
       }
       return result;
     }
@@ -403,6 +406,21 @@ export const usePerpsState = ({
     }
   }, []);
 
+  const handleSafeSetUnifiedAccount = useMemoizedFn(async () => {
+    try {
+      const sdk = getPerpsSDK();
+      await sdk.exchange?.agentSetAbstraction(Abstraction.UNIFIED_ACCOUNT);
+      // Only refresh on success — refreshing after a failure shows stale
+      // state as if the operation succeeded.
+      setTimeout(() => {
+        // empty address makes perps sdk use current address
+        dispatch.perps.fetchUserAbstraction('');
+      }, 100);
+    } catch (e: any) {
+      console.log('Failed to agentSetAbstraction:', e);
+    }
+  });
+
   const handleDirectApprove = useCallback(
     async (signActions: SignAction[]): Promise<void> => {
       const sdk = getPerpsSDK();
@@ -418,29 +436,35 @@ export const usePerpsState = ({
               signature,
             });
           } else if (type === 'approveBuilderFee') {
-            const res = await sdk.exchange?.sendApproveBuilderFee({
+            return sdk.exchange?.sendApproveBuilderFee({
               action: action?.message,
               nonce: action?.nonce || 0,
               signature: signature || '',
             });
-            return res;
           }
         })
       );
 
+      // wait 100ms for backend to process approve, then setUnifiedAccount
+      await sleep(100);
+      handleSafeSetUnifiedAccount();
       setTimeout(() => {
         handleSafeSetReference();
-      }, 500);
+      }, 100);
       const [approveAgentRes, approveBuilderFeeRes] = results;
       console.log('sendApproveAgentRes', approveAgentRes);
       console.log('sendApproveBuilderFeeRes', approveBuilderFeeRes);
     },
-    [handleSafeSetReference]
+    [handleSafeSetReference, handleSafeSetUnifiedAccount]
   );
 
   const ensureLoginApproveSign = useMemoizedFn(
     async (account: Account, agentAddress: string) => {
       try {
+        // self-sign has no agent; builder fee handled in login.
+        if (isSelfSignPerpsAccount(account.type)) {
+          return;
+        }
         const sdk = getPerpsSDK();
 
         const signActions: SignAction[] = [];
@@ -545,7 +569,9 @@ export const usePerpsState = ({
 
       const signActions: SignAction[] = [];
       const sdk = getPerpsSDK();
-      if (accountNeedApproveAgent) {
+      const isSelfSign = isSelfSignPerpsAccount(currentPerpsAccount.type);
+      // self-sign master is its own signer — never approveAgent.
+      if (accountNeedApproveAgent && !isSelfSign) {
         signActions.push({
           action: sdk.exchange?.prepareApproveAgent(),
           type: 'approveAgent',
@@ -565,6 +591,10 @@ export const usePerpsState = ({
       }
 
       if (signActions.length === 0) {
+        // self-sign never needs approveAgent; clear any stale flag.
+        if (isSelfSign && accountNeedApproveAgent) {
+          dispatch.perps.setAccountNeedApproveAgent(false);
+        }
         isHandlingApproveStatus.current = false;
         return;
       }
@@ -611,7 +641,7 @@ export const usePerpsState = ({
       account.address
     );
     const sdk = getPerpsSDK();
-    sdk.initAccount(account.address, vault, agentAddress, PERPS_AGENT_NAME);
+    initPerpsAgentAccount(account.address, vault, agentAddress);
 
     const signActions = await prepareSignActions();
 
@@ -619,8 +649,6 @@ export const usePerpsState = ({
       account.type === KEYRING_CLASS.PRIVATE_KEY ||
       account.type === KEYRING_CLASS.MNEMONIC
     ) {
-      await executeSignatures(signActions, account);
-
       let isNeedDepositBeforeApprove = true;
       const info = await sdk.info.getClearingHouseState(account.address);
       if ((Number(info?.marginSummary.accountValue) || 0) > 0) {
@@ -633,10 +661,8 @@ export const usePerpsState = ({
       if (isNeedDepositBeforeApprove) {
         handleSetLaterApproveStatus(signActions);
       } else {
+        await executeSignatures(signActions, account);
         await handleDirectApprove(signActions);
-        setTimeout(() => {
-          handleSafeSetReference();
-        }, 500);
         dispatch.perps.setAccountNeedApproveAgent(false);
         dispatch.perps.setAccountNeedApproveBuilderFee(false);
       }
@@ -664,6 +690,44 @@ export const usePerpsState = ({
   const login = useMemoizedFn(async (account: Account) => {
     try {
       const sdk = getPerpsSDK();
+      // self-sign (pk/mnemonic): no agent — install externalSign, log in, then
+      // silently approve the builder fee if missing.
+      if (isSelfSignPerpsAccount(account.type)) {
+        await applyPerpsSigner(account, wallet);
+        dispatch.perps.setCurrentPerpsAccount(account);
+        await dispatch.perps.loginPerpsAccount({ account, isPro: false });
+        dispatch.perps.setAccountNeedApproveAgent(false);
+        try {
+          const maxFee = await sdk.info.getMaxBuilderFee(
+            PERPS_BUILD_FEE_RECEIVE_ADDRESS
+          );
+          if (maxFee) {
+            dispatch.perps.setAccountNeedApproveBuilderFee(false);
+          } else {
+            const signActions: SignAction[] = [
+              {
+                action: sdk.exchange?.prepareApproveBuilderFee({
+                  builder: PERPS_BUILD_FEE_RECEIVE_ADDRESS,
+                }),
+                type: 'approveBuilderFee',
+                signature: '',
+              },
+            ];
+            signActions[0].signature = await wallet.signTypedData(
+              account.type,
+              account.address,
+              signActions[0].action,
+              { version: 'V4' }
+            );
+            await handleDirectApprove(signActions);
+            dispatch.perps.setAccountNeedApproveBuilderFee(false);
+          }
+        } catch (e) {
+          dispatch.perps.setAccountNeedApproveBuilderFee(true);
+        }
+        dispatch.perps.clearLocalLoadingHistory();
+        return true;
+      }
       const res = await wallet.getPerpsAgentWallet(account.address);
       const agentAddress = res?.preference?.agentAddress || '';
       const { isExpired, needDelete } = await checkExtraAgent(
@@ -679,11 +743,10 @@ export const usePerpsState = ({
       if (res) {
         // 如果存在 agent wallet, 则检查是否过期
         if (!isExpired) {
-          sdk.initAccount(
+          initPerpsAgentAccount(
             account.address,
             res.vault,
-            res.preference.agentAddress,
-            PERPS_AGENT_NAME
+            res.preference.agentAddress
           );
           // 未到过期时间无需签名直接登录即可
           dispatch.perps.setCurrentPerpsAccount(account);
@@ -733,9 +796,13 @@ export const usePerpsState = ({
   });
 
   const handleWithdraw = useMemoizedFn(
-    async (amount: number, isHypeWithdraw = false): Promise<boolean> => {
+    async (
+      amount: number,
+      isHypeWithdraw = false,
+      targetAsset: PerpsQuoteAsset = 'USDC'
+    ): Promise<boolean> => {
       try {
-        console.log('handleWithdraw', amount, isHypeWithdraw);
+        console.log('handleWithdraw', amount, isHypeWithdraw, targetAsset);
         const sdk = getPerpsSDK();
 
         if (!currentPerpsAccount) {
@@ -753,9 +820,9 @@ export const usePerpsState = ({
         let res: any;
         if (isHypeWithdraw) {
           const action = sdk.exchange.prepareSendAsset({
-            destination: HYPE_EVM_BRIDGE_ADDRESS,
+            destination: HYPE_EVM_BRIDGE_ADDRESS_MAP[targetAsset],
             amount: amount.toString(),
-            token: HYPE_SEND_ASSET_TOKEN,
+            token: HYPE_SEND_ASSET_TOKEN_MAP[targetAsset],
             sourceDex: isUnified ? 'spot' : '',
             destinationDex: 'spot',
           });
@@ -793,7 +860,12 @@ export const usePerpsState = ({
         console.log('withdraw res', res);
         dispatch.perps.setLocalLoadingHistory([
           {
-            time,
+            // HYPE withdraw goes through `send` ledger update whose server-
+            // side timestamp can be a few dozen ms earlier than the client
+            // clock, leaving the time-based pending filter unable to clear
+            // it. Backdate by 1s to absorb the drift (matches the desktop
+            // deposit handler's `Date.now() - 1000` trick).
+            time: isHypeWithdraw ? time - 1000 : time,
             hash: res.hash || '',
             type: 'withdraw',
             status: 'pending',
@@ -802,7 +874,6 @@ export const usePerpsState = ({
               : (amount - 1).toString(),
           },
         ]);
-        dispatch.perps.fetchClearinghouseState();
         return true;
       } catch (error) {
         console.error('Failed to withdraw:', error);
@@ -855,18 +926,28 @@ export const usePerpsState = ({
         if (!initAccount) {
           return false;
         }
+        // self-sign passive init: install externalSign, log in, mark builder-fee
+        // status. No signing — signs lazily on the first user action.
+        if (isSelfSignPerpsAccount(initAccount.type)) {
+          await applyPerpsSigner(initAccount, wallet);
+          await dispatch.perps.loginPerpsAccount({
+            account: initAccount,
+            isPro: false,
+          });
+          checkSelfSignBuilderFee();
+          await Promise.all([
+            dispatch.perps.fetchMarketData(undefined),
+            waitForInitialWsData(),
+          ]);
+          dispatch.perps.setInitialized(true);
+          return true;
+        }
         const {
           vault,
           agentAddress,
         } = await wallet.getOrCreatePerpsAgentWallet(initAccount.address);
-        const sdk = getPerpsSDK();
         // 开始恢复登录态
-        sdk.initAccount(
-          initAccount.address,
-          vault,
-          agentAddress,
-          PERPS_AGENT_NAME
-        );
+        initPerpsAgentAccount(initAccount.address, vault, agentAddress);
         await dispatch.perps.loginPerpsAccount({
           account: initAccount,
           isPro: false,
@@ -874,7 +955,14 @@ export const usePerpsState = ({
         // checkIsNeedAutoLoginOut(initAccount.address, agentAddress);
         ensureLoginApproveSign(initAccount, agentAddress);
 
-        await dispatch.perps.fetchMarketData(undefined);
+        // Run HTTP meta fetch and WS first-frame wait in parallel.
+        // `waitForInitialWsData` resolves on the first push of both the
+        // user clearinghouseState and the global asset ticker, or on
+        // timeout — keeps init aligned with the mobile flow.
+        await Promise.all([
+          dispatch.perps.fetchMarketData(undefined),
+          waitForInitialWsData(),
+        ]);
 
         dispatch.perps.setInitialized(true);
         return true;
