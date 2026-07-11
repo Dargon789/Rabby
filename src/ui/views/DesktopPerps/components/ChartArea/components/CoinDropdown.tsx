@@ -438,7 +438,7 @@ export const CoinDropdown: React.FC<CoinDropdownProps> = ({
 
   const dropdownMenu = useMemo(
     () => (
-      <div className="bg-rb-neutral-bg-1 rounded-[8px] shadow-lg border border-solid border-rb-neutral-line w-[850px] h-[480px] overflow-hidden flex flex-col px-16 pt-16">
+      <div className="bg-rb-neutral-bg-1 rounded-[8px] shadow-lg border border-solid border-rb-neutral-line w-[854px] h-[480px] overflow-hidden flex flex-col px-16 pt-16">
         <SearchInput
           prefix={<RcIconSearch className="text-r-neutral-foot" />}
           placeholder={t('page.perpsPro.chatArea.searchMarkets')}
@@ -571,7 +571,7 @@ export const CoinDropdown: React.FC<CoinDropdownProps> = ({
   return (
     <div className="mr-[24px] flex items-center">
       <div
-        className="flex items-center justify-center w-[24px] h-[24px] mx-[12px] shrink-0 cursor-pointer rounded-[3px] border border-solid border-rb-neutral-line"
+        className="flex items-center justify-center w-[24px] h-[24px] mr-[12px] shrink-0 cursor-pointer rounded-[3px] border border-solid border-rb-neutral-line"
         onClick={(e) => handleToggleFavorite(coin, e)}
       >
         {favoritedCoins.includes(coin) ? (
