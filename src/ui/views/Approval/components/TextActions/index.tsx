@@ -84,7 +84,7 @@ export const MessageWrapper = styled.div`
   }
 `;
 
-export const HighlightedSignMessageText = ({ text }: { text: string }) => (
+export const HighlightedSignMessageText = ({ text = '' }: { text: string }) => (
   <>
     {tokenizeSignMessageText(text).map((token, index) =>
       token.type === 'text' ? (
