@@ -4,7 +4,9 @@ import type { Candle, CandleSnapshot } from '@rabby-wallet/hyperliquid-sdk';
 import { getPerpsSDK } from '../sdkManager';
 
 const BRIDGE_CHANNEL = 'rabby-tradingview-bridge-v1';
-const DEFAULT_TRADINGVIEW_URL = 'https://tradingview.rabby.io/';
+const DEFAULT_TRADINGVIEW_URL = process.env.DEBUG
+  ? 'https://tradingview-test.vercel.app/'
+  : 'https://tradingview.rabby.io/';
 
 type TradingViewResolution =
   | '1'
@@ -91,10 +93,42 @@ export interface TradingViewHoverData {
 }
 
 export interface TradingViewLineTagInfo {
-  tpPrice: number;
-  slPrice: number;
-  liquidationPrice: number;
-  entryPrice: number;
+  tpPrice?: number;
+  slPrice?: number;
+  liquidationPrice?: number;
+  entryPrice?: number;
+  currentOrders?: Array<{
+    id?: string | number;
+    oid?: string | number;
+    side?: string;
+    orderType?: string;
+    triggerType?: string;
+    triggerCondition?: string;
+    tpslType?: string;
+    price?: number;
+    limitPx?: number | string;
+    triggerPx?: number | string;
+    size?: string | number;
+    sz?: string | number;
+    origSz?: string | number;
+    isTrigger?: boolean;
+    isTwap?: boolean;
+    isPositionTpsl?: boolean;
+    reduceOnly?: boolean;
+    expectedPnl?: string | number;
+    expectedPnlText?: string;
+  }>;
+  position?: {
+    entryPrice?: number;
+    avgPrice?: number;
+    pnl?: string | number;
+    unrealizedPnl?: string | number;
+    size?: string | number;
+    sz?: string | number;
+    szi?: string | number;
+    liquidationPrice?: number;
+    liquidationPx?: number;
+  };
 }
 
 interface TradingViewIframeChartProps {
@@ -388,6 +422,7 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
     const base = getTradingViewBaseUrl();
     const url = new URL(base);
     url.searchParams.set('source', 'rabby');
+    url.searchParams.set('version', process.env.release || '0');
     return url.toString();
   }, []);
 
@@ -403,6 +438,29 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
     if (!iframeRef.current?.contentWindow) return;
     iframeRef.current.contentWindow.postMessage(message, iframeOrigin);
   };
+
+  useEffect(() => {
+    const handleDocumentPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      const iframe = iframeRef.current;
+      if (iframe && target instanceof Node && iframe.contains(target)) return;
+
+      postToIframe({
+        channel: BRIDGE_CHANNEL,
+        kind: 'command',
+        command: 'closeDisplayMenu',
+      });
+    };
+
+    document.addEventListener('pointerdown', handleDocumentPointerDown, true);
+    return () => {
+      document.removeEventListener(
+        'pointerdown',
+        handleDocumentPointerDown,
+        true
+      );
+    };
+  }, [iframeOrigin]);
 
   const stateRef = useRef({
     coin,

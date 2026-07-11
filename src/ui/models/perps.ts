@@ -316,7 +316,9 @@ const applyAssetCtxsToList = (
     return {
       ...item,
       ...ctx,
-      pxDecimals: getPxDecimals(String(ctx.markPx ?? item.markPx ?? '')),
+      // Tick precision follows the price MAGNITUDE (5-sig-figs rule), so it
+      // only changes when the price crosses a power of ten — stable per tick.
+      pxDecimals: getPxDecimals(item.szDecimals, ctx.markPx ?? item.markPx),
     };
   });
 };
@@ -343,7 +345,7 @@ const overlayFastCtxsToMarketData = (
       ...item,
       markPx,
       midPx,
-      pxDecimals: getPxDecimals(String(markPx ?? item.markPx ?? '')),
+      pxDecimals: getPxDecimals(item.szDecimals, markPx ?? item.markPx),
     };
   });
   return changed ? next : list;
@@ -1616,7 +1618,7 @@ export const perps = createModel<RootModel>()({
           if (!isSnapshot) {
             handleUpdateHistoricalOrders(
               orderHistory,
-              rootState.perps.soundEnabled
+              store.getState().perps.soundEnabled
             );
           }
 
@@ -1665,7 +1667,7 @@ export const perps = createModel<RootModel>()({
           if (!isSnapshot) {
             handleUpdateTwapSliceFills(
               twapSliceFills,
-              rootState.perps.soundEnabled
+              store.getState().perps.soundEnabled
             );
           }
 

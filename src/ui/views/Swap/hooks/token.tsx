@@ -40,6 +40,7 @@ import {
 import { isTempoChain } from '@/utils/tempo';
 import { useGasAccountDepositFlowActive } from '@/ui/views/GasAccount/hooks/runtime';
 import { isQuoteReceiveValueTooLowForEarlyDisplay } from '@/ui/utils/quote';
+import { getDefaultSwapToTokenItem } from '@/constant/dex-swap';
 const isTab = getUiType().isTab;
 
 export const enableInsufficientQuote = true;
@@ -57,6 +58,12 @@ const isDexQuoteSelectable = (quote: TDexQuoteData) =>
   !!quote.data &&
   !!quote.preExecResult &&
   !!quote.preExecResult.isSdkPass;
+
+const isTokenOnChain = (token: TokenItem | undefined, chain: CHAINS_ENUM) => {
+  const chainInfo = findChainByEnum(chain);
+
+  return !!token && !!chainInfo && token.chain === chainInfo.serverId;
+};
 
 const getDexQuoteScore = ({
   quote,
@@ -148,13 +155,27 @@ export const useTokenPair = (userAddress: string) => {
     defaultSelectedFromToken,
     defaultSelectedToToken,
   } = useRabbySelector((state) => {
+    const selectedChain = state.swap.selectedChain || CHAINS_ENUM.ETH;
+    const selectedFromToken = isTokenOnChain(
+      state.swap.selectedFromToken,
+      selectedChain
+    )
+      ? state.swap.selectedFromToken
+      : undefined;
+    const selectedToToken = isTokenOnChain(
+      state.swap.selectedToToken,
+      selectedChain
+    )
+      ? state.swap.selectedToToken
+      : undefined;
+
     return {
       initialSelectedChain: state.swap.$$initialSelectedChain,
-      oChain: state.swap.selectedChain || CHAINS_ENUM.ETH,
-      defaultSelectedFromToken: state.swap.selectedFromToken,
+      oChain: selectedChain,
+      defaultSelectedFromToken: selectedFromToken,
       defaultSelectedToToken:
-        state.swap.selectedToToken?.id !== state.swap.selectedFromToken?.id
-          ? state.swap.selectedToToken
+        selectedToToken?.id !== selectedFromToken?.id
+          ? selectedToToken
           : undefined,
     };
   });
@@ -289,6 +310,12 @@ export const useTokenPair = (userAddress: string) => {
     receiveTokenId?: string;
     isMax?: boolean;
   }>(query2obj(search));
+  const [chainInitialized, setChainInitialized] = useState(
+    !!initialSelectedChain ||
+      !!searchObj?.chain ||
+      !!searchObj?.payTokenId ||
+      !!searchObj?.receiveTokenId
+  );
 
   useAsyncInitializeChainList({
     // NOTICE: now `useTokenPair` is only used for swap page, so we can use `SWAP_SUPPORT_CHAINS` here
@@ -303,6 +330,7 @@ export const useTokenPair = (userAddress: string) => {
       ) {
         switchChain(firstEnum);
       }
+      setChainInitialized(true);
     },
   });
 
@@ -1065,6 +1093,61 @@ export const useTokenPair = (userAddress: string) => {
     searchObj?.inputAmount,
     searchObj?.receiveTokenId,
     searchObj?.isMax,
+  ]);
+
+  useEffect(() => {
+    const targetSearchChain = searchObj?.chain
+      ? findChain({ serverId: searchObj.chain })
+      : undefined;
+    if (
+      !chainInitialized ||
+      searchObj?.receiveTokenId ||
+      (targetSearchChain && targetSearchChain.enum !== chain) ||
+      receiveToken ||
+      !payToken ||
+      !userAddress
+    ) {
+      return;
+    }
+
+    const defaultToToken = getDefaultSwapToTokenItem(chain);
+    const chainInfo = findChainByEnum(chain);
+    if (
+      !defaultToToken ||
+      !chainInfo ||
+      isSameAddress(payToken.id, defaultToToken.id)
+    ) {
+      return;
+    }
+
+    let active = true;
+
+    setReceiveToken(defaultToToken);
+
+    wallet.openapi
+      .getToken(userAddress, chainInfo.serverId, defaultToToken.id)
+      .then((token) => {
+        if (active && token) {
+          setReceiveToken(token);
+        }
+      })
+      .catch((error) => {
+        console.error('default swap to token error', error);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    chain,
+    chainInitialized,
+    payToken,
+    receiveToken,
+    searchObj?.chain,
+    searchObj?.receiveTokenId,
+    setReceiveToken,
+    userAddress,
+    wallet.openapi,
   ]);
 
   const isSetMaxRef = useRef(false);
