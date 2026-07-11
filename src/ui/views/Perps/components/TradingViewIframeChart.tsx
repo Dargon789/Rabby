@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useRef } from 'react';
+import browser from 'webextension-polyfill';
 import type { Candle, CandleSnapshot } from '@rabby-wallet/hyperliquid-sdk';
 import { getPerpsSDK } from '../sdkManager';
 
 const BRIDGE_CHANNEL = 'rabby-tradingview-bridge-v1';
-const DEFAULT_TRADINGVIEW_URL = 'https://tradingview.rabby.io/';
+const DEFAULT_TRADINGVIEW_URL = process.env.DEBUG
+  ? 'https://tradingview-test.vercel.app/'
+  : 'https://tradingview.rabby.io/';
 
 type TradingViewResolution =
   | '1'
@@ -90,10 +93,42 @@ export interface TradingViewHoverData {
 }
 
 export interface TradingViewLineTagInfo {
-  tpPrice: number;
-  slPrice: number;
-  liquidationPrice: number;
-  entryPrice: number;
+  tpPrice?: number;
+  slPrice?: number;
+  liquidationPrice?: number;
+  entryPrice?: number;
+  currentOrders?: Array<{
+    id?: string | number;
+    oid?: string | number;
+    side?: string;
+    orderType?: string;
+    triggerType?: string;
+    triggerCondition?: string;
+    tpslType?: string;
+    price?: number;
+    limitPx?: number | string;
+    triggerPx?: number | string;
+    size?: string | number;
+    sz?: string | number;
+    origSz?: string | number;
+    isTrigger?: boolean;
+    isTwap?: boolean;
+    isPositionTpsl?: boolean;
+    reduceOnly?: boolean;
+    expectedPnl?: string | number;
+    expectedPnlText?: string;
+  }>;
+  position?: {
+    entryPrice?: number;
+    avgPrice?: number;
+    pnl?: string | number;
+    unrealizedPnl?: string | number;
+    size?: string | number;
+    sz?: string | number;
+    szi?: string | number;
+    liquidationPrice?: number;
+    liquidationPx?: number;
+  };
 }
 
 interface TradingViewIframeChartProps {
@@ -330,6 +365,21 @@ const getTradingViewBaseUrl = () => {
   return local || DEFAULT_TRADINGVIEW_URL;
 };
 
+const isTradingViewExternalUrl = (url?: unknown): url is string => {
+  if (typeof url !== 'string') return false;
+
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.protocol === 'https:' &&
+      (parsed.hostname === 'tradingview.com' ||
+        parsed.hostname.endsWith('.tradingview.com'))
+    );
+  } catch (error) {
+    return false;
+  }
+};
+
 export const normalizeTradingViewLocale = (lang: string) => {
   const normalized = (lang || 'en').toLowerCase();
 
@@ -372,6 +422,7 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
     const base = getTradingViewBaseUrl();
     const url = new URL(base);
     url.searchParams.set('source', 'rabby');
+    url.searchParams.set('version', process.env.release || '0');
     return url.toString();
   }, []);
 
@@ -387,6 +438,29 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
     if (!iframeRef.current?.contentWindow) return;
     iframeRef.current.contentWindow.postMessage(message, iframeOrigin);
   };
+
+  useEffect(() => {
+    const handleDocumentPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      const iframe = iframeRef.current;
+      if (iframe && target instanceof Node && iframe.contains(target)) return;
+
+      postToIframe({
+        channel: BRIDGE_CHANNEL,
+        kind: 'command',
+        command: 'closeDisplayMenu',
+      });
+    };
+
+    document.addEventListener('pointerdown', handleDocumentPointerDown, true);
+    return () => {
+      document.removeEventListener(
+        'pointerdown',
+        handleDocumentPointerDown,
+        true
+      );
+    };
+  }, [iframeOrigin]);
 
   const stateRef = useRef({
     coin,
@@ -616,6 +690,13 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
             stateRef.current.onIntervalChange?.(
               resolutionToInterval(resolution)
             );
+          }
+        } else if (message.event === 'openExternalUrl') {
+          const url = message.payload?.url;
+          if (isTradingViewExternalUrl(url)) {
+            browser.tabs.create({ active: true, url }).catch(() => {
+              window.open(url, '_blank', 'noopener,noreferrer');
+            });
           }
         }
         return;

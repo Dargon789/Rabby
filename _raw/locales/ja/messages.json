@@ -4,7 +4,9 @@
       "title": "取引",
       "empty": {
         "title": "取引なし",
-        "desc": "<1>対応しているチェーン</1>で取引が見つかりません"
+        "desc": "<1>対応しているチェーン</1>で取引が見つかりません",
+        "noTxInThreeMonth": "90日以内の取引履歴がありません",
+        "descThreeMonths": "<2>サポートされているチェーン</2>で90日以内の取引履歴がありません"
       },
       "explain": {
         "approve": "{{project}}用に{{amount}} {{symbol}}を承認",
@@ -1323,7 +1325,8 @@
           "biometricUnlockUnsupported": "このデバイスは生体認証によるロック解除をサポートしていません。",
           "perpsFloatWidget": "パーペチュアル・フローティングウィジェット",
           "currency": "通貨",
-          "searchCurrency": "通貨を検索"
+          "searchCurrency": "通貨を検索",
+          "dataAnalysis": "データ分析"
         },
         "aboutUs": "私たちについて",
         "currentVersion": "現在のバージョン",
@@ -1629,19 +1632,21 @@
         "createdSuccessfully": "作成が成功しました",
         "verifySeedPhrase": "シードフレーズを検証",
         "fillInTheBackupSeedPhraseInOrder": "バックアップシードフレーズを順番に入力してください",
-        "wordPhrase": "私は<1>{{count}}</1>単語フレーズを持っています",
+        "wordPhrase": "私のシードフレーズは <1>{{count}}</1> 語です",
+        "wordPhraseSelected": "私のシードフレーズは <1>{{count}} 語</1>です",
         "clearAll": "すべてクリア",
         "slip39SeedPhrasePlaceholder_few": "{{count}} 番目のシードフレーズの共有をここに入力してください",
-        "slip39SeedPhrase": "<0>{{SLIP39}}</0> シードフレーズを持っています。",
+        "slip39SeedPhrase": "私のシードフレーズは <1>{{SLIP39}}</1> です",
         "invalidContent": "無効なコンテンツ",
         "slip39SeedPhrasePlaceholder_other": "ここにあなたの{{count}}番目のシードフレーズシェアを入力してください",
         "passphrase": "パスフレーズ",
-        "slip39SeedPhraseWithPassphrase": "私はパスフレーズ付きの<0>{{SLIP39}}</0>シードフレーズを持っています。",
+        "slip39SeedPhraseWithPassphrase": "私のシードフレーズはパスフレーズ付きの <1>{{SLIP39}}</1> です",
         "pastedAndClear": "貼り付けとクリップボードをクリアしました",
         "slip39SeedPhrasePlaceholder_two": "ここに{{count}}番目のシードフレーズシェアを入力してください。",
         "inputInvalidCount_other": "{{count}} 件の入力がシードフレーズの規範に適合していません。確認してください。",
         "inputInvalidCount_one": "1入力がシードフレーズの基準に合致していません。ご確認ください。",
-        "wordPhraseAndPassphrase": "私はPassphrase付きの<1>{{count}}</1>単語のフレーズを持っています。",
+        "wordPhraseAndPassphrase": "私のシードフレーズはパスフレーズ付きの <1>{{count}}</1> 語です",
+        "wordPhraseAndPassphraseSelected": "私のシードフレーズはパスフレーズ付きの <1>{{count}} 語</1>です",
         "slip39SeedPhrasePlaceholder_one": "ここに{{count}}番目のシードフレーズシェアを入力してください。",
         "importQuestion2": "私のシードフレーズは私のデバイスのみに保存されています。Rabbyはそれにアクセスできません。",
         "importQuestion1": "もし私がシードフレーズを失ったり共有したりすると、資産へのアクセスを永久に失うことになります。",
@@ -3555,6 +3560,9 @@
       "takeProfitTipsLong": "利確価格は現在の価格より高くなければなりません",
       "entryPrice": "エントリープライス",
       "estimatedLiquidationPrice": "概算清算価格",
+      "expectedSlippage": "概算スリッページ",
+      "lowLiquiditySwitchLimit": " 流動性が低いため、指値注文に切り替えてください。",
+      "switchToLimit": "切り替え",
       "long": "ロング",
       "takeProfitWhen": "利確価格を設定",
       "stopLossTipsShortLiquidation": "価格は清算価格を上回っています（{{price}}）",
@@ -3667,7 +3675,15 @@
       },
       "transferToSpot": "現物へ振替",
       "transferToPerps": "Perpsへ移転",
-      "selectChainToWithdraw": "出金先のチェーンを選択"
+      "selectChainToWithdraw": "出金先のチェーンを選択",
+      "perpsWidgetGuide": {
+        "title": "あなたのPNLは常に見える場所に",
+        "bulletViewPositions": "任意のウェブページでトップポジションを追跡。",
+        "bulletPrices": "ホバーして市場データとPNLを表示。",
+        "bulletToggle": "いつでもオンまたはオフに切り替え可能。",
+        "later": "今はいい",
+        "open": "ウィジェットを有効化"
+      }
     },
     "perpsPro": {
       "chatArea": {
@@ -3772,7 +3788,15 @@
           "marketCloseTitle": "マーケットクローズポジション",
           "marketCloseDesc": "この操作はポジションを直ちにクローズしようとします。",
           "confirmCloseAllTitle": "すべてのポジションをクローズすることを確認してください",
-          "confirmCloseAllDesc": "すべてのオープンポジションはマーケット価格でクローズされ、すべての注文はキャンセルされます。"
+          "confirmCloseAllDesc": "すべてのオープンポジションはマーケット価格でクローズされ、すべての注文はキャンセルされます。",
+          "positionSize": "ポジションサイズ",
+          "orderPrice": "注文価格",
+          "marketPrice": "市場価格",
+          "buy": "買い",
+          "sell": "売り",
+          "buyToSell": "買って売る",
+          "sellToBuy": "売って買う",
+          "reverseAction": "{{side}} {{size}} {{coin}} を反転"
         },
         "openOrders": {
           "price": "価格",
@@ -3827,6 +3851,14 @@
           "transferToPerps": "Perpsへ移転",
           "usdcSpot": "USDC(現物)",
           "usdcPerps": "USDC(Perps)"
+        },
+        "floatingWidget": {
+          "label": "フローティングウィジェット",
+          "tooltip": "· 他のページを閲覧中に、フローティングウィジェットでアカウントのPnLを表示します。\n· 取引ページとHyperliquidでは非表示になります。",
+          "enabledToastTitle": "フローティングウィジェットが有効になりました",
+          "enabledToastDescription": "他のページを閲覧すると表示されます。",
+          "disabledToastTitle": "フローティングウィジェットが無効になりました",
+          "updateFailed": "設定の更新に失敗しました"
         }
       },
       "statusBar": {
@@ -3981,7 +4013,16 @@
         "cancelTp": "利確をキャンセル",
         "loss": "含み損",
         "stopLossExpectedPnl": "ストップロス 想定損益",
-        "entryPrice": "エントリープライス："
+        "entryPrice": "エントリープライス：",
+        "entryCurrentPrice": "エントリー価格 / 現在価格",
+        "takeProfit": "利確",
+        "stopLoss": "損切り",
+        "triggerPrice": "トリガー価格",
+        "estimatedPnlWillBe": "推定損益は以下になります",
+        "triggerHigherThanLiquidation": "トリガー価格は清算価格 {{price}}より高くする必要があります",
+        "triggerLowerThanLiquidation": "トリガー価格は清算価格 {{price}}より低くする必要があります",
+        "tpTriggerInvalid": "TPトリガー価格は無効であり、設定されません",
+        "slTriggerInvalid": "SLトリガー価格は無効であり、設定されません"
       },
       "accountInfo": {
         "crossAccountLeverage": "クロスアカウント・レバレッジ",
@@ -3997,7 +4038,7 @@
         "balanceTip": "総純送金額 + 総実現利益 + 総純ファンディング手数料",
         "crossMarginRatio": "クロスマージン比率",
         "crossAccountLeverageTips": "クロスアカウント・レバレッジ = 総クロスポジション価値 / クロスアカウント価値",
-        "crossMarginRatioTips": "維持証拠金 / ポートフォリオ価値。クロス建玉は証拠金率が100%に達した場合に清算されます。",
+        "crossMarginRatioTips": "維持証拠金 / 証拠金残高。クロス建玉は証拠金率が100%に達した場合に清算されます。",
         "accountEquityTip": "残高 + 未実現損益（全ポジションを決済した場合の概算口座価値）",
         "available": "利用可能:",
         "accountSummary": "アカウント概要",
@@ -4008,7 +4049,22 @@
         "unifiedAccountLeverageTips": "統合アカウントレバレッジ = 全クロス取引価値 / 全担保残高",
         "perpsMaintenanceMargin": "Perps 維持証拠金",
         "perpsPortfolioValue": "Perps ポートフォリオ価値",
-        "perpsUnrealizedPnl": "Perps 未実現 PNL"
+        "perpsUnrealizedPnl": "Perps 未実現 PNL",
+        "perpsAccountSummary": "Perps アカウント概要",
+        "portfolioMarginSummary": "ポートフォリオマージン概要",
+        "portfolioMarginRatio": "ポートフォリオマージン比率",
+        "portfolioMarginRatioTips": "維持証拠金 / LTV 調整後ポートフォリオ価値。値が 95% を超えると、ポートフォリオが清算される可能性があります。",
+        "marginBalance": "証拠金残高",
+        "marginBalanceTips": "証拠金残高 = ウォレット残高 + 未実現 PNL。証拠金残高 <= 維持証拠金 になると、ポジションは清算されます。",
+        "totalCollateralBalance": "全担保残高",
+        "totalCollateralBalanceTips": "統合アカウントを裏付ける担保の合計価値です。",
+        "ltvAdjustedPortfolioValue": "LTV 調整後ポートフォリオ価値",
+        "ltvAdjustedPortfolioValueTips": "各資産の LTV ヘアカット適用後のポートフォリオ合計価値。維持要件を上回って維持する必要があります。",
+        "borrowCapUsed": "借入上限使用率",
+        "borrowCapUsedTips": "この値が 100% になると、追加の担保はポートフォリオマージンに寄与しなくなります",
+        "portfolioValue": "ポートフォリオ価値",
+        "portfolioValueUnifiedTips": "ポートフォリオ価値には、統合アカウント内の現物資産の価値が含まれます。",
+        "portfolioValuePortfolioMarginTips": "ポートフォリオ価値には、ポートフォリオマージンアカウント内の現物資産の価値が含まれます。"
       },
       "accountActions": {
         "available": "利用可能",
@@ -4027,16 +4083,25 @@
         "noTrades": "取引なし",
         "viewBids": "買い板",
         "amount": "数量",
+        "size": "サイズ",
+        "sum": "累計",
         "viewAsks": "売り板",
         "trades": "取引履歴",
-        "title": "オーダーブック"
+        "title": "オーダーブック",
+        "avgPrice": "平均価格",
+        "sumBase": "{{base}} 合計",
+        "sumUsd": "USD 合計"
       },
       "editMargin": {
         "longLiquidationTips": "{{percent}} 減少すると清算が発動します",
         "title": "マージン管理",
         "configureMargin": "マージンを設定する",
         "currentPosition": "現在のポジション",
-        "shortLiquidationTips": "{{percent}} 上昇すると、清算が発動します。"
+        "shortLiquidationTips": "{{percent}} 上昇すると、清算が発動します。",
+        "currentPrice": "現在の価格"
+      },
+      "topBar": {
+        "favoriteEmpty": "お気に入りのリストは空です"
       }
     },
     "perpsDetail": {
@@ -4521,7 +4586,7 @@
       "slippageTolerance": "スリッページ許容範囲",
       "singleTransactionGasLimit": "単一トランザクションのGas Limit",
       "startConvert": "変換を開始",
-      "unsupportedWalletType": "秘密鍵とシードフレーズのアドレスのみサポートされています。",
+      "unsupportedWalletType": "このアドレスタイプはサポートされていません",
       "stop": "停止",
       "selectLowValueTokens": "低価値トークンを選択",
       "tokenColumn": "トークン",
@@ -4534,7 +4599,13 @@
       "moreChains": "+{{count}}チェーン",
       "swapFailed": "スワップに失敗しました、{{reason}}",
       "completedTips": "進行中のスワップは処理を継続します",
-      "priceImpact": "気配値変動上限"
+      "priceImpact": "気配値変動上限",
+      "LedgerBtn": {
+        "start": "Ledgerで始める",
+        "confirm": "Ledgerで確認してください",
+        "continue": "続ける",
+        "send": "署名リクエストを送信中"
+      }
     },
     "staking": {
       "title": "ステーキング",
@@ -4929,7 +5000,7 @@
     },
     "DesktopSelectAccountList": {
       "addAddresses": "アドレスを追加",
-      "smallSwapDisabledTips": "現在、秘密鍵とシードフレーズのアドレスのみサポートされています。"
+      "smallSwapDisabledTips": "このアドレス種子はサポートされていません"
     },
     "LpTokenTag": {
       "title": "これは流動性プロバイダー(LP)トークンです。",
@@ -4945,6 +5016,16 @@
     "UnknownTag": {
       "label": "不明",
       "tooltip": "不明なトークン。自己責任で調査してください。"
+    },
+    "screenshotModal": {
+      "title": "フィードバック用スクリーンショット",
+      "placeholder": "問題を説明してください",
+      "placeholderRequired": "問題を説明してください（必須）"
+    },
+    "feedbackPopup": {
+      "title": "Rabbyサポートからの回答",
+      "issueReported": "報告された問題は以下の通りです：",
+      "issueReplied": "Rabbyサポートから返信がありました："
     }
   },
   "global": {
@@ -4983,7 +5064,8 @@
     "tryAgain": "再試行してください",
     "appDescription": "EthereumおよびEVMのためのあなたの定番ウォレット",
     "collapse": "折りたたむ",
-    "Yes": "はい"
+    "Yes": "はい",
+    "Submit": "送信"
   },
   "background": {
     "error": {
@@ -5030,6 +5112,9 @@
         "actionCancel": "操作がキャンセルされました",
         "deviceNeedsWebHIDPermission": "デバイスが見つからないか、WebHIDの権限が必要です"
       }
+    },
+    "feedback": {
+      "screenshotContextMenuTitle": "フィードバック用スクリーンショット"
     }
   },
   "constant": {

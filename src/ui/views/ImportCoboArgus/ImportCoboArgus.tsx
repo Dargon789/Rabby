@@ -132,7 +132,12 @@ export const ImportCoboArgus: React.FC<{
         {(step === 'add-address' || step === 'select-address') &&
           t('page.newAddress.coboSafe.addCoboArgusAddress')}
       </Header>
-      <div className="p-20 h-[calc(100vh-180px)] overflow-y-scroll pb-[100px]">
+      <div
+        className={clsx(
+          'p-20 overflow-y-scroll pb-[100px]',
+          isInModal ? 'h-[339px]' : 'h-[calc(100vh-261px)]'
+        )}
+      >
         {step === 'select-chain' && (
           <ChainList checked={selectedChain} onChecked={setSelectedChain} />
         )}
@@ -160,10 +165,9 @@ export const ImportCoboArgus: React.FC<{
       </div>
       <footer
         className={clsx(
-          'flex p-[20px]',
-          'absolute bottom-0 left-0 right-0',
+          'flex px-[20px] py-[18px]',
           'border-t border-t-r-neutral-line',
-          'bg-r-neutral-bg-1'
+          'bg-transparent'
         )}
       >
         <Button

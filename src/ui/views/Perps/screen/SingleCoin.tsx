@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { PageHeader } from '@/ui/component';
 import { useParams, useHistory } from 'react-router-dom';
 import { Trans, useTranslation } from 'react-i18next';
@@ -163,9 +169,10 @@ export const PerpsSingleCoin = () => {
 
   const quoteAsset = currentAssetCtx?.quoteAsset as PerpsQuoteAsset | undefined;
 
+  const unifiedEnableSourceRef = useRef<'swap' | 'other'>('swap');
   const needEnableUnifiedAccount = useMemo(
-    () => !isUnifiedAccount && !!quoteAsset && quoteAsset !== 'USDC',
-    [isUnifiedAccount, quoteAsset]
+    () => !isUnifiedAccount && (!currentAssetCtx || !!currentAssetCtx.dexId),
+    [isUnifiedAccount, currentAssetCtx]
   );
   const isSwapRequired = useMemo(
     () =>
@@ -175,9 +182,19 @@ export const PerpsSingleCoin = () => {
     [quoteAsset, accountValue]
   );
 
+  const gateUnifiedForNonDefaultDex = useCallback((): boolean => {
+    if (needEnableUnifiedAccount) {
+      unifiedEnableSourceRef.current = 'other';
+      setEnableUnifiedVisible(true);
+      return false;
+    }
+    return true;
+  }, [needEnableUnifiedAccount]);
+
   const handleSwapEntry = useMemoizedFn(async () => {
     await handleActionApproveStatus();
     if (!isUnifiedAccount && !accountNeedApproveAgent) {
+      unifiedEnableSourceRef.current = 'swap';
       setEnableUnifiedVisible(true);
       return;
     }
@@ -395,7 +412,7 @@ export const PerpsSingleCoin = () => {
             entryPrice: Number(currentPosition.position.entryPx || 0),
             liquidationPrice: Number(
               currentPosition.position.liquidationPx || 0
-            ).toFixed(currentAssetCtx?.pxDecimals || 2),
+            ).toFixed(currentAssetCtx?.pxDecimals ?? 2),
             autoClose: false, // This would come from SDK
             direction:
               Number(currentPosition.position.szi || 0) > 0 ? 'Long' : 'Short',
@@ -583,6 +600,10 @@ export const PerpsSingleCoin = () => {
             <div
               className="text-r-blue-default text-13 cursor-pointer px-16 py-10 rounded-[8px] bg-r-blue-light-1"
               onClick={() => {
+                if (!needDepositFirst && !gateUnifiedForNonDefaultDex()) {
+                  return;
+                }
+
                 if (isSwapRequired) {
                   handleSwapEntry();
                 } else {
@@ -768,7 +789,7 @@ export const PerpsSingleCoin = () => {
                     margin={Number(positionData?.marginUsed || 0)}
                     leverage={positionData?.leverage || 1}
                     liqPrice={Number(positionData?.liquidationPrice || 0)}
-                    pxDecimals={currentAssetCtx?.pxDecimals || 2}
+                    pxDecimals={currentAssetCtx?.pxDecimals ?? 2}
                     szDecimals={currentAssetCtx?.szDecimals || 0}
                     actionType="tp"
                     entryPrice={Number(positionData?.entryPrice || 0)}
@@ -858,7 +879,7 @@ export const PerpsSingleCoin = () => {
                     margin={Number(positionData?.marginUsed || 0)}
                     leverage={positionData?.leverage || 1}
                     liqPrice={Number(positionData?.liquidationPrice || 0)}
-                    pxDecimals={currentAssetCtx?.pxDecimals || 2}
+                    pxDecimals={currentAssetCtx?.pxDecimals ?? 2}
                     szDecimals={currentAssetCtx?.szDecimals || 0}
                     actionType="sl"
                     type="hasPosition"
@@ -1119,6 +1140,11 @@ export const PerpsSingleCoin = () => {
                         message.error(t('page.perpsDetail.needDepositFirst'));
                         return;
                       }
+
+                      if (!gateUnifiedForNonDefaultDex()) {
+                        return;
+                      }
+
                       await handleActionApproveStatus();
                       setPositionDirection('Long');
                       setOpenPositionVisible(true);
@@ -1133,6 +1159,10 @@ export const PerpsSingleCoin = () => {
                     onClick={async () => {
                       if (needDepositFirst) {
                         message.error(t('page.perpsDetail.needDepositFirst'));
+                        return;
+                      }
+
+                      if (!gateUnifiedForNonDefaultDex()) {
                         return;
                       }
                       await handleActionApproveStatus();
@@ -1162,7 +1192,7 @@ export const PerpsSingleCoin = () => {
           currentAssetCtx?.maxUsdValueSize || PERPS_MAX_NTL_VALUE
         )}
         coin={coin}
-        pxDecimals={currentAssetCtx?.pxDecimals || 2}
+        pxDecimals={currentAssetCtx?.pxDecimals ?? 2}
         szDecimals={currentAssetCtx?.szDecimals || 0}
         leverageRange={[1, currentAssetCtx?.maxLeverage || 5]}
         markPrice={markPrice}
@@ -1218,7 +1248,7 @@ export const PerpsSingleCoin = () => {
             dex: currentAssetCtx?.dexId ?? '',
             size: sizeStr,
             direction: positionData?.direction as 'Long' | 'Short',
-            price: activeAssetCtx?.markPx || '0',
+            price: activeAssetCtx?.markPx || currentAssetCtx?.markPx || '0',
           });
           if (res) {
             const isBuy = positionData?.direction === 'Long';
@@ -1285,7 +1315,9 @@ export const PerpsSingleCoin = () => {
           const ok = await handleEnableUnifiedAccount();
           if (ok) {
             setEnableUnifiedVisible(false);
-            setSwapVisible(true);
+            if (unifiedEnableSourceRef.current === 'swap') {
+              setSwapVisible(true);
+            }
             return false;
           }
           return ok;
@@ -1344,7 +1376,7 @@ export const PerpsSingleCoin = () => {
 
           <RiskLevelPopup
             direction={positionData.direction as 'Long' | 'Short'}
-            pxDecimals={currentAssetCtx?.pxDecimals || 2}
+            pxDecimals={currentAssetCtx?.pxDecimals ?? 2}
             visible={riskPopupVisible}
             liquidationPrice={Number(
               currentPosition?.position.liquidationPx || 0

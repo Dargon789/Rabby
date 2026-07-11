@@ -2,6 +2,7 @@ import React, { memo, ReactNode } from 'react';
 import { useHistory } from 'react-router-dom';
 import cx from 'clsx';
 import { Button } from 'antd';
+import { twMerge } from 'tailwind-merge';
 
 interface StrayFooterProps {
   className?: string;
@@ -33,13 +34,10 @@ const StrayFooter = memo(
   ({ className, children, isFixed = true }: StrayFooterProps) => {
     return (
       <div
-        className={cx(
+        className={twMerge(
           'bottom-0 left-0 w-full flex lg:bottom-[-24px]',
           className,
-          {
-            fixed: isFixed,
-            absolute: !isFixed,
-          }
+          isFixed ? 'fixed' : 'absolute'
         )}
       >
         {children}
@@ -78,8 +76,9 @@ const StrayFooterNav = memo(
       <StrayFooter className={className} isFixed={footerFixed}>
         <div
           className={cx(
-            'py-20 px-20 w-full flex justify-center stray-footer-nav',
-            hasDivider && 'bg-r-neutral-bg-1 border-t-r-neutral-line border-t'
+            'py-[18px] px-20 w-full flex justify-center stray-footer-nav',
+            hasDivider &&
+              'bg-transparent border-t-r-neutral-line border-t-[0.5px]'
           )}
         >
           {hasBack && (
@@ -87,7 +86,7 @@ const StrayFooterNav = memo(
               disabled={backDisabled}
               onClick={handleBack}
               size="large"
-              className="flex-1 mr-16 lg:h-[52px]"
+              className="flex-1 mr-16 h-[44px]"
             >
               {BackButtonContent}
             </Button>
@@ -98,7 +97,7 @@ const StrayFooterNav = memo(
               htmlType="submit"
               onClick={onNextClick}
               size="large"
-              className={cx('lg:h-[52px]', 'flex-1')}
+              className={cx('h-[44px]', 'flex-1')}
               type="primary"
               loading={nextLoading}
             >

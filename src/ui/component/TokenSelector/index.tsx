@@ -527,7 +527,7 @@ const TokenSelector = ({
           )}
         >
           <Input
-            className={clsx({ active: isInputActive }, 'bg-r-neutral-card2')}
+            className={clsx({ active: isInputActive })}
             size="large"
             prefix={<img src={IconSearch} />}
             // Search by Name / Address
@@ -791,7 +791,7 @@ function CommonTokenItem(props: {
               {showExchangeLogos ? (
                 <div className="flex overflow-visible">
                   <span
-                    className="symbol_click overflow-visible truncate flex-1"
+                    className="symbol_click overflow-hidden truncate flex-1"
                     onClick={onClickTokenSymbol}
                   >
                     {getTokenSymbol(token)}
@@ -801,7 +801,7 @@ function CommonTokenItem(props: {
                     <LpTokenTag
                       size={14}
                       inModal
-                      iconClassName="text-r-neutral-foot flex-shrink-0"
+                      iconClassName="text-r-neutral-foot shrink-0"
                       protocolName={token.protocol_id || ''}
                     />
                   )}
@@ -810,7 +810,7 @@ function CommonTokenItem(props: {
               ) : (
                 <div className="flex items-center gap-4">
                   <span
-                    className="symbol_click overflow-visible truncate"
+                    className="symbol_click overflow-hidden truncate"
                     onClick={onClickTokenSymbol}
                   >
                     {getTokenSymbol(token)}
@@ -820,7 +820,7 @@ function CommonTokenItem(props: {
                     <LpTokenTag
                       size={14}
                       inModal
-                      iconClassName="text-r-neutral-foot flex-shrink-0"
+                      iconClassName="text-r-neutral-foot shrink-0"
                       protocolName={token.protocol_id || ''}
                     />
                   )}

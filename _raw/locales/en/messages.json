@@ -4,7 +4,9 @@
       "title": "Transactions",
       "empty": {
         "title": "No transactions",
-        "desc": " No transactions found on <1>supported chains</1>"
+        "desc": " No transactions found on <1>supported chains</1>",
+        "noTxInThreeMonth": "No Transaction history in 90 Days",
+        "descThreeMonths": "No Transaction history in 90 Days on <2>supported chains</2>"
       },
       "explain": {
         "approve": "Approve {{amount}} {{symbol}} for {{project}}",
@@ -49,7 +51,7 @@
       "slippageTolerance": "Slippage tolerance",
       "singleTransactionGasLimit": "Single Transaction Gas Limit",
       "startConvert": "Start convert",
-      "unsupportedWalletType": "Only private key and seed phrase addresses are supported.",
+      "unsupportedWalletType": "This address type is not supported",
       "stop": "Stop",
       "selectLowValueTokens": "Select Low-Value Tokens",
       "tokenColumn": "Token",
@@ -84,7 +86,13 @@
         "success": "Swap successful"
       },
       "completedTips": "Ongoing swap will continue processing",
-      "priceImpact": "Price Impact Cap"
+      "priceImpact": "Price Impact Cap",
+      "LedgerBtn": {
+        "start": "Start with Ledger",
+        "confirm": "Please confirm with Ledger",
+        "continue": "Continue",
+        "send": "Sending signing request"
+      }
     },
     "staking": {
       "__skip_translation": [
@@ -1260,6 +1268,9 @@
       "reviewOrder": "Review Order",
       "back": "Back",
       "estimatedLiquidationPrice": "Estimated Liquidation Price",
+      "expectedSlippage": "Estimated Slippage",
+      "lowLiquiditySwitchLimit": " Low liquidity, switch to Limit Order.",
+      "switchToLimit": "Switch",
       "fee": "Fee",
       "leverageRangeMaxError": "The maximum leverage is {{max}}x",
       "leverageRangeMinError": "The minimum leverage is {{min}}x",
@@ -1324,6 +1335,14 @@
       "newUserGuide": {
         "learnMore": "Learn More"
       },
+      "perpsWidgetGuide": {
+        "title": "Your PNL Always in View",
+        "bulletViewPositions": "Track your top positions on any webpage.",
+        "bulletPrices": "Hover to view market data and PNL.",
+        "bulletToggle": "Turn it on or off anytime.",
+        "later": "Not Now",
+        "open": "Enable Widget"
+      },
       "invitePopup": {
         "title": "Save on Hyperliquid Fees",
         "activatedSuccess": "4% Hyperliquid fee savings activated",
@@ -1352,6 +1371,9 @@
         "fundingCountdown": "Funding / Countdown",
         "8hrFunding": "8h Funding",
         "categoryAll": "ALL"
+      },
+      "topBar": {
+        "favoriteEmpty": "Your favorite list is empty"
       },
       "userInfo": {
         "tab": {
@@ -1399,6 +1421,14 @@
           "orderHistory": "Order History",
           "assets": "Assets",
           "about": "About"
+        },
+        "floatingWidget": {
+          "label": "Floating Widget",
+          "tooltip": "· Show your account PnL in a floating widget while\n  browsing other pages.\n· Hidden on the trading page and Hyperliquid.",
+          "enabledToastTitle": "Floating widget enabled",
+          "enabledToastDescription": "It will appear when you browse other pages.",
+          "disabledToastTitle": "Floating widget disabled",
+          "updateFailed": "Failed to update setting"
         },
         "emptyMessage": {
           "openOrders": "No open orders",
@@ -1449,7 +1479,15 @@
           "marketCloseBtn": "Market Close",
           "dontShowAgain": "Don't show this again",
           "confirmCloseAllTitle": "Confirm Close All Positions",
-          "confirmCloseAllDesc": "All your open positions will be closed at market price and cancel all orders."
+          "confirmCloseAllDesc": "All your open positions will be closed at market price and cancel all orders.",
+          "positionSize": "Position Size",
+          "orderPrice": "Order Price",
+          "marketPrice": "Market Price",
+          "buy": "Buy",
+          "sell": "Sell",
+          "buyToSell": "Buy to sell",
+          "sellToBuy": "Sell to buy",
+          "reverseAction": "{{side}} {{size}} {{coin}} to Reverse"
         },
         "openOrders": {
           "__skip_translation": ["ro"],
@@ -1641,12 +1679,18 @@
         "configureMargin": "Configure Margin",
         "longLiquidationTips": "Going down {{percent}} will trigger liquidation",
         "shortLiquidationTips": "Going up {{percent}} will trigger liquidation",
-        "currentPosition": "Current Position"
+        "currentPosition": "Current Position",
+        "currentPrice": "Current Price"
       },
       "editTpSl": {
         "entryPrice": "Entry Price:",
         "markPrice": "Mark Price:",
-        "title": "Configure TP/SL",
+        "entryCurrentPrice": "Entry Price / Current Price",
+        "title": "TP/SL for entire position",
+        "takeProfit": "Take Profit",
+        "stopLoss": "Stop Loss",
+        "triggerPrice": "Trigger Price",
+        "estimatedPnlWillBe": "Your estimated PnL will be",
         "gain": "Gain",
         "loss": "Loss",
         "cancelTp": "Cancel TP",
@@ -1656,7 +1700,11 @@
         "currentPosition": "Current Position",
         "tp": "TP",
         "sl": "SL",
-        "confirm": "Confirm"
+        "confirm": "Confirm",
+        "triggerHigherThanLiquidation": "The trigger price should be higher than the liquidation price {{price}}",
+        "triggerLowerThanLiquidation": "The trigger price should be lower than the liquidation price {{price}}",
+        "tpTriggerInvalid": "The TP trigger price is invalid and will not be set",
+        "slTriggerInvalid": "The SL trigger price is invalid and will not be set"
       },
       "accountInfo": {
         "available": "Available: ",
@@ -1670,7 +1718,7 @@
         "availableBalance": "Available Balance",
         "unrealizedPnl": "Unrealized P&L",
         "crossMarginRatio": "Cross Margin Ratio",
-        "crossMarginRatioTips": "Maintenance Margin / Portfolio Value. Your cross positions will be liquidated if Margin Ratio reaches 100%.",
+        "crossMarginRatioTips": "Maintenance Margin / Margin Balance. Your cross positions will be liquidated if Margin Ratio reaches 100%.",
         "crossAccountLeverage": "Cross Account Leverage",
         "crossAccountLeverageTips": "Cross Account Leverage = Total Cross Position Value / Cross Account Value.",
         "maintenanceMargin": "Maintenance margin",
@@ -1683,7 +1731,22 @@
         "unifiedAccountLeverageTips": "Unified Account Leverage = Total Cross Positions Value / Total Collateral Balance.",
         "perpsMaintenanceMargin": "Perps Maintenance Margin",
         "perpsPortfolioValue": "Perps Portfolio Value",
-        "perpsUnrealizedPnl": "Perps Unrealized PNL"
+        "perpsUnrealizedPnl": "Perps Unrealized PNL",
+        "perpsAccountSummary": "Perps Account Summary",
+        "portfolioMarginSummary": "Portfolio Margin Summary",
+        "portfolioMarginRatio": "Portfolio Margin Ratio",
+        "portfolioMarginRatioTips": "Maintenance Margin / LTV-adjusted Portfolio Value. When the value is greater than 95%, your portfolio may be liquidated.",
+        "marginBalance": "Margin Balance",
+        "marginBalanceTips": "Margin Balance = Wallet Balance + Unrealized PNL. Your positions will be liquidated once Margin Balance <= Maintenance Margin.",
+        "totalCollateralBalance": "Total Collateral Balance",
+        "totalCollateralBalanceTips": "Total value of the collateral backing your unified account.",
+        "ltvAdjustedPortfolioValue": "LTV-adjusted Portfolio Value",
+        "ltvAdjustedPortfolioValueTips": "Total portfolio value after each asset's LTV haircut; must stay above the maintenance requirement.",
+        "borrowCapUsed": "Borrow Cap Used",
+        "borrowCapUsedTips": "When this value is 100%, further collateral will not contribute to portfolio margin",
+        "portfolioValue": "Portfolio Value",
+        "portfolioValueUnifiedTips": "Portfolio Value includes the value of spot assets in your Unified Account.",
+        "portfolioValuePortfolioMarginTips": "Portfolio Value includes the value of spot assets in your Portfolio Margin Account."
       },
       "accountActions": {
         "pending": "Pending",
@@ -1698,13 +1761,18 @@
         "trades": "Trades",
         "price": "Price",
         "amount": "Amount",
+        "size": "Size",
+        "sum": "Sum",
         "total": "Total",
         "markPrice": "Mark Price",
         "time": "Time",
         "noTrades": "No trades",
         "viewBoth": "Both",
         "viewBids": "Bids",
-        "viewAsks": "Asks"
+        "viewAsks": "Asks",
+        "avgPrice": "Avg. Price",
+        "sumBase": "Sum {{base}}",
+        "sumUsd": "Sum USD"
       }
     },
     "perpsDetail": {
@@ -2890,7 +2958,8 @@
           "biometricUnlock": "Unlock with Biometrics",
           "biometricUnlockHint": "Use biometrics to unlock on this device.",
           "biometricUnlockUnsupported": "This device does not support biometric unlock.",
-          "perpsFloatWidget": "Perps Floating Widget"
+          "perpsFloatWidget": "Perps Floating Widget",
+          "dataAnalysis": "Data Analysis"
         },
         "aboutUs": "About us",
         "currentVersion": "Current Version",
@@ -3224,10 +3293,12 @@
         "createdSuccessfully": "Created Successfully",
         "verifySeedPhrase": "Verify Seed Phrase",
         "fillInTheBackupSeedPhraseInOrder": "Fill in the backup seed phrase in order",
-        "wordPhrase": "I have a <1>{{count}}</1>-word phrase",
-        "wordPhraseAndPassphrase": "I have a <1>{{count}}</1>-word phrase with Passphrase",
-        "slip39SeedPhrase": "I have a <0>{{SLIP39}}</0> Seed Phrase",
-        "slip39SeedPhraseWithPassphrase": "I have a <0>{{SLIP39}}</0> Seed Phrase with Passphrase",
+        "wordPhrase": "My seed phrase has <1>{{count}}</1> words",
+        "wordPhraseSelected": "My seed phrase has <1>{{count}} words</1>",
+        "wordPhraseAndPassphrase": "My seed phrase has <1>{{count}}</1> words with password",
+        "wordPhraseAndPassphraseSelected": "My seed phrase has <1>{{count}} words</1> with password",
+        "slip39SeedPhrase": "My seed phrase is <1>{{SLIP39}}</1>",
+        "slip39SeedPhraseWithPassphrase": "My seed phrase is <1>{{SLIP39}}</1> with password",
         "slip39SeedPhrasePlaceholder_one": "Enter your {{count}}st seed phrase shares here",
         "slip39SeedPhrasePlaceholder_two": "Enter your {{count}}nd seed phrase shares here",
         "slip39SeedPhrasePlaceholder_few": "Enter your {{count}}rd seed phrase shares here",
@@ -4964,7 +5035,7 @@
     },
     "DesktopSelectAccountList": {
       "addAddresses": "Add address",
-      "smallSwapDisabledTips": "Currently only private key and seed phrase addresses are supported."
+      "smallSwapDisabledTips": "This address type is not supported"
     },
     "LpTokenTag": {
       "title": "This is a liquidity provider(LP) token",
@@ -4980,6 +5051,16 @@
     "UnknownTag": {
       "label": "Unknown",
       "tooltip": "Unknown token, please do your own research."
+    },
+    "screenshotModal": {
+      "title": "Screenshot to Feedback",
+      "placeholder": "Describe the issue",
+      "placeholderRequired": "Describe the issue (required)"
+    },
+    "feedbackPopup": {
+      "title": "Response from Rabby Support",
+      "issueReported": "Here’s the issue you reported:",
+      "issueReplied": "Rabby Support has replied:"
     }
   },
   "global": {
@@ -5018,7 +5099,8 @@
     "tryAgain": "Try Again",
     "notSupportTesntnet": "Not supported for custom network",
     "collapse": "Collapse",
-    "Yes": "Yes"
+    "Yes": "Yes",
+    "Submit": "Submit"
   },
   "background": {
     "error": {
@@ -5048,6 +5130,9 @@
       "txFailedMoreContent": "{{chain}} #{{nonce}} failed. Click to view more.",
       "completed": "Transaction completed",
       "failed": "Transaction failed"
+    },
+    "feedback": {
+      "screenshotContextMenuTitle": "Screenshot to feedback"
     },
     "alias": {
       "HdKeyring": "Seed Phrase",

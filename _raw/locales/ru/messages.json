@@ -4,7 +4,9 @@
       "title": "Транзакции",
       "empty": {
         "title": "Нет транзакций",
-        "desc": "Транзакции не найдены в <1>поддерживаемых сетях</1>"
+        "desc": "Транзакции не найдены в <1>поддерживаемых сетях</1>",
+        "noTxInThreeMonth": "Нет истории транзакций за 90 дней",
+        "descThreeMonths": "Нет истории транзакций за 90 дней на <2>поддерживаемых блокчейнах</2>"
       },
       "explain": {
         "approve": "Подтвердить {{amount}} {{symbol}} для {{project}}",
@@ -1324,7 +1326,8 @@
           "perpsFloatWidget": "Плавающий виджет Perps",
           "biometricUnlockHint": "Используйте биометрию для разблокировки на этом устройстве.",
           "currency": "Валюта",
-          "searchCurrency": "Поиск валюты"
+          "searchCurrency": "Поиск валюты",
+          "dataAnalysis": "Анализ данных"
         },
         "aboutUs": "О нас",
         "currentVersion": "Текущая версия",
@@ -1630,10 +1633,12 @@
         "createdSuccessfully": "Успешно создано",
         "verifySeedPhrase": "Проверить секретную фразу",
         "fillInTheBackupSeedPhraseInOrder": "Заполните резервную секретную фразу в порядке",
-        "wordPhrase": "У меня есть <1>{{count}}</1>-словная фраза",
-        "wordPhraseAndPassphrase": "У меня есть сид фраза из <1>{{count}}</1> слов с паролем",
-        "slip39SeedPhrase": "У меня есть <0>{{SLIP39}}</0> Seed Phrase",
-        "slip39SeedPhraseWithPassphrase": "У меня есть <0>{{SLIP39}}</0> сид фразы с паролем",
+        "wordPhrase": "Моя сид-фраза состоит из <1>{{count}}</1> слов",
+        "wordPhraseSelected": "Моя сид-фраза состоит из <1>{{count}} слов</1>",
+        "wordPhraseAndPassphrase": "Моя сид-фраза состоит из <1>{{count}}</1> слов с паролем",
+        "wordPhraseAndPassphraseSelected": "Моя сид-фраза состоит из <1>{{count}} слов</1> с паролем",
+        "slip39SeedPhrase": "Моя сид-фраза — <1>{{SLIP39}}</1>",
+        "slip39SeedPhraseWithPassphrase": "Моя сид-фраза — <1>{{SLIP39}}</1> с паролем",
         "slip39SeedPhrasePlaceholder_one": "Введите {{count}}ю часть сид фразы",
         "slip39SeedPhrasePlaceholder_two": "Введите {{count}}ю часть сид фразы",
         "slip39SeedPhrasePlaceholder_few": "Введите {{count}}ю часть сид фразы",
@@ -3573,6 +3578,9 @@
       "stopLoss": "Стоп-лосс",
       "isolated": "Изолированная маржа",
       "estimatedLiquidationPrice": "Расчётная цена ликвидации",
+      "expectedSlippage": "Расчётное проскальзывание",
+      "lowLiquiditySwitchLimit": " Низкая ликвидность, переключитесь на лимитный ордер.",
+      "switchToLimit": "Переключить",
       "leverageRangeMaxError": "Максимальное кредитное плечо составляет {{max}}x",
       "explorePerps": "Изучить Perps",
       "providerFeeTips": "Комиссия Hyperliquid: {{fee}}",
@@ -3669,7 +3677,15 @@
       },
       "transferToSpot": "Перевод на спот",
       "transferToPerps": "Перевести в Perps",
-      "selectChainToWithdraw": "Выберите сеть для вывода"
+      "selectChainToWithdraw": "Выберите сеть для вывода",
+      "perpsWidgetGuide": {
+        "title": "Ваш PNL всегда на виду",
+        "bulletViewPositions": "Отслеживайте свои лучшие позиции на любой веб-странице.",
+        "bulletPrices": "Наведите курсор, чтобы просмотреть рыночные данные и PNL.",
+        "bulletToggle": "Включайте и выключайте его в любое время.",
+        "later": "Не сейчас",
+        "open": "Включить виджет"
+      }
     },
     "perpsPro": {
       "chatArea": {
@@ -3774,7 +3790,15 @@
           "marketCloseTitle": "Закрыть позицию на рынке",
           "confirmCloseAllTitle": "Подтвердить закрытие всех позиций",
           "confirmCloseAllDesc": "Все ваши открытые позиции будут закрыты по рыночной цене, и все заказы будут отменены.",
-          "marketCloseDesc": "Это попытается немедленно закрыть позицию."
+          "marketCloseDesc": "Это попытается немедленно закрыть позицию.",
+          "positionSize": "Размер позиции",
+          "orderPrice": "Цена ордера",
+          "marketPrice": "Рыночная цена",
+          "buy": "Купить",
+          "sell": "Продать",
+          "buyToSell": "Купить для продажи",
+          "sellToBuy": "Продать для покупки",
+          "reverseAction": "{{side}} {{size}} {{coin}} для разворота"
         },
         "openOrders": {
           "cancelAll": "Отменить все",
@@ -3829,6 +3853,14 @@
           "transferToPerps": "Перевести в Perps",
           "usdcSpot": "USDC(Спот)",
           "usdcPerps": "USDC(Perps)"
+        },
+        "floatingWidget": {
+          "label": "Плавающий виджет",
+          "tooltip": "· Показывайте PnL вашего аккаунта в плавающем виджете при\n  просмотре других страниц.\n· Скрыт на странице торговли и Hyperliquid.",
+          "enabledToastTitle": "Плавающий виджет включён",
+          "enabledToastDescription": "Он будет отображаться при просмотре других страниц.",
+          "disabledToastTitle": "Плавающий виджет выключен",
+          "updateFailed": "Не удалось обновить настройку"
         }
       },
       "statusBar": {
@@ -3983,7 +4015,16 @@
         "sl": "Стоп-лосс",
         "gain": "прибыль",
         "stopLossExpectedPnl": "Ожидаемая PnL по стоп-лоссу",
-        "takeProfitExpectedPnl": "Тейк-профит: ожидаемая PnL"
+        "takeProfitExpectedPnl": "Тейк-профит: ожидаемая PnL",
+        "entryCurrentPrice": "Цена входа / Текущая цена",
+        "takeProfit": "Тейк-профит",
+        "stopLoss": "Стоп-лосс",
+        "triggerPrice": "Триггерная цена",
+        "estimatedPnlWillBe": "Ваша оценочная PnL составит",
+        "triggerHigherThanLiquidation": "Триггерная цена должна быть выше цены ликвидации {{price}}",
+        "triggerLowerThanLiquidation": "Триггерная цена должна быть ниже цены ликвидации {{price}}",
+        "tpTriggerInvalid": "Триггерная цена TP недействительна и не будет установлена",
+        "slTriggerInvalid": "Триггерная цена SL недействительна и не будет установлена"
       },
       "accountInfo": {
         "availableBalance": "Доступный баланс",
@@ -3997,7 +4038,7 @@
         "crossAccountLeverage": "Кросс-аккаунтное кредитное плечо",
         "deposit": "Пополнить",
         "balanceTip": "Итого чистые переводы + Итого реализованная прибыль + Итого чистые сборы за финансирование",
-        "crossMarginRatioTips": "Поддерживающая маржа / Стоимость портфеля.\nВаши кросс-позиции будут ликвидированы, если коэффициент маржи достигнет 100%.",
+        "crossMarginRatioTips": "Поддерживающая маржа / Маржинальный баланс.\nВаши кросс-позиции будут ликвидированы, если коэффициент маржи достигнет 100%.",
         "maintenanceMarginTips": "Минимальная стоимость портфеля, необходимая для поддержания открытых кросс-позиций.",
         "crossAccountLeverageTips": "Плечо кросс-аккаунта = Общая стоимость кросс-позиций / Баланс кросс-аккаунта.",
         "accountEquityTip": "Баланс + нереализованный PnL (приближенная стоимость счёта, если все позиции были закрыты)",
@@ -4010,7 +4051,22 @@
         "unifiedAccountLeverageTips": "Плечо унифицированного счёта = Общая стоимость кросс-позиций / Общий залоговый баланс.",
         "perpsMaintenanceMargin": "Маржа поддержки Perps",
         "perpsPortfolioValue": "Стоимость портфеля Perps",
-        "perpsUnrealizedPnl": "Нереализованный PnL Perps"
+        "perpsUnrealizedPnl": "Нереализованный PnL Perps",
+        "perpsAccountSummary": "Сводка по счёту Perps",
+        "portfolioMarginSummary": "Сводка по портфельной марже",
+        "portfolioMarginRatio": "Коэффициент портфельной маржи",
+        "portfolioMarginRatioTips": "Поддерживающая маржа / Стоимость портфеля с учётом LTV. Когда значение превышает 95%, ваш портфель может быть ликвидирован.",
+        "marginBalance": "Маржинальный баланс",
+        "marginBalanceTips": "Маржинальный баланс = Баланс кошелька + Нереализованный PNL. Ваши позиции будут ликвидированы, как только Маржинальный баланс станет <= Поддерживающей марже.",
+        "totalCollateralBalance": "Общий залоговый баланс",
+        "totalCollateralBalanceTips": "Общая стоимость залога, обеспечивающего ваш унифицированный счёт.",
+        "ltvAdjustedPortfolioValue": "Стоимость портфеля с учётом LTV",
+        "ltvAdjustedPortfolioValueTips": "Общая стоимость портфеля после применения LTV-дисконта к каждому активу; должна оставаться выше требования по поддерживающей марже.",
+        "borrowCapUsed": "Использовано из лимита заимствования",
+        "borrowCapUsedTips": "Когда это значение достигает 100%, дополнительный залог не будет учитываться в портфельной марже",
+        "portfolioValue": "Стоимость портфеля",
+        "portfolioValueUnifiedTips": "Стоимость портфеля включает стоимость спотовых активов на вашем унифицированном счёте.",
+        "portfolioValuePortfolioMarginTips": "Стоимость портфеля включает стоимость спотовых активов на вашем счёте с портфельной маржой."
       },
       "accountActions": {
         "pending": "Ожидание",
@@ -4031,14 +4087,23 @@
         "viewBids": "Заявки на покупку",
         "title": "Книга заявок",
         "viewAsks": "Заявки на продажу",
-        "amount": "Объём"
+        "amount": "Объём",
+        "size": "Размер",
+        "sum": "Сумма",
+        "avgPrice": "Средняя цена",
+        "sumBase": "Сумма {{base}}",
+        "sumUsd": "Сумма USD"
       },
       "editMargin": {
         "configureMargin": "Настроить маржу",
         "title": "Управление маржой",
         "shortLiquidationTips": "Рост на {{percent}} приведет к ликвидации",
         "currentPosition": "Текущая позиция",
-        "longLiquidationTips": "Снижение на {{percent}} приведет к ликвидации"
+        "longLiquidationTips": "Снижение на {{percent}} приведет к ликвидации",
+        "currentPrice": "Текущая цена"
+      },
+      "topBar": {
+        "favoriteEmpty": "Ваш список избранного пуст"
       }
     },
     "perpsDetail": {
@@ -4523,7 +4588,7 @@
       "slippageTolerance": "Допуск проскальзывания",
       "singleTransactionGasLimit": "Gas Limit для одной транзакции",
       "startConvert": "Начать конвертацию",
-      "unsupportedWalletType": "Поддерживаются только адреса с приватным ключом и seed фразой.",
+      "unsupportedWalletType": "Этот тип адреса не поддерживается",
       "stop": "Остановить",
       "selectLowValueTokens": "Выберите низкоценные токены",
       "tokenColumn": "Токен",
@@ -4536,7 +4601,13 @@
       "moreChains": "+{{count}} цепей",
       "swapFailed": "Неудачный обмен, {{reason}}",
       "completedTips": "Текущий обмен будет продолжать обрабатываться",
-      "priceImpact": "Лимит влияния на цену"
+      "priceImpact": "Лимит влияния на цену",
+      "LedgerBtn": {
+        "start": "Начните с Ledger",
+        "confirm": "Пожалуйста, подтвердите с Ledger",
+        "continue": "Продолжить",
+        "send": "Отправка запроса на подпись"
+      }
     },
     "staking": {
       "title": "Стейкинг",
@@ -4931,7 +5002,7 @@
     },
     "DesktopSelectAccountList": {
       "addAddresses": "Добавить адрес",
-      "smallSwapDisabledTips": "На данный момент поддерживаются только адреса с закрытым ключом и сид-фразой."
+      "smallSwapDisabledTips": "Этот тип адреса не поддерживается"
     },
     "LpTokenTag": {
       "title": "Это токен поставщика ликвидности (LP)",
@@ -4947,6 +5018,16 @@
     "UnknownTag": {
       "label": "Неизвестно",
       "tooltip": "Неизвестный токен, пожалуйста, проведите собственное исследование."
+    },
+    "screenshotModal": {
+      "title": "Скриншот для отзыва",
+      "placeholder": "Опишите проблему",
+      "placeholderRequired": "Опишите проблему (обязательно)"
+    },
+    "feedbackPopup": {
+      "title": "Ответ от поддержки Rabby",
+      "issueReported": "Вот проблема, которую вы сообщили:",
+      "issueReplied": "Поддержка Rabby ответила:"
     }
   },
   "global": {
@@ -4985,7 +5066,8 @@
     "notSupportTesntnet": "Эта своя сеть поддерживается",
     "appDescription": "Ваш кошелек для Ethereum и EVM",
     "collapse": "Свернуть",
-    "Yes": "Да"
+    "Yes": "Да",
+    "Submit": "Отправить"
   },
   "background": {
     "error": {
@@ -5032,6 +5114,9 @@
         "actionCancel": "Операция отменена",
         "deviceNeedsWebHIDPermission": "Устройство не найдено или требует разрешения WebHID"
       }
+    },
+    "feedback": {
+      "screenshotContextMenuTitle": "Скриншот для отзыва"
     }
   },
   "constant": {

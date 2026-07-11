@@ -5,12 +5,33 @@ import { PerpTopTokenV3 } from '@rabby-wallet/rabby-api/dist/types';
 import {
   PERPS_MAX_NTL_VALUE,
   PERPS_POSITION_RISK_LEVEL,
+  PERPS_BUILD_FEE_RECEIVE_ADDRESS,
   PerpsQuoteAsset,
 } from './constants';
 import { useWallet, WalletController } from '@/ui/utils';
 import { KEYRING_CLASS } from '@/constant';
 import { getPerpsSDK } from './sdkManager';
 import store from '@/ui/store';
+
+// Matches Hyperliquid's "Builder fee has not been approved" order rejection.
+const BUILDER_FEE_NOT_APPROVED_RE = /builder fee has not been approved/i;
+export const isBuilderFeeNotApprovedError = (errorMessage?: string): boolean =>
+  !!errorMessage && BUILDER_FEE_NOT_APPROVED_RE.test(errorMessage);
+
+// self-sign has no agent — only the builder fee can be pending. Shared by both
+// perps init flows; uses store.dispatch so it can live outside the hooks.
+export const checkSelfSignBuilderFee = async () => {
+  try {
+    const maxFee = await getPerpsSDK().info.getMaxBuilderFee(
+      PERPS_BUILD_FEE_RECEIVE_ADDRESS
+    );
+    store.dispatch.perps.setAccountNeedApproveAgent(false);
+    store.dispatch.perps.setAccountNeedApproveBuilderFee(!maxFee);
+  } catch (e) {
+    // best-effort; keep current flags
+    console.error('Failed to check self-sign builder fee:', e);
+  }
+};
 
 /**
  * Wait until both the user clearinghouseState and the global asset ticker
@@ -43,11 +64,22 @@ export const waitForInitialWsData = (timeoutMs = 5000): Promise<void> => {
   });
 };
 
-export const getPxDecimals = (markPx: string) => {
-  const parts = markPx.split('.');
-  if (!parts[1]) return 2;
-  const decimalPart = parts[1];
-  return decimalPart.length;
+// Hyperliquid price-axis precision, ported from the official app bundle:
+// decimals = clamp(4 - floor(log10(0.95 * px)), 0, cap) — i.e. 5
+// significant figures derived from the price magnitude (BTC at 64,026 →
+// whole numbers; 0.123456 → 5 decimals). The ×0.95 is HL's hysteresis:
+// prices just above a power of ten keep the finer precision, so the axis
+// doesn't flap when hovering around a boundary (it also keeps log10 away
+// from exact powers of ten where floats have edges). We cap by
+// 6 - szDecimals (the perp tick bound) where HL's chart caps by a flat 6;
+// ours is never looser. Recomputed per tick but only changes when the
+// price crosses a magnitude.
+export const getPxDecimals = (szDecimals: number, refPx?: string | number) => {
+  const maxBySz = Math.max(0, 6 - Number(szDecimals ?? 0));
+  const px = Math.abs(Number(refPx));
+  if (!Number.isFinite(px) || px === 0) return maxBySz;
+  const sigDecimals = 4 - Math.floor(Math.log10(0.95 * px));
+  return Math.max(0, Math.min(sigDecimals, maxBySz));
 };
 
 import { getQuoteAssetFromMeta } from '@/utils/perps/quoteAsset';
@@ -129,8 +161,8 @@ export const formatMarkData = (
           maxUsdValueSize: String(nextTier?.lowerBound ?? PERPS_MAX_NTL_VALUE),
           szDecimals: Number(hlDataAsset.szDecimals ?? 0),
           onlyIsolated: hlDataAsset.onlyIsolated,
+          pxDecimals: getPxDecimals(Number(hlDataAsset.szDecimals ?? 0)),
           // Price fields initialized empty; filled by WebSocket AssetCtx updates.
-          pxDecimals: 2,
           dayBaseVlm: '0',
           dayNtlVlm: '0',
           funding: '0',

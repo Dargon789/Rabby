@@ -3,7 +3,9 @@
     "transactions": {
       "empty": {
         "title": "Tidak ada transaksi",
-        "desc": "Tidak ditemukan transaksi di <1>supported chains</1>"
+        "desc": "Tidak ditemukan transaksi di <1>supported chains</1>",
+        "noTxInThreeMonth": "Tidak ada riwayat transaksi dalam 90 hari",
+        "descThreeMonths": "Tidak ada riwayat transaksi dalam 90 hari pada <2>rantai yang didukung</2>"
       },
       "explain": {
         "unknown": "Interaksi kontrak",
@@ -1392,7 +1394,8 @@
           "biometricUnlockUnsupported": "Perangkat ini tidak mendukung pembukaan kunci biometrik.",
           "perpsFloatWidget": "Widget Mengambang Perps",
           "currency": "Mata Uang",
-          "searchCurrency": "Cari mata uang"
+          "searchCurrency": "Cari mata uang",
+          "dataAnalysis": "Analisis Data"
         },
         "7Days": "7 hari",
         "4Hours": "4 jam",
@@ -1703,17 +1706,19 @@
         "fillInTheBackupSeedPhraseInOrder": "Isi frasa biji cadangan dalam urutan yang benar",
         "backupTips": "Pastikan tidak ada orang lain yang melihat layar Anda saat Anda mencadangkan frase biji.",
         "importError": "[CreateMnemonics] langkah tak terduga {{0}}",
-        "wordPhrase": "Saya memiliki frasa <1>{{count}}</1> kata",
+        "wordPhrase": "Seed phrase saya terdiri dari <1>{{count}}</1> kata",
+        "wordPhraseSelected": "Seed phrase saya terdiri dari <1>{{count}} kata</1>",
         "verifySeedPhrase": "Verifikasi Seed Phrase",
         "inputInvalidCount_one": "1 input tidak sesuai dengan norma Seed Phrase, silakan periksa.",
         "slip39SeedPhrasePlaceholder_two": "Masukkan {{count}}nd seed phrase shares di sini",
         "slip39SeedPhrasePlaceholder_one": "Masukkan {{count}} saham frase benih Anda di sini",
-        "slip39SeedPhrase": "Saya memiliki frase biji <0>{{SLIP39}}</0>",
+        "slip39SeedPhrase": "Seed phrase saya adalah <1>{{SLIP39}}</1>",
         "pleaseSelectWords": "Silakan pilih kata-kata",
-        "slip39SeedPhraseWithPassphrase": "Saya memiliki <0>{{SLIP39}}</0> Frasa Bijak dengan Frasa Sandi",
+        "slip39SeedPhraseWithPassphrase": "Seed phrase saya adalah <1>{{SLIP39}}</1> dengan kata sandi",
         "copy": "Salin frasa benih",
         "clearAll": "Hapus Semua",
-        "wordPhraseAndPassphrase": "Saya memiliki frasa <1>{{count}}</1>-kata dengan Passphrase",
+        "wordPhraseAndPassphrase": "Seed phrase saya terdiri dari <1>{{count}}</1> kata dengan kata sandi",
+        "wordPhraseAndPassphraseSelected": "Seed phrase saya terdiri dari <1>{{count}} kata</1> dengan kata sandi",
         "riskTips": "Sebelum Anda mulai, harap baca dan ingat tips keamanan berikut.",
         "createdSuccessfully": "Dibuat Berhasil",
         "slip39SeedPhrasePlaceholder_few": "Masukkan {{count}}rd seed phrase shares Anda di sini",
@@ -3573,6 +3578,9 @@
       "tradePerps": "Trade Perps",
       "sizeTips": "Nilai total atau jumlah perdagangan Anda, ditentukan oleh margin dan leverage.",
       "estimatedLiquidationPrice": "Perkiraan Harga Likuidasi",
+      "expectedSlippage": "Perkiraan Slippage",
+      "lowLiquiditySwitchLimit": " Likuiditas rendah, beralih ke Order Limit.",
+      "switchToLimit": "Beralih",
       "openPositionTips": "Perdagangan kontrak perpetual mengandung risiko yang signifikan, termasuk potensi kehilangan mendadak dan total atas investasi dan jaminan Anda akibat leverage yang tinggi dan volatilitas pasar, dan mungkin tidak sesuai untuk semua pengguna. Harga dapat dipengaruhi oleh tingkat pendanaan dan likuiditas, dan Anda mungkin terkena likuidasi otomatis tanpa pemberitahuan. Data pasar disediakan oleh Hyperliquid.",
       "fundingGains": "Keuntungan Pendanaan",
       "leverage": "Marjin",
@@ -3664,7 +3672,15 @@
       },
       "transferToSpot": "Transfer ke Spot",
       "transferToPerps": "Transfer ke Perps",
-      "selectChainToWithdraw": "Pilih Chain untuk Withdrawal"
+      "selectChainToWithdraw": "Pilih Chain untuk Withdrawal",
+      "perpsWidgetGuide": {
+        "title": "PNL Anda Selalu dalam Pandangan",
+        "bulletViewPositions": "Pantau posisi teratas Anda di halaman web mana pun",
+        "bulletPrices": "Arahkan kursor untuk melihat data pasar dan PNL",
+        "bulletToggle": "Nyalakan atau matikan kapan saja",
+        "later": "Belum Sekarang",
+        "open": "Aktifkan Widget"
+      }
     },
     "perpsPro": {
       "chatArea": {
@@ -3769,7 +3785,15 @@
           "marketCloseTitle": "Tutup Posisi Pasar",
           "confirmCloseAllTitle": "Konfirmasi Tutup Semua Posisi",
           "marketCloseDesc": "Ini akan mencoba untuk segera menutup posisi.",
-          "confirmCloseAllDesc": "Semua posisi terbuka Anda akan ditutup pada harga pasar dan membatalkan semua pesanan."
+          "confirmCloseAllDesc": "Semua posisi terbuka Anda akan ditutup pada harga pasar dan membatalkan semua pesanan.",
+          "positionSize": "Ukuran Posisi",
+          "orderPrice": "Harga Pesanan",
+          "marketPrice": "Harga Pasar",
+          "buy": "Beli",
+          "sell": "Jual",
+          "buyToSell": "Beli untuk menjual",
+          "sellToBuy": "Jual untuk membeli",
+          "reverseAction": "{{side}} {{size}} {{coin}} untuk Reverse"
         },
         "openOrders": {
           "price": "Harga",
@@ -3824,6 +3848,14 @@
           "transferToPerps": "Transfer ke Perps",
           "usdcSpot": "USDC(Spot)",
           "usdcPerps": "USDC(Perps)"
+        },
+        "floatingWidget": {
+          "label": "Widget Mengambang",
+          "tooltip": "· Tampilkan PnL akun Anda di widget mengambang saat\n  menjelajahi halaman lain.\n· Tersembunyi di halaman trading dan Hyperliquid.",
+          "enabledToastTitle": "Widget mengambang diaktifkan",
+          "enabledToastDescription": "Widget akan muncul saat Anda menjelajahi halaman lain.",
+          "disabledToastTitle": "Widget mengambang dinonaktifkan",
+          "updateFailed": "Gagal memperbarui pengaturan"
         }
       },
       "statusBar": {
@@ -3978,7 +4010,16 @@
         "title": "Konfigurasi TP/SL",
         "stopLossExpectedPnl": "Stop loss yang diharapkan PnL",
         "takeProfitExpectedPnl": "Ambil keuntungan yang diharapkan PnL",
-        "markPrice": "Harga Mark:"
+        "markPrice": "Harga Mark:",
+        "entryCurrentPrice": "Harga Entry / Harga Saat Ini",
+        "takeProfit": "Ambil Profit",
+        "stopLoss": "Stop Loss",
+        "triggerPrice": "Harga Pemicu",
+        "estimatedPnlWillBe": "Estimasi PnL Anda adalah",
+        "triggerHigherThanLiquidation": "Harga pemicu harus lebih tinggi dari harga likuidasi {{price}}",
+        "triggerLowerThanLiquidation": "Harga pemicu harus lebih rendah dari harga likuidasi {{price}}",
+        "tpTriggerInvalid": "Harga pemicu TP tidak valid dan tidak akan disetel",
+        "slTriggerInvalid": "Harga pemicu SL tidak valid dan tidak akan disetel"
       },
       "accountInfo": {
         "totalBalance": "Total saldo",
@@ -3992,7 +4033,7 @@
         "balance": "Saldo",
         "balanceTip": "Total transfer bersih + total laba terealisasi + total biaya funding bersih",
         "maintenanceMargin": "Margin pemeliharaan",
-        "crossMarginRatioTips": "Margin Pemeliharaan / Nilai Portfolio. Posisi cross Anda akan dilikuidasi jika Rasio Margin mencapai 100%.",
+        "crossMarginRatioTips": "Margin Pemeliharaan / Saldo Margin. Posisi cross Anda akan dilikuidasi jika Rasio Margin mencapai 100%.",
         "crossAccountLeverage": "Leveraged Akun Silang",
         "maintenanceMarginTips": "Nilai portofolio minimum yang diperlukan untuk mempertahankan posisi silang Anda tetap terbuka",
         "crossAccountLeverageTips": "Leverage Akun Silang = Total Nilai Posisi Silang / Nilai Akun Silang.",
@@ -4005,7 +4046,22 @@
         "unifiedAccountLeverageTips": "Leverage Akun Terpadu = Total Nilai Posisi Cross / Total Saldo Jaminan.",
         "perpsMaintenanceMargin": "Margin Pemeliharaan Perps",
         "perpsPortfolioValue": "Nilai Portofolio Perps",
-        "perpsUnrealizedPnl": "PNL Belum Terealisasi Perps"
+        "perpsUnrealizedPnl": "PNL Belum Terealisasi Perps",
+        "perpsAccountSummary": "Ringkasan Akun Perps",
+        "portfolioMarginSummary": "Ringkasan Portfolio Margin",
+        "portfolioMarginRatio": "Rasio Portfolio Margin",
+        "portfolioMarginRatioTips": "Margin Pemeliharaan / Nilai Portofolio yang Disesuaikan dengan LTV. Ketika nilainya lebih dari 95%, portofolio Anda mungkin akan dilikuidasi.",
+        "marginBalance": "Saldo Margin",
+        "marginBalanceTips": "Saldo Margin = Saldo Dompet + PNL Belum Terealisasi. Posisi Anda akan dilikuidasi ketika Saldo Margin <= Margin Pemeliharaan.",
+        "totalCollateralBalance": "Total Saldo Jaminan",
+        "totalCollateralBalanceTips": "Total nilai jaminan yang menjamin akun terpadu Anda.",
+        "ltvAdjustedPortfolioValue": "Nilai Portofolio yang Disesuaikan dengan LTV",
+        "ltvAdjustedPortfolioValueTips": "Total nilai portofolio setelah pemotongan LTV pada setiap aset; harus tetap di atas persyaratan pemeliharaan.",
+        "borrowCapUsed": "Batas Pinjaman Terpakai",
+        "borrowCapUsedTips": "Ketika nilai ini 100%, jaminan tambahan tidak akan berkontribusi pada portfolio margin",
+        "portfolioValue": "Nilai Portofolio",
+        "portfolioValueUnifiedTips": "Nilai Portofolio mencakup nilai aset spot di Akun Terpadu Anda.",
+        "portfolioValuePortfolioMarginTips": "Nilai Portofolio mencakup nilai aset spot di Akun Portfolio Margin Anda."
       },
       "accountActions": {
         "pending": "Menunggu",
@@ -4017,6 +4073,8 @@
       },
       "orderBook": {
         "amount": "Jumlah",
+        "size": "Ukuran",
+        "sum": "Jumlah Total",
         "price": "Harga",
         "viewBids": "Penawaran",
         "trades": "Perdagangan",
@@ -4026,14 +4084,21 @@
         "viewBoth": "Keduanya",
         "time": "Waktu",
         "total": "Total",
-        "viewAsks": "Permintaan"
+        "viewAsks": "Permintaan",
+        "avgPrice": "Harga Rata-rata",
+        "sumBase": "Jumlah {{base}}",
+        "sumUsd": "Jumlah USD"
       },
       "editMargin": {
         "currentPosition": "Posisi Saat Ini",
         "title": "Kelola Margin",
         "configureMargin": "Atur Margin",
         "longLiquidationTips": "Penurunan {{percent}} akan memicu likuidasi",
-        "shortLiquidationTips": "Naik {{percent}} akan memicu likuidasi"
+        "shortLiquidationTips": "Naik {{percent}} akan memicu likuidasi",
+        "currentPrice": "Harga Saat Ini"
+      },
+      "topBar": {
+        "favoriteEmpty": "Daftar favorit Anda kosong"
       }
     },
     "perpsDetail": {
@@ -4518,7 +4583,7 @@
       "slippageTolerance": "Toleransi selip",
       "singleTransactionGasLimit": "Gas Limit Transaksi Tunggal",
       "startConvert": "Mulai konversi",
-      "unsupportedWalletType": "Hanya alamat kunci privat dan seed phrase yang didukung.",
+      "unsupportedWalletType": "Jenis alamat ini tidak didukung",
       "stop": "Berhenti",
       "selectLowValueTokens": "Pilih Token Bernilai Rendah",
       "tokenColumn": "Token",
@@ -4531,7 +4596,13 @@
       "moreChains": "+{{count}} rantai",
       "swapFailed": "Swap gagal, {{reason}}",
       "completedTips": "Swap yang sedang berlangsung akan terus diproses",
-      "priceImpact": "Batas Dampak Harga"
+      "priceImpact": "Batas Dampak Harga",
+      "LedgerBtn": {
+        "start": "Mulai dengan Ledger",
+        "confirm": "Harap konfirmasi dengan Ledger",
+        "continue": "Lanjutkan",
+        "send": "Mengirim permintaan penandatanganan"
+      }
     },
     "staking": {
       "title": "Staking",
@@ -4926,7 +4997,7 @@
     },
     "DesktopSelectAccountList": {
       "addAddresses": "Tambah alamat",
-      "smallSwapDisabledTips": "Saat ini hanya alamat kunci privat dan frase seed yang didukung."
+      "smallSwapDisabledTips": "Jenis alamat ini tidak didukung"
     },
     "LpTokenTag": {
       "title": "Ini adalah token penyedia likuiditas (LP)",
@@ -4942,6 +5013,16 @@
     "UnknownTag": {
       "label": "Tidak dikenal",
       "tooltip": "Token tidak dikenal, silakan lakukan riset sendiri."
+    },
+    "screenshotModal": {
+      "title": "Tangkapan layar untuk masukan",
+      "placeholder": "Jelaskan masalahnya",
+      "placeholderRequired": "Jelaskan masalah (wajib)"
+    },
+    "feedbackPopup": {
+      "title": "Respons dari Dukungan Rabby",
+      "issueReported": "Berikut adalah masalah yang Anda laporkan:",
+      "issueReplied": "Dukungan Rabby telah membalas:"
     }
   },
   "global": {
@@ -4980,7 +5061,8 @@
     "backButton": "Kembali",
     "appDescription": "Dompet andalan Anda untuk Ethereum dan EVM",
     "collapse": "Tutup",
-    "Yes": "Ya"
+    "Yes": "Ya",
+    "Submit": "Kirim"
   },
   "background": {
     "error": {
@@ -5027,6 +5109,9 @@
         "actionCancel": "Operasi dibatalkan",
         "deviceNeedsWebHIDPermission": "Perangkat tidak ditemukan atau memerlukan izin WebHID"
       }
+    },
+    "feedback": {
+      "screenshotContextMenuTitle": "Tangkapan layar untuk masukan"
     }
   },
   "constant": {

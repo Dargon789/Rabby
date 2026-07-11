@@ -35,14 +35,17 @@
     "notSupportTesntnet": "不支持自定义网络",
     "appDescription": "你首选的以太坊和 EVM 钱包",
     "collapse": "折叠",
-    "Yes": "是"
+    "Yes": "是",
+    "Submit": "提交"
   },
   "page": {
     "transactions": {
       "title": "交易记录",
       "empty": {
         "desc": "在<1>支持的链</1>上找不到交易",
-        "title": "没有交易"
+        "title": "没有交易",
+        "noTxInThreeMonth": "90 天内无交易记录",
+        "descThreeMonths": "90 天内在<2>支持的链</2>上无交易记录"
       },
       "explain": {
         "approve": "授权 {{project}} 使用 {{amount}} {{symbol}}",
@@ -276,7 +279,8 @@
           "biometricUnlock": "通过生物识别解锁",
           "biometricUnlockUnsupported": "此设备不支持生物识别解锁。",
           "perpsFloatWidget": "永续合约悬浮窗",
-          "biometricUnlockHint": "使用生物识别在此设备上解锁。"
+          "biometricUnlockHint": "使用生物识别在此设备上解锁。",
+          "dataAnalysis": "数据分析"
         },
         "testnetBackendServiceUrl": "测试网后端服务 URL",
         "updateAvailable": "更新版本",
@@ -595,12 +599,14 @@
         "verifySeedPhrase": "验证助记词",
         "fillInTheBackupSeedPhraseInOrder": "按顺序填写备份助记词",
         "clearAll": "全部清除",
-        "wordPhrase": "我有一个 <1>{{count}}</1> 词的助记词",
+        "wordPhrase": "我的助记词有 <1>{{count}}</1> 个单词",
+        "wordPhraseSelected": "我的助记词有 <1>{{count}} 个单词</1>",
         "pastedAndClear": "已粘贴并清空剪切板",
         "inputInvalidCount": "有{{count}} 处输入内容不符合助记词规范，请检查",
-        "wordPhraseAndPassphrase": "我有一个带 Passphrase 的 <1>{{count}}</1> 词助记词",
-        "slip39SeedPhrase": "我有一个 <0>{{SLIP39}}</0> 助记词",
-        "slip39SeedPhraseWithPassphrase": "我有一个带密码的 <0>{{SLIP39}}</0> 助记词",
+        "wordPhraseAndPassphrase": "我的助记词有 <1>{{count}}</1> 个单词，并设有密码",
+        "wordPhraseAndPassphraseSelected": "我的助记词有 <1>{{count}} 个单词</1>，并设有密码",
+        "slip39SeedPhrase": "我的助记词是 <1>{{SLIP39}}</1>",
+        "slip39SeedPhraseWithPassphrase": "我的助记词是 <1>{{SLIP39}}</1>，并设有密码",
         "slip39SeedPhrasePlaceholder_one": "在这里输入你的第 {{count}} 个助记词份额",
         "slip39SeedPhrasePlaceholder_two": "在这里输入你的第 {{count}} 个助记词份额",
         "slip39SeedPhrasePlaceholder_few": "在这里输入你的第 {{count}} 个助记词份额",
@@ -3599,6 +3605,9 @@
       "stopLossTipsShort": "止损价必须高于当前价",
       "seeMore": "查看更多",
       "estimatedLiquidationPrice": "预计爆仓价",
+      "expectedSlippage": "预计滑点",
+      "lowLiquiditySwitchLimit": " 流动性不足，切换到限价单。",
+      "switchToLimit": "切换",
       "yourPosition": "你的持仓",
       "fee": "手续费",
       "closeLong": "平多",
@@ -3649,6 +3658,14 @@
       "crossMarginDesc": "所有仓位共享同一份保证金。这会降低单个仓位被强平的概率，但在极端市场波动中，全部全仓保证金资金都可能损失。",
       "newUserGuide": {
         "learnMore": "了解更多"
+      },
+      "perpsWidgetGuide": {
+        "title": "盈亏始终一目了然",
+        "bulletViewPositions": "无论浏览哪个网页，都能随时掌握持仓。",
+        "bulletPrices": "鼠标悬停即可查看行情数据和各持仓盈亏。",
+        "bulletToggle": "随时开启或关闭悬浮窗。",
+        "later": "暂不启用",
+        "open": "启用悬浮窗"
       },
       "addFunds": "添加资金",
       "crossMarginLiqPriceTip": "在全仓保证金模式下，单个仓位的强平价仅为参考估算。",
@@ -3729,7 +3746,7 @@
         "openInterest": "未平仓合约",
         "mark": "标记价",
         "markTips": "用于保证金管理、计算未实现盈亏、强平，以及触发止盈/止损订单。",
-        "symbol": "永续合约符号",
+        "symbol": "永续合约币对",
         "fundingCountdown": "资金费率 / 倒计时",
         "fundingTips": "多头向空头支付的每小时资金费率（若为负数，空头向多头支付）。资金交易不收取任何费用，这是一种用户之间的点对点转账，旨在将价格推向现货价格。详见文档以了解详情。",
         "categoryAll": "全部"
@@ -3818,7 +3835,15 @@
           "marketCloseTitle": "市场平仓",
           "marketCloseDesc": "这将尝试立即平仓。",
           "invalidPrice": "无效价格",
-          "confirmCloseAllDesc": "所有未平仓仓位都将按市价平仓，并取消所有订单。"
+          "confirmCloseAllDesc": "所有未平仓仓位都将按市价平仓，并取消所有订单。",
+          "positionSize": "仓位大小",
+          "orderPrice": "订单价格",
+          "marketPrice": "市场价格",
+          "buy": "买入",
+          "sell": "卖出",
+          "buyToSell": "买入转卖出",
+          "sellToBuy": "卖出转买入",
+          "reverseAction": "{{side}}{{size}}{{coin}}反向"
         },
         "openOrders": {
           "tpSl": "止盈/止损",
@@ -3873,6 +3898,14 @@
           "transferToPerps": "转入 Perps",
           "usdcSpot": "USDC（现货）",
           "usdcPerps": "USDC（Perps）"
+        },
+        "floatingWidget": {
+          "label": "浮动小部件",
+          "tooltip": "· 在浏览其他页面时，在浮动小部件中显示您的账户盈亏。\n· 在交易页面和 Hyperliquid 上隐藏。",
+          "enabledToastTitle": "浮动小部件已启用",
+          "enabledToastDescription": "在您浏览其他页面时它会出现。",
+          "disabledToastTitle": "浮动小部件已禁用",
+          "updateFailed": "更新设置失败"
         }
       },
       "statusBar": {
@@ -4027,14 +4060,23 @@
         "gain": "盈利",
         "cancelTp": "取消止盈",
         "takeProfitExpectedPnl": "止盈的预期盈亏",
-        "stopLossExpectedPnl": "止损的预期盈亏"
+        "stopLossExpectedPnl": "止损的预期盈亏",
+        "entryCurrentPrice": "入场价格 / 当前价格",
+        "takeProfit": "止盈",
+        "stopLoss": "止损",
+        "triggerPrice": "触发价格",
+        "estimatedPnlWillBe": "您预计的盈亏将为",
+        "triggerHigherThanLiquidation": "触发价格应高于清算价格 {{price}}",
+        "triggerLowerThanLiquidation": "触发价格应低于清算价格 {{price}}",
+        "tpTriggerInvalid": "TP 触发价格无效，将不会设置",
+        "slTriggerInvalid": "SL 触发价格无效，将不会设置"
       },
       "accountInfo": {
         "balance": "余额",
         "availableBalance": "可用余额",
         "maintenanceMargin": "维持保证金",
         "totalBalance": "总余额",
-        "crossMarginRatioTips": "维持保证金 / 组合价值。若保证金率达到 100%，你的全仓头寸将被强平。",
+        "crossMarginRatioTips": "维持保证金 / 保证金余额。若保证金率达到 100%，你的全仓头寸将被强平。",
         "withdraw": "提币",
         "accountEquity": "账户权益",
         "maintenanceMarginTips": "维持跨头寸所需的最低组合价值",
@@ -4054,7 +4096,22 @@
         "unifiedAccountLeverageTips": "统一账户杠杆 = 交叉仓位总价值 / 总抵押品余额。",
         "perpsMaintenanceMargin": "Perps 维持保证金",
         "perpsPortfolioValue": "Perps 投资组合价值",
-        "perpsUnrealizedPnl": "Perps 未实现盈亏"
+        "perpsUnrealizedPnl": "Perps 未实现盈亏",
+        "perpsAccountSummary": "Perps 账户概览",
+        "portfolioMarginSummary": "组合保证金概览",
+        "portfolioMarginRatio": "组合保证金率",
+        "portfolioMarginRatioTips": "维持保证金 / LTV 调整后投资组合价值。当该数值大于 95% 时，您的投资组合可能被强制平仓。",
+        "marginBalance": "保证金余额",
+        "marginBalanceTips": "保证金余额 = 钱包余额 + 未实现盈亏。当保证金余额 <= 维持保证金时，您的仓位将被强制平仓。",
+        "totalCollateralBalance": "总抵押品余额",
+        "totalCollateralBalanceTips": "为您的统一账户提供担保的抵押品总价值。",
+        "ltvAdjustedPortfolioValue": "LTV 调整后投资组合价值",
+        "ltvAdjustedPortfolioValueTips": "对每项资产进行 LTV 折算后的投资组合总价值；该值须始终高于维持保证金要求。",
+        "borrowCapUsed": "借款额度使用率",
+        "borrowCapUsedTips": "当该数值为 100% 时，新增抵押品将不再计入组合保证金。",
+        "portfolioValue": "投资组合价值",
+        "portfolioValueUnifiedTips": "投资组合价值包含您统一账户中现货资产的价值。",
+        "portfolioValuePortfolioMarginTips": "投资组合价值包含您组合保证金账户中现货资产的价值。"
       },
       "accountActions": {
         "available": "可用",
@@ -4070,19 +4127,28 @@
         "markPrice": "标记价",
         "title": "订单簿",
         "amount": "数量",
+        "size": "数量",
+        "sum": "累计",
         "noTrades": "暂无成交记录",
         "viewAsks": "卖单",
         "viewBoth": "双向",
         "total": "合计",
         "viewBids": "买盘",
-        "trades": "成交记录"
+        "trades": "成交记录",
+        "avgPrice": "均价",
+        "sumBase": "合计 {{base}}",
+        "sumUsd": "合计 USD"
       },
       "editMargin": {
         "configureMargin": "配置保证金",
         "currentPosition": "当前头寸",
         "shortLiquidationTips": "上涨 {{percent}} 将触发清算",
         "title": "管理保证金",
-        "longLiquidationTips": "下跌 {{percent}} 将触发清算"
+        "longLiquidationTips": "下跌 {{percent}} 将触发清算",
+        "currentPrice": "当前价格"
+      },
+      "topBar": {
+        "favoriteEmpty": "您的收藏列表为空"
       }
     },
     "perpsDetail": {
@@ -4546,7 +4612,7 @@
       "singleTransactionGasLimit": "单笔交易 Gas Limit",
       "startConvert": "一键兑换",
       "stop": "停止兑换",
-      "unsupportedWalletType": "目前只支持私钥助记词类型的地址",
+      "unsupportedWalletType": "此地址类型不支持",
       "conversionProgress": "兑换进度",
       "completedTitle": "兑换完成！",
       "done": "完成",
@@ -4580,7 +4646,13 @@
       "statusColumn": "兑换状态",
       "noLowValueTokensFound": "暂无资产",
       "moreChains": "+{{count}} 条链",
-      "priceImpact": "价差上限"
+      "priceImpact": "价差上限",
+      "LedgerBtn": {
+        "start": "开始使用 Ledger",
+        "confirm": "请在 Ledger 上确认",
+        "continue": "继续",
+        "send": "正在发送签名请求"
+      }
     },
     "staking": {
       "title": "质押",
@@ -4975,7 +5047,7 @@
     },
     "DesktopSelectAccountList": {
       "addAddresses": "添加地址",
-      "smallSwapDisabledTips": "目前仅支持私钥和助记词地址。"
+      "smallSwapDisabledTips": "不支持此地址类型"
     },
     "LpTokenTag": {
       "title": "这是一个流动性提供者(LP)代币",
@@ -4991,6 +5063,16 @@
     "UnknownTag": {
       "label": "未知",
       "tooltip": "未知代币，请自行研究。"
+    },
+    "screenshotModal": {
+      "title": "截图反馈",
+      "placeholder": "描述问题",
+      "placeholderRequired": "描述问题（必填）"
+    },
+    "feedbackPopup": {
+      "title": "Rabby Support 的回复",
+      "issueReported": "以下是您报告的问题：",
+      "issueReplied": "Rabby Support 已回复："
     }
   },
   "background": {
@@ -5021,6 +5103,9 @@
       "completed": "交易已完成",
       "txCompleteMoreContent": "{{chain}} #{{nonce}} 交易已完成，点击查看更多",
       "txFailedMoreContent": "{{chain}} #{{nonce}} 交易失败，点击查看更多"
+    },
+    "feedback": {
+      "screenshotContextMenuTitle": "截图反馈"
     },
     "alias": {
       "HdKeyring": "助记词",

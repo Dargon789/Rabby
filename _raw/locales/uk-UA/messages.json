@@ -4,7 +4,9 @@
       "title": "Транзакції",
       "empty": {
         "title": "Немає транзакцій",
-        "desc": " Не знайдено транзакцій на <1>підтримуваних мережах</1>"
+        "desc": " Не знайдено транзакцій на <1>підтримуваних мережах</1>",
+        "noTxInThreeMonth": "Немає історії транзакцій за 90 днів",
+        "descThreeMonths": "Немає історії транзакцій за 90 днів на <2>підтримуваних мережах</2>"
       },
       "explain": {
         "approve": "Затвердити {{amount}} {{symbol}} для {{project}}",
@@ -1326,7 +1328,8 @@
           "perpsFloatWidget": "Плаваючий віджет Perps",
           "biometricUnlockHint": "Використовуйте біометрію для розблокування на цьому пристрої.",
           "currency": "Валюта",
-          "searchCurrency": "Пошук валюти"
+          "searchCurrency": "Пошук валюти",
+          "dataAnalysis": "Аналіз даних"
         },
         "aboutUs": "Про нас",
         "currentVersion": "Поточна версія",
@@ -1633,22 +1636,24 @@
         "createdSuccessfully": "Створено успішно",
         "verifySeedPhrase": "Перевірити ключову фразу",
         "fillInTheBackupSeedPhraseInOrder": "Заповнити резервну фразу по порядку",
-        "wordPhrase": "У мене є <1>{{count}}</1>-словосполучення",
+        "wordPhrase": "Моя seed-фраза складається з <1>{{count}}</1> слів",
+        "wordPhraseSelected": "Моя seed-фраза складається з <1>{{count}} слів</1>",
         "clearAll": "Очистити все",
         "isItSafeToImportItInRabby": {
           "question": "Чи безпечно імпортувати його в Rabby?",
           "answer": "Так, він буде збережений локально у вашому браузері і доступний лише вам."
         },
         "slip39SeedPhrasePlaceholder_few": "Введіть вашу {{count}}-у частку seed фрази тут",
-        "slip39SeedPhraseWithPassphrase": "У мене є <0>{{SLIP39}}</0> Початкова фраза з Паролем",
-        "slip39SeedPhrase": "У мене є <0>{{SLIP39}}</0> Seed Phrase",
+        "slip39SeedPhraseWithPassphrase": "Моя seed-фраза — <1>{{SLIP39}}</1> з паролем",
+        "slip39SeedPhrase": "Моя seed-фраза — <1>{{SLIP39}}</1>",
         "pastedAndClear": "Вставлено та буфер обміну очищено",
         "slip39SeedPhrasePlaceholder_one": "Введіть вашу {{count}}-шу частину seed-фрази тут",
         "inputInvalidCount_other": "{{count}} введень не відповідають нормам Seed Phrase, перевірте, будь ласка.",
         "slip39SeedPhrasePlaceholder_two": "Введіть тут {{count}}-у частину посівної фрази",
         "invalidContent": "Недійсний вміст",
         "passphrase": "Парольна фраза",
-        "wordPhraseAndPassphrase": "У мене є фраза з <1>{{count}}</1> словами з Passphrase",
+        "wordPhraseAndPassphrase": "Моя seed-фраза складається з <1>{{count}}</1> слів із паролем",
+        "wordPhraseAndPassphraseSelected": "Моя seed-фраза складається з <1>{{count}} слів</1> із паролем",
         "slip39SeedPhrasePlaceholder_other": "Введіть тут {{count}}-й частину вашої seed фрази",
         "inputInvalidCount_one": "Вхідні дані не відповідають нормам Seed Phrase, будь ласка, перевірте.",
         "importQuestion2": "Моя семантична фраза зберігається лише на моєму пристрої. Rabby не може отримати до неї доступ.",
@@ -3589,6 +3594,9 @@
       "reviewOrder": "Переглянути ордер",
       "isolated": "Ізольований",
       "estimatedLiquidationPrice": "Очікувана ціна ліквідації",
+      "expectedSlippage": "Очікуване прослизання",
+      "lowLiquiditySwitchLimit": " Низька ліквідність, перейдіть до лімітного ордера.",
+      "switchToLimit": "Перейти",
       "funding": "фандінг",
       "review": "Перегляд",
       "logInPerpsAccount": "Увійдіть у мій обліковий запис Perps.",
@@ -3679,7 +3687,15 @@
       },
       "transferToSpot": "Переказ на спот",
       "transferToPerps": "Переказ на Perps",
-      "selectChainToWithdraw": "Вибрати ланцюг для виведення"
+      "selectChainToWithdraw": "Вибрати ланцюг для виведення",
+      "perpsWidgetGuide": {
+        "title": "Ваш PNL завжди на виду",
+        "bulletViewPositions": "Відстежуйте свої топ позиції на будь-якій веб-сторінці.",
+        "bulletPrices": "Наведіть курсор, щоб переглянути ринкові дані та PNL.",
+        "bulletToggle": "Увімкніть або вимкніть будь-коли.",
+        "later": "Зараз ні",
+        "open": "Увімкнути віджет"
+      }
     },
     "perpsPro": {
       "chatArea": {
@@ -3784,7 +3800,15 @@
           "dontShowAgain": "Не показувати це знову",
           "confirmCloseAllTitle": "Підтвердити закриття всіх позицій",
           "marketCloseDesc": "Це спробує відразу закрити позицію.",
-          "confirmCloseAllDesc": "Всі ваші відкриті позиції будуть закриті за ринковою ціною, а всі ордери будуть скасовані."
+          "confirmCloseAllDesc": "Всі ваші відкриті позиції будуть закриті за ринковою ціною, а всі ордери будуть скасовані.",
+          "positionSize": "Розмір позиції",
+          "orderPrice": "Ціна ордера",
+          "marketPrice": "Ринкова ціна",
+          "buy": "Купити",
+          "sell": "Продати",
+          "buyToSell": "Купити, щоб продати",
+          "sellToBuy": "Продати, щоб купити",
+          "reverseAction": "{{side}} {{size}} {{coin}} щоб розвернути"
         },
         "openOrders": {
           "price": "Ціна",
@@ -3839,6 +3863,14 @@
           "transferToPerps": "Переказ на Perps",
           "usdcSpot": "USDC (Спот)",
           "usdcPerps": "USDC (Perps)"
+        },
+        "floatingWidget": {
+          "label": "Плаваючий віджет",
+          "tooltip": "· Показувати PnL вашого акаунту у плаваючому віджеті під час\n  перегляду інших сторінок.\n· Приховано на сторінці торгівлі та Hyperliquid.",
+          "enabledToastTitle": "Плаваючий віджет увімкнено",
+          "enabledToastDescription": "Він з'являтиметься, коли ви переглядатимете інші сторінки.",
+          "disabledToastTitle": "Плаваючий віджет вимкнено",
+          "updateFailed": "Не вдалося оновити налаштування"
         }
       },
       "statusBar": {
@@ -3993,7 +4025,16 @@
         "cancelSl": "Скасувати стоп-лосс",
         "tp": "Ціль прибутку",
         "takeProfitExpectedPnl": "Тейк-профіт: очікуваний PnL",
-        "stopLossExpectedPnl": "Очікуваний PnL за стоп-лоссом"
+        "stopLossExpectedPnl": "Очікуваний PnL за стоп-лоссом",
+        "entryCurrentPrice": "Ціна входу / Поточна ціна",
+        "takeProfit": "Тейк-профіт",
+        "stopLoss": "Стоп-лос",
+        "triggerPrice": "Тригерна ціна",
+        "estimatedPnlWillBe": "Ваш очікуваний PnL буде",
+        "triggerHigherThanLiquidation": "Тригерна ціна має бути вищою за ціну ліквідації {{price}}",
+        "triggerLowerThanLiquidation": "Тригерна ціна має бути нижчою за ціну ліквідації {{price}}",
+        "tpTriggerInvalid": "Тригерна ціна TP недійсна і не буде встановлена",
+        "slTriggerInvalid": "Тригерна ціна SL недійсна і не буде встановлена"
       },
       "accountInfo": {
         "totalBalance": "Загальний баланс",
@@ -4009,7 +4050,7 @@
         "accountEquity": "Еквіті рахунку",
         "crossAccountLeverage": "Крос-маржа облікового запису",
         "accountEquityTip": "Баланс + нереалізований PnL (приблизна вартість рахунку, якби всі позиції були закриті)",
-        "crossMarginRatioTips": "Підтримуюча маржа / Вартість портфеля. Ваші позиції з крос-маржі будуть ліквідовані, якщо коефіцієнт маржі досягне 100%.",
+        "crossMarginRatioTips": "Підтримуюча маржа / Баланс маржі. Ваші позиції з крос-маржі будуть ліквідовані, якщо коефіцієнт маржі досягне 100%.",
         "balanceTip": "Загальна сума чистих переказів + Загальний реалізований прибуток + Загальна сума чистих зборів за фінансування",
         "available": "Доступно:",
         "accountSummary": "Огляд рахунку",
@@ -4020,7 +4061,22 @@
         "unifiedAccountLeverageTips": "Кредитне плече уніфікованого рахунку = Загальна вартість перехресних позицій / Загальний баланс застави.",
         "perpsMaintenanceMargin": "Маржа підтримки Perps",
         "perpsPortfolioValue": "Вартість портфеля Perps",
-        "perpsUnrealizedPnl": "Нереалізований PNL Perps"
+        "perpsUnrealizedPnl": "Нереалізований PNL Perps",
+        "perpsAccountSummary": "Зведення рахунку Perps",
+        "portfolioMarginSummary": "Зведення Portfolio Margin",
+        "portfolioMarginRatio": "Коефіцієнт Portfolio Margin",
+        "portfolioMarginRatioTips": "Маржа підтримки / Вартість портфеля з урахуванням LTV. Коли значення перевищує 95%, ваш портфель може бути ліквідовано.",
+        "marginBalance": "Баланс маржі",
+        "marginBalanceTips": "Баланс маржі = Баланс гаманця + Нереалізований PNL. Ваші позиції буде ліквідовано, щойно Баланс маржі <= Маржа підтримки.",
+        "totalCollateralBalance": "Загальний баланс застави",
+        "totalCollateralBalanceTips": "Загальна вартість застави, що забезпечує ваш уніфікований рахунок.",
+        "ltvAdjustedPortfolioValue": "Вартість портфеля з урахуванням LTV",
+        "ltvAdjustedPortfolioValueTips": "Загальна вартість портфеля після застосування дисконту LTV до кожного активу; має залишатися вищою за вимогу підтримки.",
+        "borrowCapUsed": "Використано ліміт позики",
+        "borrowCapUsedTips": "Коли це значення дорівнює 100%, додаткова застава більше не враховуватиметься в маржі портфеля.",
+        "portfolioValue": "Вартість портфеля",
+        "portfolioValueUnifiedTips": "Вартість портфеля включає вартість спотових активів на вашому Unified Account.",
+        "portfolioValuePortfolioMarginTips": "Вартість портфеля включає вартість спотових активів на вашому рахунку Portfolio Margin."
       },
       "accountActions": {
         "available": "Доступно",
@@ -4035,20 +4091,29 @@
         "price": "Ціна",
         "viewBoth": "Обидва",
         "amount": "Кількість",
+        "size": "Розмір",
+        "sum": "Сума",
         "total": "Усього",
         "noTrades": "Немає угод",
         "title": "Книга ордерів",
         "viewBids": "Заявки на купівлю",
         "trades": "Сделки",
         "markPrice": "Позначена ціна",
-        "viewAsks": "Пропозиції продажу"
+        "viewAsks": "Пропозиції продажу",
+        "avgPrice": "Середня ціна",
+        "sumBase": "Сума {{base}}",
+        "sumUsd": "Сума USD"
       },
       "editMargin": {
         "configureMargin": "Налаштувати Маржу",
         "currentPosition": "Поточна позиція",
         "title": "Управління маржею",
         "longLiquidationTips": "Зниження на {{percent}} викликатиме ліквідацію",
-        "shortLiquidationTips": "Зростання на {{percent}} спровокує ліквідацію"
+        "shortLiquidationTips": "Зростання на {{percent}} спровокує ліквідацію",
+        "currentPrice": "Поточна ціна"
+      },
+      "topBar": {
+        "favoriteEmpty": "Ваш список улюблених порожній"
       }
     },
     "perpsDetail": {
@@ -4533,7 +4598,7 @@
       "slippageTolerance": "Допуск slippage",
       "singleTransactionGasLimit": "Gas Limit однієї транзакції",
       "startConvert": "Почати конвертацію",
-      "unsupportedWalletType": "Підтримуються лише адреси з приватним ключем та seed-фразою.",
+      "unsupportedWalletType": "Цей тип адреси не підтримується",
       "stop": "Стоп",
       "selectLowValueTokens": "Виберіть токени з низькою вартістю",
       "tokenColumn": "Токен",
@@ -4546,7 +4611,13 @@
       "moreChains": "+{{count}} ланцюжків",
       "swapFailed": "Конвертація не вдалася, {{reason}}",
       "completedTips": "Поточна конвертація продовжить обробку",
-      "priceImpact": "Ліміт цінового впливу"
+      "priceImpact": "Ліміт цінового впливу",
+      "LedgerBtn": {
+        "start": "Почати з Ledger",
+        "confirm": "Підтвердьте, будь ласка, через Ledger",
+        "continue": "Продовжити",
+        "send": "Надсилання запиту на підписання"
+      }
     },
     "staking": {
       "title": "Стейкінг",
@@ -4941,7 +5012,7 @@
     },
     "DesktopSelectAccountList": {
       "addAddresses": "Додати адресу",
-      "smallSwapDisabledTips": "Наразі підтримуються лише адреси з приватним ключем та seed-фразою."
+      "smallSwapDisabledTips": "Цей тип адреси не підтримується"
     },
     "LpTokenTag": {
       "title": "Це токен постачальника ліквідності (LP)",
@@ -4957,6 +5028,16 @@
     "UnknownTag": {
       "label": "Невідомо",
       "tooltip": "Невідомий токен, будь ласка, проведіть власне дослідження."
+    },
+    "screenshotModal": {
+      "title": "Знімок екрана для відгуку",
+      "placeholder": "Опишіть проблему",
+      "placeholderRequired": "Опишіть проблему (обов'язково)"
+    },
+    "feedbackPopup": {
+      "title": "Відповідь від служби підтримки Rabby",
+      "issueReported": "Ось проблема, яку ви повідомили:",
+      "issueReplied": "Служба підтримки Rabby відповіла:"
     }
   },
   "global": {
@@ -5003,7 +5084,8 @@
     "Done": "Готово",
     "appDescription": "Ваш улюблений гаманець для Ethereum та EVM",
     "collapse": "Згорнути",
-    "Yes": "Так"
+    "Yes": "Так",
+    "Submit": "Надіслати"
   },
   "background": {
     "error": {
@@ -5050,6 +5132,9 @@
         "actionCancel": "Операція скасована",
         "deviceNeedsWebHIDPermission": "Пристрій не знайдено або потрібен дозвіл WebHID"
       }
+    },
+    "feedback": {
+      "screenshotContextMenuTitle": "Знімок екрана для відгуку"
     }
   },
   "constant": {

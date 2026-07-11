@@ -465,9 +465,10 @@ export const TransactionItem = ({
                     ? null
                     : t('page.activities.signedTx.tips.canNotCancel')
                 }
-                overlayClassName="rectangle cant-cancel__tooltip"
+                overlayClassName="rectangle"
                 placement="topRight"
                 autoAdjustOverflow={false}
+                arrowPointAtCenter
               >
                 <div className="flex items-center">
                   <Tooltip
@@ -479,7 +480,7 @@ export const TransactionItem = ({
                     overlayClassName="rectangle"
                   >
                     <ThemeIcon
-                      className={clsx('icon icon-action', {
+                      className={clsx('icon icon-action size-[20px]', {
                         'cursor-not-allowed': !canCancel,
                       })}
                       src={RcIconSpeedup}
@@ -496,7 +497,7 @@ export const TransactionItem = ({
                     overlayClassName="rectangle"
                   >
                     <ThemeIcon
-                      className={clsx('icon icon-action', {
+                      className={clsx('icon icon-action size-[20px]', {
                         'cursor-not-allowed': !canCancel,
                       })}
                       src={RcIconCancel}
@@ -535,7 +536,7 @@ export const TransactionItem = ({
             {item.isSubmitFailed || maxGasTx.isWithdrawed ? (
               <>
                 {originTx.site && <TransactionWebsite site={originTx.site} />}
-                <span className="whitespace-nowrap overflow-ellipsis overflow-hidden text-r-neutral-foot text-right">
+                <span className="whitespace-nowrap text-ellipsis overflow-hidden text-r-neutral-foot text-right">
                   No Gas cost
                 </span>
               </>
@@ -544,9 +545,9 @@ export const TransactionItem = ({
                 {completedTx?.site ? (
                   <TransactionWebsite site={completedTx.site} />
                 ) : (
-                  <span className="flex-1 whitespace-nowrap overflow-ellipsis overflow-hidden text-r-neutral-foot"></span>
+                  <span className="flex-1 whitespace-nowrap text-ellipsis overflow-hidden text-r-neutral-foot"></span>
                 )}
-                <span className="whitespace-nowrap overflow-ellipsis overflow-hidden text-r-neutral-foot text-right">
+                <span className="whitespace-nowrap text-ellipsis overflow-hidden text-r-neutral-foot text-right">
                   Gas:{' '}
                   {gasTokenCount
                     ? `${gasTokenCount.toFixed(

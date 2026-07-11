@@ -21,6 +21,9 @@ import {
   UserTwapSliceFill,
   WsAllClearinghouseStates,
   SpotClearinghouseState,
+  SpotMeta,
+  FFastAssetCtx,
+  WsFastAssetCtxs,
   UserAbstractionResp,
 } from '@rabby-wallet/hyperliquid-sdk';
 import { Account } from '@/background/service/preference';
@@ -34,7 +37,11 @@ import {
   PerpsQuoteAsset,
   CANDLE_MENU_KEY_V2,
 } from '../views/Perps/constants';
-import { ApproveSignatures } from '@/background/service/perps';
+import type {
+  ApproveSignatures,
+  PerpsTpslModePreference,
+  PerpsTpslModePreferences,
+} from '@/background/service/perps';
 import { maxBy } from 'lodash';
 import eventBus from '@/eventBus';
 import { EVENTS } from '@/constant';
@@ -120,6 +127,10 @@ export interface AccountHistoryItem {
 }
 
 const VALID_TPSL_MODES = ['price', 'pnl', 'roi'] as const;
+const DEFAULT_POSITION_TPSL_MODE_PREFERENCES: PerpsTpslModePreferences = {
+  tp: 'pnl',
+  sl: 'pnl',
+};
 
 const getSavedTpslMode = (
   type: 'takeProfit' | 'stopLoss'
@@ -204,6 +215,7 @@ export interface PerpsState {
   selectedTokenDetail: PerpTopTokenV3 | null;
   favoritedCoins: string[];
   marginModePreferences: Record<string, 'cross' | 'isolated'>;
+  tpslModePreferences: PerpsTpslModePreferences;
   chartInterval: string;
   wsActiveAssetCtx: WsActiveAssetCtx | null;
   wsActiveAssetData: WsActiveAssetData | null;
@@ -224,7 +236,16 @@ export interface PerpsState {
     balances: SpotBalance[];
     balancesMap: Record<string, SpotBalance>;
     tokenToAvailableAfterMaintenance: [number, string][] | null;
+    // Portfolio-margin account-level fields (passed through from the WS spotState)
+    portfolioMarginEnabled?: boolean;
+    portfolioMarginRatio?: string;
+    tokenToPortfolioBorrowRatio?: [number, string][];
   };
+  // Combined spot+perp mark/mid price map from the `fastAssetCtxs` WS feed,
+  // merged across delta frames. Keyed by coin (perp) / '@index' (spot) / '#n'.
+  spotAssetCtxs: Record<string, FFastAssetCtx>;
+  // Static spot metadata (token list + pair universe); fetched once on login.
+  spotMeta: SpotMeta | null;
   userAbstraction: UserAbstractionResp;
   historicalOrders: UserHistoricalOrders[];
   userFunding: WsUserFunding['fundings'];
@@ -295,9 +316,39 @@ const applyAssetCtxsToList = (
     return {
       ...item,
       ...ctx,
-      pxDecimals: getPxDecimals(String(ctx.markPx ?? item.markPx ?? '')),
+      // Tick precision follows the price MAGNITUDE (5-sig-figs rule), so it
+      // only changes when the price crosses a power of ten — stable per tick.
+      pxDecimals: getPxDecimals(item.szDecimals, ctx.markPx ?? item.markPx),
     };
   });
+};
+
+// Overlay fresh markPx/midPx from the fastAssetCtxs feed onto the perp
+// marketData list (matched by coin name). fastAssetCtxs is HL's upgraded combined
+// feed that supersedes the throttled allDexsAssetCtxs for PRICES; the rest of each
+// ctx (oraclePx / funding / openInterest / ...) still comes from allDexsAssetCtxs
+// via applyAssetCtxsToList. Returns the same reference when nothing changed so the
+// map rebuild + re-render is skipped.
+const overlayFastCtxsToMarketData = (
+  list: MarketData[],
+  fastCtxs: WsFastAssetCtxs
+): MarketData[] => {
+  let changed = false;
+  const next = list.map((item) => {
+    const fc = fastCtxs[item.name];
+    if (!fc) return item;
+    const markPx = fc.markPx != null ? fc.markPx : item.markPx;
+    const midPx = fc.midPx != null ? fc.midPx : item.midPx;
+    if (markPx === item.markPx && midPx === item.midPx) return item;
+    changed = true;
+    return {
+      ...item,
+      markPx,
+      midPx,
+      pxDecimals: getPxDecimals(item.szDecimals, markPx ?? item.markPx),
+    };
+  });
+  return changed ? next : list;
 };
 
 export const perps = createModel<RootModel>()({
@@ -328,6 +379,7 @@ export const perps = createModel<RootModel>()({
     selectedCoin: 'BTC',
     favoritedCoins: [],
     marginModePreferences: {},
+    tpslModePreferences: DEFAULT_POSITION_TPSL_MODE_PREFERENCES,
     chartInterval: '15m',
     wsActiveAssetCtx: null,
     wsActiveAssetData: null,
@@ -343,7 +395,12 @@ export const perps = createModel<RootModel>()({
       balances: [],
       balancesMap: {},
       tokenToAvailableAfterMaintenance: null,
+      portfolioMarginEnabled: false,
+      portfolioMarginRatio: undefined,
+      tokenToPortfolioBorrowRatio: undefined,
     },
+    spotAssetCtxs: {},
+    spotMeta: null,
     userFunding: [],
     nonFundingLedgerUpdates: [],
     twapStates: [],
@@ -369,6 +426,35 @@ export const perps = createModel<RootModel>()({
       return {
         ...state,
         ...payload,
+      };
+    },
+
+    // fastAssetCtxs frames are deltas: the first frame is a snapshot, later
+    // frames carry only updated coins and omit unchanged fields. Merge per-coin
+    // so a markPx-only (or midPx-only) update doesn't wipe the other field.
+    mergeFastAssetCtxs(state, payload: WsFastAssetCtxs) {
+      if (!payload) return state;
+      // 1) spot price map — collateral valuation (AccountInfo PM/unified rows).
+      const nextSpot: Record<string, FFastAssetCtx> = {
+        ...state.spotAssetCtxs,
+      };
+      for (const coin of Object.keys(payload)) {
+        nextSpot[coin] = { ...nextSpot[coin], ...payload[coin] };
+      }
+      // 2) Overlay fresh perp markPx/midPx onto marketData (fastAssetCtxs is the
+      //    upgraded combined feed; allDexsAssetCtxs was throttled post-upgrade).
+      const nextMarketData = overlayFastCtxsToMarketData(
+        state.marketData,
+        payload
+      );
+      return {
+        ...state,
+        spotAssetCtxs: nextSpot,
+        marketData: nextMarketData,
+        marketDataMap:
+          nextMarketData === state.marketData
+            ? state.marketDataMap
+            : buildMarketDataMap(nextMarketData),
       };
     },
 
@@ -923,6 +1009,31 @@ export const perps = createModel<RootModel>()({
       };
     },
 
+    setTpslModePreferences(state, payload: PerpsTpslModePreferences) {
+      return {
+        ...state,
+        tpslModePreferences: {
+          ...DEFAULT_POSITION_TPSL_MODE_PREFERENCES,
+          ...(payload || {}),
+        },
+      };
+    },
+
+    patchTpslModePreference(
+      state,
+      payload: { side: 'tp' | 'sl'; mode: PerpsTpslModePreference }
+    ) {
+      if (!payload.side) return state;
+      return {
+        ...state,
+        tpslModePreferences: {
+          ...DEFAULT_POSITION_TPSL_MODE_PREFERENCES,
+          ...state.tpslModePreferences,
+          [payload.side]: payload.mode,
+        },
+      };
+    },
+
     setChartInterval(state, payload: string) {
       return {
         ...state,
@@ -1046,6 +1157,18 @@ export const perps = createModel<RootModel>()({
       }
     },
 
+    // Static spot metadata (token list + pair universe). Fetched once on login;
+    // maps a held token name -> its spot pair key ('@index') for spot pricing.
+    async fetchSpotMeta() {
+      try {
+        const sdk = getPerpsSDK();
+        const spotMeta = await sdk.info.getSpotMeta();
+        dispatch.perps.patchState({ spotMeta });
+      } catch (error) {
+        console.error('Failed to fetch spot meta:', error);
+      }
+    },
+
     async loginPerpsAccount(
       payload: {
         account: Account;
@@ -1070,6 +1193,7 @@ export const perps = createModel<RootModel>()({
 
       // dispatch.perps.startPolling(undefined);
       dispatch.perps.fetchUserAbstraction(account.address);
+      isPro && dispatch.perps.fetchSpotMeta();
       dispatch.perps.fetchPerpPermission(account.address);
       setTimeout(() => {
         // avoid 429 error
@@ -1383,6 +1507,15 @@ export const perps = createModel<RootModel>()({
         dispatch.perps.updateMarketData(ctxs);
       });
       subscriptions.push(unsubscribeAllDexsAssetCtxs);
+
+      // Combined spot+perp fast price feed (supersedes the throttled
+      // allDexsAssetCtxs/sac feeds). Decoded by the SDK; merged as deltas here.
+      const {
+        unsubscribe: unsubscribeFastAssetCtxs,
+      } = sdk.ws.subscribeToFastAssetCtxs((data) => {
+        dispatch.perps.mergeFastAssetCtxs(data);
+      });
+      subscriptions.push(unsubscribeFastAssetCtxs);
       const {
         unsubscribe: unsubscribeClearinghouseState,
       } = sdk.ws.subscribeToAllDexsClearinghouseState(address, (data) => {
@@ -1485,7 +1618,7 @@ export const perps = createModel<RootModel>()({
           if (!isSnapshot) {
             handleUpdateHistoricalOrders(
               orderHistory,
-              rootState.perps.soundEnabled
+              store.getState().perps.soundEnabled
             );
           }
 
@@ -1534,7 +1667,7 @@ export const perps = createModel<RootModel>()({
           if (!isSnapshot) {
             handleUpdateTwapSliceFills(
               twapSliceFills,
-              rootState.perps.soundEnabled
+              store.getState().perps.soundEnabled
             );
           }
 
@@ -1707,6 +1840,35 @@ export const perps = createModel<RootModel>()({
         );
       } catch (error) {
         console.error('Failed to save margin mode preference:', error);
+      }
+    },
+
+    async initTpslModePreferences(_, rootState) {
+      try {
+        const preferences = await rootState.app.wallet.getPerpsTpslModePreferences();
+        dispatch.perps.setTpslModePreferences(
+          preferences || DEFAULT_POSITION_TPSL_MODE_PREFERENCES
+        );
+      } catch (error) {
+        console.error('Failed to load TP/SL mode preferences:', error);
+        dispatch.perps.setTpslModePreferences(
+          DEFAULT_POSITION_TPSL_MODE_PREFERENCES
+        );
+      }
+    },
+
+    async updateTpslModePreference(
+      payload: { side: 'tp' | 'sl'; mode: PerpsTpslModePreference },
+      rootState
+    ) {
+      try {
+        dispatch.perps.patchTpslModePreference(payload);
+        await rootState.app.wallet.setPerpsTpslModePreference(
+          payload.side,
+          payload.mode
+        );
+      } catch (error) {
+        console.error('Failed to save TP/SL mode preference:', error);
       }
     },
 

@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Tooltip } from 'antd';
 import { PerpsDropdown } from './PerpsDropdown';
 import { useTranslation } from 'react-i18next';
@@ -37,6 +37,10 @@ const ADVANCED_OPTIONS: { value: OrderType; label: string }[] = [
 const isPrimaryTab = (type: OrderType) =>
   PRIMARY_TABS.some((t) => t.value === type);
 
+// Anchored margin-mode / leverage modals keep their original 400px width and
+// are right-aligned to the trigger row, expanding leftward.
+const ANCHOR_MODAL_WIDTH = 400;
+
 export const TopModeStatus: React.FC<TopModeStatusProps> = ({
   orderType,
   onOrderTypeChange,
@@ -63,6 +67,27 @@ export const TopModeStatus: React.FC<TopModeStatusProps> = ({
   const [showLeverageModal, setShowLeverageModal] = React.useState(false);
   const { t } = useTranslation();
 
+  // Each modal anchors to its own trigger box: the margin-mode modal aligns to
+  // the margin-mode button's right edge, the leverage modal to the leverage
+  // button's right edge.
+  const marginBoxRef = useRef<HTMLDivElement | null>(null);
+  const leverageBoxRef = useRef<HTMLDivElement | null>(null);
+  const [modalPos, setModalPos] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+
+  const computeModalPos = useMemoizedFn((el: HTMLElement | null) => {
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    // Sit just below the box; align the modal's right edge to the box's right
+    // edge so the fixed-width panel expands leftward.
+    setModalPos({
+      top: rect.bottom + 6,
+      left: rect.right - ANCHOR_MODAL_WIDTH,
+    });
+  });
+
   const { handleUpdateMarginModeLeverage } = usePerpsProPosition();
 
   const handleLeverageConfirm = useMemoizedFn(async (newLeverage: number) => {
@@ -83,6 +108,7 @@ export const TopModeStatus: React.FC<TopModeStatusProps> = ({
   });
 
   const handleLeverageClick = () => {
+    computeModalPos(leverageBoxRef.current);
     setShowLeverageModal(true);
   };
 
@@ -98,6 +124,7 @@ export const TopModeStatus: React.FC<TopModeStatusProps> = ({
 
   const handleMarginModeClick = () => {
     if (marginModeDisabledReason) return;
+    computeModalPos(marginBoxRef.current);
     setShowMarginModeModal(true);
   };
 
@@ -117,6 +144,27 @@ export const TopModeStatus: React.FC<TopModeStatusProps> = ({
       });
     setShowMarginModeModal(false);
   });
+
+  // Keep the anchored modal aligned to its trigger box when the viewport resizes.
+  useEffect(() => {
+    if (!showMarginModeModal && !showLeverageModal) return;
+    const onResize = () =>
+      computeModalPos(
+        showMarginModeModal ? marginBoxRef.current : leverageBoxRef.current
+      );
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [showMarginModeModal, showLeverageModal, computeModalPos]);
+
+  const anchoredStyle: React.CSSProperties | undefined = modalPos
+    ? {
+        position: 'absolute',
+        top: modalPos.top,
+        left: modalPos.left,
+        margin: 0,
+        paddingBottom: 0,
+      }
+    : undefined;
 
   const LAST_ADVANCED_KEY = 'perps_last_advanced_order_type';
 
@@ -193,106 +241,110 @@ export const TopModeStatus: React.FC<TopModeStatusProps> = ({
 
   return (
     <>
-      {/* Row 1: Margin mode + Leverage — fill width */}
-      <div className="flex items-center gap-[8px]">
-        <Tooltip
-          title={marginModeDisabledReason}
-          placement="top"
-          overlayClassName="rectangle w-[max-content]"
-        >
-          <div
-            onClick={handleMarginModeClick}
-            className={clsx(
-              'h-[28px] flex-1 rounded-[6px] flex items-center justify-center text-[12px] font-medium border border-solid bg-rb-neutral-bg-5',
-              marginModeDisabledReason
-                ? 'text-rb-neutral-foot border-transparent cursor-not-allowed opacity-60'
-                : 'text-rb-neutral-title-1 border-transparent cursor-pointer hover:border-rb-brand-default'
-            )}
+      <div className="flex flex-col gap-[6px]">
+        {/* Row 1: Margin mode + Leverage — fill width */}
+        <div className="flex items-center gap-[6px]">
+          <Tooltip
+            title={marginModeDisabledReason}
+            placement="top"
+            overlayClassName="rectangle w-[max-content]"
           >
-            {marginMode === MarginMode.ISOLATED
-              ? t('page.perpsPro.marginMode.isolated')
-              : t('page.perpsPro.marginMode.cross')}
+            <div
+              ref={marginBoxRef}
+              onClick={handleMarginModeClick}
+              className={clsx(
+                'h-[28px] flex-1 rounded-[6px] flex items-center justify-center text-12 border border-solid bg-rb-neutral-bg-5',
+                marginModeDisabledReason
+                  ? 'text-rb-neutral-foot border-transparent cursor-not-allowed opacity-60'
+                  : 'text-rb-neutral-title-1 border-transparent cursor-pointer hover:border-rb-brand-default'
+              )}
+            >
+              {marginMode === MarginMode.ISOLATED
+                ? t('page.perpsPro.marginMode.isolated')
+                : t('page.perpsPro.marginMode.cross')}
+            </div>
+          </Tooltip>
+
+          <div
+            ref={leverageBoxRef}
+            onClick={handleLeverageClick}
+            className="h-[28px] flex-1 flex items-center justify-center rounded-[6px] text-12 text-rb-neutral-title-1 border border-solid border-transparent cursor-pointer hover:border-rb-brand-default bg-rb-neutral-bg-5"
+          >
+            {leverage}x
           </div>
-        </Tooltip>
-
-        <div
-          onClick={handleLeverageClick}
-          className="h-[28px] flex-1 flex items-center justify-center rounded-[6px] text-[12px] text-rb-neutral-title-1 border border-solid border-transparent font-medium cursor-pointer hover:border-rb-brand-default bg-rb-neutral-bg-5"
-        >
-          {leverage}x
         </div>
-      </div>
 
-      {/* Row 2: Order type tabs */}
-      <div
-        ref={tabsContainerRef}
-        className="relative flex items-center border-b border-solid border-rb-neutral-line"
-      >
-        {PRIMARY_TABS.map((tab) => (
-          <button
-            key={tab.value}
-            type="button"
-            ref={(el) => {
-              tabRefs.current[tab.value] = el;
-            }}
-            onClick={() => onOrderTypeChange(tab.value)}
+        {/* Row 2: Order type tabs */}
+        <div
+          ref={tabsContainerRef}
+          className="relative flex h-[38px] items-center border-b border-solid border-rb-neutral-line -mx-[12px] px-[12px]"
+        >
+          {PRIMARY_TABS.map((tab) => (
+            <button
+              key={tab.value}
+              type="button"
+              ref={(el) => {
+                tabRefs.current[tab.value] = el;
+              }}
+              onClick={() => onOrderTypeChange(tab.value)}
+              className={clsx(
+                'h-[38px] mr-20 text-12 font-medium transition-colors',
+                orderType === tab.value
+                  ? 'text-rb-neutral-title-1'
+                  : 'text-rb-neutral-secondary hover:text-rb-neutral-title-1'
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+
+          <div
             className={clsx(
-              'h-[28px] mr-20 text-13 font-medium transition-colors',
-              orderType === tab.value
+              'h-[38px] text-12 font-medium',
+              'inline-flex items-center transition-colors',
+              isAdvancedSelected
                 ? 'text-rb-neutral-title-1'
                 : 'text-rb-neutral-secondary hover:text-rb-neutral-title-1'
             )}
           >
-            {tab.label}
-          </button>
-        ))}
-
-        <div
-          className={clsx(
-            'h-[28px] text-13 font-medium',
-            'inline-flex items-center transition-colors',
-            isAdvancedSelected
-              ? 'text-rb-neutral-title-1'
-              : 'text-rb-neutral-secondary hover:text-rb-neutral-title-1'
-          )}
-        >
-          <span
-            ref={(el) => {
-              tabRefs.current['advanced'] = el;
-            }}
-            className="cursor-pointer h-[28px] inline-flex items-center"
-            onClick={() => onOrderTypeChange(lastAdvancedType)}
-          >
-            {advancedLabel}
-          </span>
-          <PerpsDropdown
-            placement="bottomRight"
-            options={ADVANCED_OPTIONS.map((o) => ({
-              key: o.value,
-              label: o.label,
-            }))}
-            onSelect={(key) => onOrderTypeChange(key as OrderType)}
-          >
-            <span className="inline-flex items-center cursor-pointer pl-[4px] h-[28px]">
-              <RcIconArrowDownPerpsCC className="text-rb-neutral-secondary" />
+            <span
+              ref={(el) => {
+                tabRefs.current['advanced'] = el;
+              }}
+              className="cursor-pointer h-[38px] inline-flex items-center"
+              onClick={() => onOrderTypeChange(lastAdvancedType)}
+            >
+              {advancedLabel}
             </span>
-          </PerpsDropdown>
+            <PerpsDropdown
+              placement="bottomRight"
+              options={ADVANCED_OPTIONS.map((o) => ({
+                key: o.value,
+                label: o.label,
+              }))}
+              onSelect={(key) => onOrderTypeChange(key as OrderType)}
+            >
+              <span className="inline-flex items-center cursor-pointer pl-[3px] h-[38px]">
+                <RcIconArrowDownPerpsCC className="w-[14px] h-[14px] text-rb-neutral-secondary" />
+              </span>
+            </PerpsDropdown>
+          </div>
+          {/* Sliding indicator */}
+          <div
+            className="absolute bottom-0 h-[2px] bg-rb-brand-default transition-all duration-300 ease-out"
+            style={{
+              left: indicatorStyle.left,
+              width: indicatorStyle.width,
+            }}
+          />
+          <Tooltip
+            title={orderTypeTooltip}
+            placement="topRight"
+            overlayClassName="rectangle max-w-[320px]"
+          >
+            <RcIconInfo className="ml-auto w-[16px] h-[16px] text-rb-neutral-secondary" />
+          </Tooltip>
         </div>
-        {/* Sliding indicator */}
-        <div
-          className="absolute bottom-0 h-[2px] bg-rb-brand-default transition-all duration-300 ease-out"
-          style={{
-            left: indicatorStyle.left,
-            width: indicatorStyle.width,
-          }}
-        />
-        <Tooltip
-          title={orderTypeTooltip}
-          placement="topRight"
-          overlayClassName="rectangle max-w-[320px]"
-        >
-          <RcIconInfo className="text-rb-neutral-secondary ml-auto" />
-        </Tooltip>
       </div>
 
       {/* Margin Mode Modal */}
@@ -302,6 +354,7 @@ export const TopModeStatus: React.FC<TopModeStatusProps> = ({
         coinSymbol={selectedCoin}
         onConfirm={handleMarginModeConfirm}
         onCancel={() => setShowMarginModeModal(false)}
+        positionStyle={anchoredStyle}
       />
 
       {/* Leverage Modal */}
@@ -312,6 +365,7 @@ export const TopModeStatus: React.FC<TopModeStatusProps> = ({
         coinSymbol={selectedCoin}
         onConfirm={handleLeverageConfirm}
         onCancel={() => setShowLeverageModal(false)}
+        positionStyle={anchoredStyle}
       />
     </>
   );

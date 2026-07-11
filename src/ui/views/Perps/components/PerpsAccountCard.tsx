@@ -78,12 +78,30 @@ export const PerpsAccountCard: React.FC<PerpsAccountCardProps> = ({
   const [newUserGuideDismissed, setNewUserGuideDismissed] = useState(true);
 
   useEffect(() => {
-    wallet.getHasDismissedNewUserGuideV2().then((dismissed) => {
-      setNewUserGuideDismissed(!!dismissed);
-    });
+    let isCancelled = false;
+    wallet
+      .getHasDismissedNewUserGuideV2()
+      .then((dismissed) => {
+        if (!isCancelled) {
+          setNewUserGuideDismissed(!!dismissed);
+        }
+      })
+      .catch(() => {
+        // Keep the guide hidden if the stored dismissal state cannot be read.
+      });
+    return () => {
+      isCancelled = true;
+    };
   }, [wallet]);
 
   const showNewUserGuide = isNewUser && !newUserGuideDismissed;
+
+  const dismissNewUserGuide = () => {
+    setNewUserGuideDismissed(true);
+    Promise.resolve(wallet.setHasDismissedNewUserGuideV2(true)).catch(() => {
+      // Local dismissal still applies for the current popup session.
+    });
+  };
 
   const handleDeposit = () => {
     if (currentPerpsAccount) {
@@ -214,7 +232,7 @@ export const PerpsAccountCard: React.FC<PerpsAccountCardProps> = ({
                     key={b.coin}
                     className="inline-flex items-center gap-4 text-12 font-medium text-r-neutral-title-1"
                   >
-                    <Icon className="w-[16px] h-[16px]" />
+                    <Icon className="w-20 h-20" />
                     <span>
                       {formatUsdValue(b.available, BigNumber.ROUND_DOWN)}
                     </span>
@@ -223,7 +241,7 @@ export const PerpsAccountCard: React.FC<PerpsAccountCardProps> = ({
               })}
             </div>
             <div
-              className="text-12 font-medium text-r-blue-default cursor-pointer flex-shrink-0 flex items-center gap-2 leading-[20px]"
+              className="text-12 font-medium text-r-blue-default cursor-pointer shrink-0 flex items-center gap-2 leading-[20px]"
               onClick={() => onSwap?.()}
             >
               {t('page.perps.PerpsSpotSwap.toSwapEntry')}
@@ -240,8 +258,7 @@ export const PerpsAccountCard: React.FC<PerpsAccountCardProps> = ({
             className="absolute top-8 right-8 w-[16px] h-[16px] flex items-center justify-center cursor-pointer text-r-neutral-foot hover:text-r-blue-default z-10"
             onClick={(e) => {
               e.stopPropagation();
-              setNewUserGuideDismissed(true);
-              wallet.setHasDismissedNewUserGuideV2(true);
+              dismissNewUserGuide();
             }}
           >
             <RcIconCloseCC className="w-[16px] h-[16px] " />
@@ -256,7 +273,7 @@ export const PerpsAccountCard: React.FC<PerpsAccountCardProps> = ({
                 <RcIconArrowRight className="w-[20px] h-[20px] text-r-blue-default" />
               </div>
             </div>
-            <div className="relative w-[90px] h-[56px] flex-shrink-0">
+            <div className="relative w-[90px] h-[56px] shrink-0">
               <img
                 src={isDarkTheme ? perpsGuideBgDark : perpsGuideBg}
                 className="absolute bottom-0 right-0 w-[90px] h-[29px]"

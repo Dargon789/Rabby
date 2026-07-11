@@ -3,7 +3,9 @@
     "transactions": {
       "empty": {
         "desc": "Nenhuma transação encontrada em <1>chains suportados</1>",
-        "title": "Sem transações"
+        "title": "Sem transações",
+        "noTxInThreeMonth": "Sem histórico de transações em 90 dias",
+        "descThreeMonths": "Sem histórico de transações em 90 dias em <2>chains suportadas</2>"
       },
       "explain": {
         "unknown": "Interação com Contratos",
@@ -1392,7 +1394,8 @@
           "biometricUnlockUnsupported": "Este dispositivo não suporta desbloqueio biométrico.",
           "perpsFloatWidget": "Widget flutuante de Perps",
           "currency": "Moeda",
-          "searchCurrency": "Pesquisar moeda"
+          "searchCurrency": "Pesquisar moeda",
+          "dataAnalysis": "Análise de Dados"
         },
         "cancel": "Cancelar",
         "7Days": "7 dias",
@@ -1707,7 +1710,7 @@
         "invalidContent": "Conteúdo inválido",
         "saved": "Eu salvei a frase",
         "verificationFailed": "Verificação falhou",
-        "slip39SeedPhrase": "Eu tenho uma <0>{{SLIP39}}</0> Frase Semente",
+        "slip39SeedPhrase": "A minha frase-semente é <1>{{SLIP39}}</1>",
         "passphrase": "Frase secreta",
         "slip39SeedPhrasePlaceholder_one": "Insira suas {{count}}ª partes da frase semente aqui",
         "pastedAndClear": "Colado e área de transferência limpa",
@@ -1715,13 +1718,15 @@
         "fillInTheBackupSeedPhraseInOrder": "Preencha a frase de recuperação em ordem.",
         "slip39SeedPhrasePlaceholder_few": "Insira suas {{count}}ª partes da frase-semente aqui",
         "backupTips": "Certifique-se de que ninguém mais esteja olhando para a sua tela ao fazer o backup da seed phrase.",
-        "slip39SeedPhraseWithPassphrase": "Eu tenho uma frase-semente <0>{{SLIP39}}</0> com frase de acesso.",
+        "slip39SeedPhraseWithPassphrase": "A minha frase-semente é <1>{{SLIP39}}</1> com palavra-passe",
         "pleaseSelectWords": "Por favor, selecione as palavras",
         "slip39SeedPhrasePlaceholder_other": "Insira suas {{count}}ª partes da frase semente aqui",
-        "wordPhrase": "Eu tenho uma frase de <1>{{count}}</1> palavras",
+        "wordPhrase": "A minha frase-semente tem <1>{{count}}</1> palavras",
+        "wordPhraseSelected": "A minha frase-semente tem <1>{{count}} palavras</1>",
         "inputInvalidCount_one": "1 entrada não conforma os padrões da Seed Phrase, por favor verifique.",
         "inputInvalidCount_other": "{{count}} entradas não estão em conformidade com as normas da Seed Phrase, por favor verifique.",
-        "wordPhraseAndPassphrase": "Eu tenho uma frase de <1>{{count}}</1> palavras com Passphrase.",
+        "wordPhraseAndPassphrase": "A minha frase-semente tem <1>{{count}}</1> palavras com palavra-passe",
+        "wordPhraseAndPassphraseSelected": "A minha frase-semente tem <1>{{count}} palavras</1> com palavra-passe",
         "importQuestion1": "Se eu perder ou compartilhar minha seed phrase, perderei o acesso aos meus ativos permanentemente.",
         "importQuestion2": "Minha frase semente é armazenada apenas no meu dispositivo. Rabby não pode acessá-la.",
         "importQuestion3": "Se eu desinstalar o Rabby sem fazer backup da minha frase-semente, não poderá ser recuperado pelo Rabby.",
@@ -3532,6 +3537,9 @@
       "providerFeeTips": "Taxa Hyperliquid: {{fee}}",
       "deleteAgentSuccess": "Agente excluído com sucesso",
       "estimatedLiquidationPrice": "Preço de liquidação estimado",
+      "expectedSlippage": "Slippage estimado",
+      "lowLiquiditySwitchLimit": " Baixa liquidez, mude para ordem limite.",
+      "switchToLimit": "Mudar",
       "fundingRate": "Taxa de financiamento",
       "size": "Tamanho da posição",
       "autoClose": "Fechamento automático de posição",
@@ -3664,7 +3672,15 @@
       },
       "transferToSpot": "Transferir para Spot",
       "transferToPerps": "Transferir para Perps",
-      "selectChainToWithdraw": "Selecionar Cadeia para Retirar"
+      "selectChainToWithdraw": "Selecionar Cadeia para Retirar",
+      "perpsWidgetGuide": {
+        "title": "Seu PNL Sempre Visível",
+        "bulletViewPositions": "Acompanhe suas principais posições em qualquer página web.",
+        "bulletPrices": "Passe o mouse para ver dados de mercado e PNL.",
+        "bulletToggle": "Ative ou desative a qualquer momento.",
+        "later": "Agora não",
+        "open": "Ativar Widget"
+      }
     },
     "perpsPro": {
       "chatArea": {
@@ -3769,7 +3785,15 @@
           "confirmCloseAllTitle": "Confirmar Fechar Todas as Posições",
           "marketCloseDesc": "Isso tentará fechar a posição imediatamente.",
           "marketCloseTitle": "Fechar Posição de Mercado",
-          "confirmCloseAllDesc": "Todas as suas posições abertas serão fechadas ao preço de mercado e todos os pedidos serão cancelados."
+          "confirmCloseAllDesc": "Todas as suas posições abertas serão fechadas ao preço de mercado e todos os pedidos serão cancelados.",
+          "positionSize": "Tamanho da posição",
+          "orderPrice": "Preço da ordem",
+          "marketPrice": "Preço de mercado",
+          "buy": "Comprar",
+          "sell": "Vender",
+          "buyToSell": "Comprar para vender",
+          "sellToBuy": "Vender para comprar",
+          "reverseAction": "{{side}} {{size}} {{coin}} para inverter"
         },
         "openOrders": {
           "cancel": "Cancelar",
@@ -3824,6 +3848,14 @@
           "transferToPerps": "Transferir para Perps",
           "usdcSpot": "USDC(Spot)",
           "usdcPerps": "USDC(Perps)"
+        },
+        "floatingWidget": {
+          "label": "Widget Flutuante",
+          "tooltip": "· Mostre o PnL da sua conta em um widget flutuante enquanto\n  navega em outras páginas.\n· Oculto na página de negociação e Hyperliquid.",
+          "enabledToastTitle": "Widget flutuante ativado",
+          "enabledToastDescription": "Ele aparecerá quando você navegar em outras páginas.",
+          "disabledToastTitle": "Widget flutuante desativado",
+          "updateFailed": "Falha ao atualizar configuração"
         }
       },
       "statusBar": {
@@ -3978,7 +4010,16 @@
         "cancelTp": "Cancelar Take Profit",
         "title": "Configurar TP/SL",
         "gain": "Lucro",
-        "stopLossExpectedPnl": "Stop loss P/L esperado"
+        "stopLossExpectedPnl": "Stop loss P/L esperado",
+        "entryCurrentPrice": "Preço de Entrada / Preço Atual",
+        "takeProfit": "Obter Lucro",
+        "stopLoss": "Stop Loss",
+        "triggerPrice": "Preço de Trigger",
+        "estimatedPnlWillBe": "Sua PnL estimada será",
+        "triggerHigherThanLiquidation": "O preço de gatilho deve ser maior que o preço de liquidação {{price}}",
+        "triggerLowerThanLiquidation": "O preço de gatilho deve ser menor que o preço de liquidação {{price}}",
+        "tpTriggerInvalid": "O preço de gatilho do TP é inválido e não será definido",
+        "slTriggerInvalid": "O preço de gatilho do SL é inválido e não será definido"
       },
       "accountInfo": {
         "availableBalance": "Saldo disponível",
@@ -3995,7 +4036,7 @@
         "accountEquityTip": "Saldo + P/L não realizado (valor aproximado da conta se todas as posições fossem fechadas)",
         "crossAccountLeverageTips": "Alavancagem de Conta Cruzada = Valor Total da Posição Cruzada / Valor da Conta Cruzada",
         "unrealizedPnl": "P&L não realizado",
-        "crossMarginRatioTips": "Margem de Manutenção / Valor da Carteira. Suas posições de margem cruzada serão liquidadas se o Índice de Margem atingir 100%.",
+        "crossMarginRatioTips": "Margem de Manutenção / Saldo de Margem. Suas posições de margem cruzada serão liquidadas se o Índice de Margem atingir 100%.",
         "available": "Disponível:",
         "accountSummary": "Resumo da Conta",
         "unifiedAccountSummary": "Resumo da Conta Unificada",
@@ -4005,7 +4046,22 @@
         "unifiedAccountLeverageTips": "Alavancagem da Conta Unificada = Valor Total das Posições Cruzadas / Saldo Total de Colateral.",
         "perpsMaintenanceMargin": "Margem de Manutenção de Perps",
         "perpsPortfolioValue": "Valor do Portfólio de Perps",
-        "perpsUnrealizedPnl": "PNL Não Realizado de Perps"
+        "perpsUnrealizedPnl": "PNL Não Realizado de Perps",
+        "perpsAccountSummary": "Resumo da Conta de Perps",
+        "portfolioMarginSummary": "Resumo da Margem de Portfólio",
+        "portfolioMarginRatio": "Índice da Margem de Portfólio",
+        "portfolioMarginRatioTips": "Margem de Manutenção / Valor do Portfólio Ajustado por LTV. Quando o valor é maior que 95%, o seu portfólio pode ser liquidado.",
+        "marginBalance": "Saldo de Margem",
+        "marginBalanceTips": "Saldo de Margem = Saldo da Carteira + PNL Não Realizado. As suas posições serão liquidadas assim que o Saldo de Margem <= Margem de Manutenção.",
+        "totalCollateralBalance": "Saldo Total de Colateral",
+        "totalCollateralBalanceTips": "Valor total do colateral que suporta a sua conta unificada.",
+        "ltvAdjustedPortfolioValue": "Valor do Portfólio Ajustado por LTV",
+        "ltvAdjustedPortfolioValueTips": "Valor total do portfólio após a redução de LTV de cada ativo; deve manter-se acima do requisito de manutenção.",
+        "borrowCapUsed": "Limite de Empréstimo Utilizado",
+        "borrowCapUsedTips": "Quando este valor é 100%, o colateral adicional não contribuirá para a margem de portfólio.",
+        "portfolioValue": "Valor do Portfólio",
+        "portfolioValueUnifiedTips": "O Valor do Portfólio inclui o valor dos ativos spot na sua Conta Unificada.",
+        "portfolioValuePortfolioMarginTips": "O Valor do Portfólio inclui o valor dos ativos spot na sua Conta de Margem de Portfólio."
       },
       "accountActions": {
         "pending": "Pendente",
@@ -4025,15 +4081,24 @@
         "time": "Tempo",
         "viewBids": "Lances",
         "amount": "Quantidade",
+        "size": "Tamanho",
+        "sum": "Soma",
         "viewAsks": "Ofertas",
-        "trades": "Negociações"
+        "trades": "Negociações",
+        "avgPrice": "Preço Médio",
+        "sumBase": "Soma {{base}}",
+        "sumUsd": "Soma USD"
       },
       "editMargin": {
         "configureMargin": "Configurar Margem",
         "title": "Gerenciar Margem",
         "currentPosition": "Posição Atual",
         "longLiquidationTips": "A queda de {{percent}} acionará a liquidação",
-        "shortLiquidationTips": "Subindo {{percent}} irá ativar a liquidação"
+        "shortLiquidationTips": "Subindo {{percent}} irá ativar a liquidação",
+        "currentPrice": "Preço Atual"
+      },
+      "topBar": {
+        "favoriteEmpty": "Sua lista favorita está vazia"
       }
     },
     "perpsDetail": {
@@ -4518,7 +4583,7 @@
       "slippageTolerance": "Tolerância de slippage",
       "singleTransactionGasLimit": "Gas Limit de Transação Única",
       "startConvert": "Iniciar conversão",
-      "unsupportedWalletType": "Apenas endereços de chave privada e frase-semente são suportados.",
+      "unsupportedWalletType": "Este tipo de endereço não é suportado",
       "stop": "Parar",
       "selectLowValueTokens": "Selecionar Tokens de Baixo Valor",
       "tokenColumn": "Token",
@@ -4531,7 +4596,13 @@
       "moreChains": "+{{count}} cadeias",
       "swapFailed": "Troca falhou, {{reason}}",
       "completedTips": "Troca em andamento continuará processando",
-      "priceImpact": "Limite de Impacto de Preço"
+      "priceImpact": "Limite de Impacto de Preço",
+      "LedgerBtn": {
+        "start": "Começar com Ledger",
+        "confirm": "Por favor, confirme com Ledger",
+        "continue": "Continuar",
+        "send": "Enviando solicitação de assinatura"
+      }
     },
     "staking": {
       "title": "Staking",
@@ -4926,7 +4997,7 @@
     },
     "DesktopSelectAccountList": {
       "addAddresses": "Adicionar endereço",
-      "smallSwapDisabledTips": "Atualmente, apenas endereços de chave privada e frase-semente são suportados."
+      "smallSwapDisabledTips": "Este tipo de endereço não é suportado"
     },
     "LpTokenTag": {
       "title": "Este é um token de provedor de liquidez (LP)",
@@ -4942,6 +5013,16 @@
     "UnknownTag": {
       "label": "Desconhecido",
       "tooltip": "Token desconhecido, por favor, faça sua própria pesquisa."
+    },
+    "screenshotModal": {
+      "title": "Captura de ecrã para feedback",
+      "placeholder": "Descreva o problema",
+      "placeholderRequired": "Descreva o problema (obrigatório)"
+    },
+    "feedbackPopup": {
+      "title": "Resposta do Suporte Rabby",
+      "issueReported": "Aqui está o problema que você reportou:",
+      "issueReplied": "O Suporte Rabby respondeu:"
     }
   },
   "global": {
@@ -4980,7 +5061,8 @@
     "copyAddress": "Copie o endereço",
     "appDescription": "Sua carteira de referência para Ethereum e EVM",
     "collapse": "Recolher",
-    "Yes": "Sim"
+    "Yes": "Sim",
+    "Submit": "Enviar"
   },
   "background": {
     "error": {
@@ -5027,6 +5109,9 @@
         "actionCancel": "Operação cancelada",
         "deviceNeedsWebHIDPermission": "Dispositivo não encontrado ou precisa de permissão WebHID"
       }
+    },
+    "feedback": {
+      "screenshotContextMenuTitle": "Captura de ecrã para feedback"
     }
   },
   "constant": {

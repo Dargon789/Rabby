@@ -3,7 +3,9 @@
     "transactions": {
       "empty": {
         "title": "Không có giao dịch nào",
-        "desc": "Không tìm thấy giao dịch trên <1>các chuỗi được hỗ trợ</1>"
+        "desc": "Không tìm thấy giao dịch trên <1>các chuỗi được hỗ trợ</1>",
+        "noTxInThreeMonth": "Không có lịch sử giao dịch trong 90 ngày",
+        "descThreeMonths": "Không có lịch sử giao dịch trong 90 ngày trên <2>các chain được hỗ trợ</2>"
       },
       "explain": {
         "approve": "Phê duyệt {{amount}} {{symbol}} cho {{project}}",
@@ -1392,7 +1394,8 @@
           "biometricUnlockUnsupported": "Thiết bị này không hỗ trợ mở khóa sinh trắc học.",
           "perpsFloatWidget": "Tiện ích nổi Perps",
           "currency": "Tiền tệ",
-          "searchCurrency": "Tìm kiếm tiền tệ"
+          "searchCurrency": "Tìm kiếm tiền tệ",
+          "dataAnalysis": "Phân tích dữ liệu"
         },
         "1Hour": "1 giờ",
         "7Days": "7 ngày",
@@ -1712,16 +1715,18 @@
         "verificationFailed": "Xác minh không thành công",
         "slip39SeedPhrasePlaceholder_few": "Nhập các phần chia seed phrase {{count}}rd của bạn ở đây",
         "pastedAndClear": "Dán và bộ nhớ tạm đã được xóa",
-        "slip39SeedPhrase": "Tôi có một cụm từ hạt giống <0>{{SLIP39}}</0>",
+        "slip39SeedPhrase": "Cụm từ khôi phục của tôi là <1>{{SLIP39}}</1>",
         "pleaseSelectWords": "Vui lòng chọn từ",
         "importQuestion4": "Nếu tôi gỡ cài đặt Rabby mà không sao lưu cụm từ khôi phục, Rabby sẽ không thể lấy lại cho tôi.",
         "inputInvalidCount_other": "{{count}} inputs không tuân thủ các tiêu chuẩn Seed Phrase, vui lòng kiểm tra.",
         "inputInvalidCount_one": "1 đầu vào không tuân thủ các tiêu chuẩn Seed Phrase, vui lòng kiểm tra.",
         "invalidContent": "Nội dung không hợp lệ",
-        "wordPhraseAndPassphrase": "Tôi có một cụm từ <1>{{count}}</1> từ với Passphrase",
-        "wordPhrase": "Tôi có một cụm từ <1>{{count}}</1> từ",
+        "wordPhraseAndPassphrase": "Cụm từ khôi phục của tôi có <1>{{count}}</1> từ kèm mật khẩu",
+        "wordPhraseAndPassphraseSelected": "Cụm từ khôi phục của tôi có <1>{{count}} từ</1> kèm mật khẩu",
+        "wordPhrase": "Cụm từ khôi phục của tôi có <1>{{count}}</1> từ",
+        "wordPhraseSelected": "Cụm từ khôi phục của tôi có <1>{{count}} từ</1>",
         "slip39SeedPhrasePlaceholder_one": "Nhập các phần chia sẻ cụm từ hạt giống thứ {{count}} của bạn vào đây",
-        "slip39SeedPhraseWithPassphrase": "Tôi có một cụm từ hạt giống <0>{{SLIP39}}</0> với mật khẩu.",
+        "slip39SeedPhraseWithPassphrase": "Cụm từ khôi phục của tôi là <1>{{SLIP39}}</1> kèm mật khẩu",
         "importQuestion2": "Câu gốc của tôi chỉ được lưu trữ trên thiết bị của tôi. Rabby không thể truy cập nó.",
         "importQuestion3": "Nếu tôi gỡ cài đặt Rabby mà không sao lưu cụm từ khôi phục của mình, nó sẽ không thể được phục hồi bởi Rabby.",
         "importQuestion1": "Nếu tôi mất hoặc chia sẻ cụm từ hạt giống của mình, tôi sẽ mất quyền truy cập vào tài sản của mình vĩnh viễn.",
@@ -3581,6 +3586,9 @@
       "openPositionTips": "Giao dịch hợp đồng vĩnh viễn mang lại rủi ro đáng kể, bao gồm khả năng mất đột ngột và toàn bộ khoản đầu tư và tài sản thế chấp của bạn do đòn bẩy cao và biến động thị trường, và có thể không phù hợp với tất cả người dùng. Giá có thể bị ảnh hưởng bởi tỷ lệ funding và thanh khoản và bạn có thể phải chịu thanh lý tự động mà không nhận được thông báo trước. Dữ liệu thị trường được cung cấp bởi Hyperliquid.",
       "takeProfit": "Lệnh chốt lời",
       "estimatedLiquidationPrice": "Giá thanh lý ước tính",
+      "expectedSlippage": "Trượt giá ước tính",
+      "lowLiquiditySwitchLimit": " Thanh khoản thấp, chuyển sang lệnh giới hạn.",
+      "switchToLimit": "Chuyển",
       "closeAll": "Đóng tất cả",
       "directDepositFast": "Nhanh, 0 Trượt giá",
       "currentPrice": "Giá hiện tại",
@@ -3664,7 +3672,15 @@
       },
       "transferToSpot": "Chuyển sang Spot",
       "transferToPerps": "Chuyển sang Perps",
-      "selectChainToWithdraw": "Chọn Chain để rút"
+      "selectChainToWithdraw": "Chọn Chain để rút",
+      "perpsWidgetGuide": {
+        "title": "PNL Của Bạn Luôn Trong Tầm Nhìn",
+        "bulletViewPositions": "Theo dõi các vị thế hàng đầu trên bất kỳ trang web nào.",
+        "bulletPrices": "Di chuột để xem dữ liệu thị trường và PNL.",
+        "bulletToggle": "Bật hoặc tắt bất cứ lúc nào.",
+        "later": "Không, cảm ơn",
+        "open": "Bật Widget"
+      }
     },
     "perpsPro": {
       "chatArea": {
@@ -3769,7 +3785,15 @@
           "dontShowAgain": "Không hiển thị lại điều này nữa",
           "marketCloseDesc": "Điều này sẽ cố gắng đóng vị thế ngay lập tức.",
           "confirmCloseAllTitle": "Xác nhận Đóng Tất Cả Vị Thế",
-          "confirmCloseAllDesc": "Tất cả các vị thế mở của bạn sẽ được đóng ở giá thị trường và hủy tất cả các lệnh."
+          "confirmCloseAllDesc": "Tất cả các vị thế mở của bạn sẽ được đóng ở giá thị trường và hủy tất cả các lệnh.",
+          "positionSize": "Quy mô vị thế",
+          "orderPrice": "Giá lệnh",
+          "marketPrice": "Giá thị trường",
+          "buy": "Mua",
+          "sell": "Bán",
+          "buyToSell": "Mua để bán",
+          "sellToBuy": "Bán để mua",
+          "reverseAction": "Đảo ngược {{size}} {{coin}} {{side}}"
         },
         "openOrders": {
           "time": "Thời gian",
@@ -3824,6 +3848,14 @@
           "transferToPerps": "Chuyển sang Perps",
           "usdcSpot": "USDC(Spot)",
           "usdcPerps": "USDC(Perps)"
+        },
+        "floatingWidget": {
+          "label": "Widget Nổi",
+          "tooltip": "· Hiển thị PnL tài khoản của bạn trong một widget nổi khi\n  duyệt các trang khác.\n· Ẩn trên trang giao dịch và Hyperliquid.",
+          "enabledToastTitle": "Widget nổi đã bật",
+          "enabledToastDescription": "Nó sẽ xuất hiện khi bạn duyệt các trang khác.",
+          "disabledToastTitle": "Widget nổi đã tắt",
+          "updateFailed": "Cập nhật cài đặt thất bại"
         }
       },
       "statusBar": {
@@ -3978,7 +4010,16 @@
         "gain": "Lợi nhuận",
         "confirm": "Xác nhận",
         "stopLossExpectedPnl": "Lệnh dừng lỗ: PnL kỳ vọng",
-        "loss": "lỗ"
+        "loss": "lỗ",
+        "entryCurrentPrice": "Giá vào / Giá hiện tại",
+        "takeProfit": "Chốt lời",
+        "stopLoss": "Cắt lỗ",
+        "triggerPrice": "Giá kích hoạt",
+        "estimatedPnlWillBe": "Lợi nhuận ước tính của bạn sẽ là",
+        "triggerHigherThanLiquidation": "Giá kích hoạt nên cao hơn giá thanh lý {{price}}",
+        "triggerLowerThanLiquidation": "Giá kích hoạt nên thấp hơn giá thanh lý {{price}}",
+        "tpTriggerInvalid": "Giá kích hoạt TP không hợp lệ và sẽ không được đặt",
+        "slTriggerInvalid": "Giá kích hoạt SL không hợp lệ và sẽ không được đặt"
       },
       "accountInfo": {
         "withdraw": "Rút tiền",
@@ -3993,7 +4034,7 @@
         "accountEquityTip": "Số dư + Lợi nhuận/lỗ chưa thực hiện (giá trị tài khoản ước tính nếu đóng tất cả các vị thế)",
         "balanceTip": "Tổng chuyển khoản ròng + Tổng lợi nhuận thực tế đã thực hiện + Tổng phí cấp vốn ròng",
         "crossAccountLeverage": "Đòn bẩy ký quỹ chéo giữa các tài khoản",
-        "crossMarginRatioTips": "Ký quỹ duy trì / Giá trị danh mục đầu tư. Các vị thế ký quỹ chéo của bạn sẽ bị thanh lý nếu Tỷ lệ ký quỹ đạt 100%.",
+        "crossMarginRatioTips": "Ký quỹ duy trì / Số dư ký quỹ. Các vị thế ký quỹ chéo của bạn sẽ bị thanh lý nếu Tỷ lệ ký quỹ đạt 100%.",
         "unrealizedPnl": "Lợi nhuận và lỗ chưa thực hiện",
         "crossAccountLeverageTips": "Đòn bẩy ký quỹ chéo = Tổng giá trị vị thế ký quỹ chéo / Giá trị tài khoản ký quỹ chéo.",
         "available": "Có sẵn:",
@@ -4005,7 +4046,22 @@
         "unifiedAccountLeverageTips": "Đòn bẩy Tài khoản Thống nhất = Tổng giá trị vị thế Cross / Tổng số dư ký quỹ.",
         "perpsMaintenanceMargin": "Ký quỹ Duy trì Perps",
         "perpsPortfolioValue": "Giá trị danh mục Perps",
-        "perpsUnrealizedPnl": "PNL chưa thực hiện của Perps"
+        "perpsUnrealizedPnl": "PNL chưa thực hiện của Perps",
+        "perpsAccountSummary": "Tổng quan tài khoản Perps",
+        "portfolioMarginSummary": "Tổng quan Portfolio Margin",
+        "portfolioMarginRatio": "Tỷ lệ Portfolio Margin",
+        "portfolioMarginRatioTips": "Ký quỹ duy trì / Giá trị danh mục đã điều chỉnh theo LTV. Khi giá trị lớn hơn 95%, danh mục đầu tư của bạn có thể bị thanh lý.",
+        "marginBalance": "Số dư ký quỹ",
+        "marginBalanceTips": "Số dư ký quỹ = Số dư ví + PNL chưa thực hiện. Các vị thế của bạn sẽ bị thanh lý khi Số dư ký quỹ <= Ký quỹ duy trì.",
+        "totalCollateralBalance": "Tổng số dư tài sản thế chấp",
+        "totalCollateralBalanceTips": "Tổng giá trị tài sản thế chấp đảm bảo cho tài khoản thống nhất của bạn.",
+        "ltvAdjustedPortfolioValue": "Giá trị danh mục đã điều chỉnh theo LTV",
+        "ltvAdjustedPortfolioValueTips": "Tổng giá trị danh mục sau khi áp dụng mức chiết khấu LTV cho từng tài sản; phải luôn cao hơn yêu cầu ký quỹ duy trì.",
+        "borrowCapUsed": "Hạn mức vay đã sử dụng",
+        "borrowCapUsedTips": "Khi giá trị này đạt 100%, tài sản thế chấp bổ sung sẽ không còn đóng góp vào ký quỹ danh mục",
+        "portfolioValue": "Giá trị danh mục",
+        "portfolioValueUnifiedTips": "Giá trị danh mục bao gồm giá trị tài sản giao ngay trong Tài khoản Thống nhất của bạn.",
+        "portfolioValuePortfolioMarginTips": "Giá trị danh mục bao gồm giá trị tài sản giao ngay trong tài khoản Portfolio Margin của bạn."
       },
       "accountActions": {
         "available": "Có sẵn",
@@ -4018,6 +4074,8 @@
       "orderBook": {
         "viewBoth": "Cả hai",
         "amount": "Số lượng",
+        "size": "Khối lượng",
+        "sum": "Tổng",
         "time": "Thời gian",
         "title": "Sổ lệnh",
         "total": "Tổng cộng",
@@ -4026,14 +4084,21 @@
         "noTrades": "Chưa có giao dịch",
         "markPrice": "Giá tham chiếu",
         "trades": "Giao dịch",
-        "viewAsks": "Giá bán"
+        "viewAsks": "Giá bán",
+        "avgPrice": "Giá TB",
+        "sumBase": "Tổng {{base}}",
+        "sumUsd": "Tổng USD"
       },
       "editMargin": {
         "longLiquidationTips": "Giảm {{percent}} sẽ kích hoạt việc thanh lý",
         "currentPosition": "Vị trí hiện tại",
         "configureMargin": "Cấu hình Biên độ",
         "shortLiquidationTips": "Đi lên {{percent}} sẽ kích hoạt thanh lý",
-        "title": "Quản lý Margin"
+        "title": "Quản lý Margin",
+        "currentPrice": "Giá Hiện Tại"
+      },
+      "topBar": {
+        "favoriteEmpty": "Danh sách yêu thích của bạn trống"
       }
     },
     "perpsDetail": {
@@ -4518,7 +4583,7 @@
       "slippageTolerance": "Chênh lệch giá cho phép",
       "singleTransactionGasLimit": "Gas Limit giao dịch đơn",
       "startConvert": "Bắt đầu chuyển đổi",
-      "unsupportedWalletType": "Chỉ hỗ trợ địa chỉ từ private key và seed phrase.",
+      "unsupportedWalletType": "Loại địa chỉ này không được hỗ trợ",
       "stop": "Dừng",
       "selectLowValueTokens": "Chọn Token giá trị thấp",
       "tokenColumn": "Token",
@@ -4531,7 +4596,13 @@
       "moreChains": "+{{count}} chuỗi",
       "swapFailed": "Hoán đổi thất bại, {{reason}}",
       "completedTips": "Hoán đổi đang diễn ra sẽ tiếp tục xử lý",
-      "priceImpact": "Giới hạn Biến động Giá"
+      "priceImpact": "Giới hạn Biến động Giá",
+      "LedgerBtn": {
+        "start": "Bắt đầu với Ledger",
+        "confirm": "Vui lòng xác nhận với Ledger",
+        "continue": "Tiếp tục",
+        "send": "Đang gửi yêu cầu ký"
+      }
     },
     "staking": {
       "title": "Staking",
@@ -4926,7 +4997,7 @@
     },
     "DesktopSelectAccountList": {
       "addAddresses": "Thêm địa chỉ",
-      "smallSwapDisabledTips": "Hiện tại chỉ hỗ trợ địa chỉ từ private key và seed phrase."
+      "smallSwapDisabledTips": "Loại địa chỉ này không được hỗ trợ"
     },
     "LpTokenTag": {
       "title": "Đây là một token nhà cung cấp thanh khoản (LP)",
@@ -4942,6 +5013,16 @@
     "UnknownTag": {
       "label": "Không xác định",
       "tooltip": "Token không xác định, vui lòng tự nghiên cứu."
+    },
+    "screenshotModal": {
+      "title": "Ảnh chụp màn hình để phản hồi",
+      "placeholder": "Mô tả vấn đề",
+      "placeholderRequired": "Mô tả vấn đề (bắt buộc)"
+    },
+    "feedbackPopup": {
+      "title": "Phản hồi từ Hỗ trợ Rabby",
+      "issueReported": "Đây là vấn đề bạn đã báo cáo:",
+      "issueReplied": "Hỗ trợ Rabby đã trả lời:"
     }
   },
   "global": {
@@ -4980,7 +5061,8 @@
     "proceedButton": "Tiến hành",
     "appDescription": "Ví dụ ví của bạn cho Ethereum và EVM",
     "collapse": "Thu gọn",
-    "Yes": "Có"
+    "Yes": "Có",
+    "Submit": "Gửi"
   },
   "background": {
     "error": {
@@ -5027,6 +5109,9 @@
         "actionCancel": "Thao tác đã được hủy",
         "deviceNeedsWebHIDPermission": "Không tìm thấy thiết bị hoặc cần quyền WebHID"
       }
+    },
+    "feedback": {
+      "screenshotContextMenuTitle": "Ảnh chụp màn hình để phản hồi"
     }
   },
   "constant": {

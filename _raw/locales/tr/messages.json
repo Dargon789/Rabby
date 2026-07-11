@@ -4,7 +4,9 @@
       "title": "İşlemler",
       "empty": {
         "title": "İşlem yok",
-        "desc": "<1>Desteklenen zincirlerde</1> işlem bulunamadı"
+        "desc": "<1>Desteklenen zincirlerde</1> işlem bulunamadı",
+        "noTxInThreeMonth": "Son 90 günde işlem geçmişi yok",
+        "descThreeMonths": "<2>Desteklenen zincirlerde</2> son 90 günde işlem geçmişi yok"
       },
       "explain": {
         "approve": "{{project}} için {{amount}} {{symbol}} onayla",
@@ -1323,7 +1325,8 @@
           "perpsFloatWidget": "Perps Kayan Widget'ı",
           "biometricUnlockHint": "Bu cihazda açmak için biyometrik verileri kullanın.",
           "currency": "Para Birimi",
-          "searchCurrency": "Para birimi ara"
+          "searchCurrency": "Para birimi ara",
+          "dataAnalysis": "Veri Analizi"
         },
         "aboutUs": "Hakkımızda",
         "currentVersion": "Mevcut Sürüm",
@@ -1629,16 +1632,18 @@
         "createdSuccessfully": "Başarıyla oluşturuldu",
         "verifySeedPhrase": "Seed Phrase'i Doğrula",
         "fillInTheBackupSeedPhraseInOrder": "Yedek Seed Phrase'i sırayla doldurun",
-        "wordPhrase": "Bir <1>{{count}}</1>-kelimelik diziye sahibim",
+        "wordPhrase": "Seed phrase'im <1>{{count}}</1> kelimeden oluşuyor",
+        "wordPhraseSelected": "Seed phrase'im <1>{{count}} kelimeden</1> oluşuyor",
         "clearAll": "Hepsini Temizle",
-        "slip39SeedPhrase": "Bir <0>{{SLIP39}}</0> Seed Phrase'im var",
+        "slip39SeedPhrase": "Seed phrase'im <1>{{SLIP39}}</1>",
         "slip39SeedPhrasePlaceholder_other": "Buraya {{count}}. tohum ifadesi paylaşımlarınızı girin",
         "inputInvalidCount_other": "{{count}} girdi Seed Phrase normlarına uymuyor, lütfen kontrol edin.",
         "invalidContent": "Geçersiz içerik",
         "slip39SeedPhrasePlaceholder_one": "{{count}}. anahtar kelime payınızı buraya girin",
         "pastedAndClear": "Yapıştırıldı ve panoya alınanlar temizlendi",
-        "wordPhraseAndPassphrase": "Bir Passphrase ile <1>{{count}}</1> kelimelik bir ifadeye sahibim",
-        "slip39SeedPhraseWithPassphrase": "Parolalı bir <0>{{SLIP39}}</0> Seed Phrase'im var",
+        "wordPhraseAndPassphrase": "Seed phrase'im parolalı <1>{{count}}</1> kelimeden oluşuyor",
+        "wordPhraseAndPassphraseSelected": "Seed phrase'im parolalı <1>{{count}} kelimeden</1> oluşuyor",
+        "slip39SeedPhraseWithPassphrase": "Seed phrase'im parolalı <1>{{SLIP39}}</1>",
         "slip39SeedPhrasePlaceholder_two": "{{count}}nci tohum ifadesi payınızı buraya girin",
         "slip39SeedPhrasePlaceholder_few": "{{count}}. tohum cümlesi paylarınızı buraya girin",
         "passphrase": "Parola cümlesi",
@@ -3540,6 +3545,9 @@
       "fundingPayments": "Finansman Ödemeleri",
       "stopLossTipsShort": "Zarar durdurma fiyatı mevcut fiyattan yüksek olmalıdır.",
       "estimatedLiquidationPrice": "Tahmini Likidasyon Fiyatı",
+      "expectedSlippage": "Tahmini Kayma",
+      "lowLiquiditySwitchLimit": " Düşük likidite, Limit emrine geçin.",
+      "switchToLimit": "Geç",
       "direction": "Pozisyon Yönü",
       "openInterest": "Açık Pozisyonlar",
       "directDeposit": "Doğrudan Yatırma",
@@ -3670,7 +3678,15 @@
       },
       "transferToSpot": "Spot'a Aktar",
       "transferToPerps": "Perps'e Aktar",
-      "selectChainToWithdraw": "Çekmek İçin Zincir Seç"
+      "selectChainToWithdraw": "Çekmek İçin Zincir Seç",
+      "perpsWidgetGuide": {
+        "title": "PNL'iniz her zaman görünür",
+        "bulletViewPositions": "Herhangi bir web sayfasında en önemli pozisyonlarınızı takip edin.",
+        "bulletPrices": "Piyasa verilerini ve PNL'yi görüntülemek için üzerine gelin.",
+        "bulletToggle": "İstediğiniz zaman açıp kapatın.",
+        "later": "Şimdi değil",
+        "open": "Widget'ı etkinleştir"
+      }
     },
     "perpsPro": {
       "chatArea": {
@@ -3775,7 +3791,15 @@
           "confirmCloseAllTitle": "Tüm Pozisyonları Kapatmayı Onayla",
           "marketCloseBtn": "Piyasa Kapatma",
           "marketCloseDesc": "Bu, pozisyonu hemen kapatmayı deneyecektir.",
-          "confirmCloseAllDesc": "Tüm açık pozisyonlar piyasa fiyatından kapatılacak ve tüm emirler iptal edilecektir."
+          "confirmCloseAllDesc": "Tüm açık pozisyonlar piyasa fiyatından kapatılacak ve tüm emirler iptal edilecektir.",
+          "positionSize": "Pozisyon Büyüklüğü",
+          "orderPrice": "Emir Fiyatı",
+          "marketPrice": "Piyasa Fiyatı",
+          "buy": "Al",
+          "sell": "Sat",
+          "buyToSell": "Satmak için al",
+          "sellToBuy": "Satın almak için sat",
+          "reverseAction": "{{side}} {{size}} {{coin}} Tersine Çevir"
         },
         "openOrders": {
           "time": "Zaman",
@@ -3830,6 +3854,14 @@
           "transferToPerps": "Perps'e Aktar",
           "usdcSpot": "USDC(Spot)",
           "usdcPerps": "USDC(Perps)"
+        },
+        "floatingWidget": {
+          "label": "Kayan Widget",
+          "tooltip": "· Hesabınızın PnL'sini diğer sayfalara göz atarken bir kayan widget'ta gösterin.\n· İşlem sayfasında ve Hyperliquid'de gizlidir.",
+          "enabledToastTitle": "Kayan widget etkinleştirildi",
+          "enabledToastDescription": "Diğer sayfalara göz atarken görünecektir.",
+          "disabledToastTitle": "Kayan widget devre dışı bırakıldı",
+          "updateFailed": "Ayar güncellenemedi"
         }
       },
       "statusBar": {
@@ -3984,7 +4016,16 @@
         "tp": "Kâr Al",
         "cancelTp": "Kâr Al Emrini İptal Et",
         "takeProfitExpectedPnl": "Kâr Al, Beklenen PnL",
-        "cancelSl": "Stop-Loss'u İptal Et"
+        "cancelSl": "Stop-Loss'u İptal Et",
+        "entryCurrentPrice": "Giriş Fiyatı / Güncel Fiyat",
+        "takeProfit": "Kâr Al",
+        "stopLoss": "Zarar Durdur",
+        "triggerPrice": "Tetikleme Fiyatı",
+        "estimatedPnlWillBe": "Tahmini PnL'niz olacak",
+        "triggerHigherThanLiquidation": "Tetikleme fiyatı, likidasyon fiyatı {{price}}'den yüksek olmalıdır",
+        "triggerLowerThanLiquidation": "Tetikleme fiyatı, likidasyon fiyatı {{price}}'den düşük olmalıdır",
+        "tpTriggerInvalid": "TP tetikleme fiyatı geçersizdir ve ayarlanmayacak",
+        "slTriggerInvalid": "SL tetikleme fiyatı geçersizdir ve ayarlanmayacak"
       },
       "accountInfo": {
         "totalBalance": "Toplam Bakiye",
@@ -4000,7 +4041,7 @@
         "balanceTip": "Toplam Net Transferler + Toplam Gerçekleşen Kâr + Toplam Net Finansman Ücretleri",
         "crossAccountLeverageTips": "Çapraz Hesap Kaldıraç Oranı = Toplam Çapraz Pozisyon Değeri / Çapraz Hesap Değeri",
         "accountEquity": "Hesap Özsermayesi",
-        "crossMarginRatioTips": "Bakım Marjı / Portföy Değeri. Çapraz pozisyonlarınız, Marj Oranı yüzde 100'e ulaştığında tasfiye edilecektir.",
+        "crossMarginRatioTips": "Bakım Marjı / Marj Bakiyesi. Çapraz pozisyonlarınız, Marj Oranı yüzde 100'e ulaştığında tasfiye edilecektir.",
         "accountEquityTip": "Bakiye + Gerçekleşmemiş Kâr/Zarar (tüm pozisyonlar kapatıldığında yaklaşık hesap değeri)",
         "available": "Mevcut:",
         "accountSummary": "Hesap Özeti",
@@ -4011,7 +4052,22 @@
         "unifiedAccountLeverageTips": "Birleşik Hesap Kaldıraç = Toplam Çapraz Pozisyon Değeri / Toplam Teminat Bakiyesi.",
         "perpsMaintenanceMargin": "Perps Bakım Marjı",
         "perpsPortfolioValue": "Perps Portföy Değeri",
-        "perpsUnrealizedPnl": "Perps Gerçekleşmemiş K/Z"
+        "perpsUnrealizedPnl": "Perps Gerçekleşmemiş K/Z",
+        "perpsAccountSummary": "Perps Hesap Özeti",
+        "portfolioMarginSummary": "Portföy Marjı Özeti",
+        "portfolioMarginRatio": "Portföy Marjı Oranı",
+        "portfolioMarginRatioTips": "Bakım Marjı / LTV ayarlı Portföy Değeri. Değer %95'ten büyük olduğunda, portföyünüz tasfiye edilebilir.",
+        "marginBalance": "Marj Bakiyesi",
+        "marginBalanceTips": "Marj Bakiyesi = Cüzdan Bakiyesi + Gerçekleşmemiş PNL. Marj Bakiyesi <= Bakım Marjı olduğunda pozisyonlarınız tasfiye edilecektir.",
+        "totalCollateralBalance": "Toplam Teminat Bakiyesi",
+        "totalCollateralBalanceTips": "Birleşik hesabınızı destekleyen teminatın toplam değeri.",
+        "ltvAdjustedPortfolioValue": "LTV ayarlı Portföy Değeri",
+        "ltvAdjustedPortfolioValueTips": "Her varlığın LTV indirimi uygulandıktan sonraki toplam portföy değeri; bakım gereksiniminin üzerinde kalmalıdır.",
+        "borrowCapUsed": "Kullanılan Borçlanma Limiti",
+        "borrowCapUsedTips": "Bu değer %100 olduğunda, ek teminat portföy marjına katkıda bulunmayacaktır",
+        "portfolioValue": "Portföy Değeri",
+        "portfolioValueUnifiedTips": "Portföy Değeri, Birleşik Hesabınızdaki spot varlıkların değerini içerir.",
+        "portfolioValuePortfolioMarginTips": "Portföy Değeri, Portföy Marjı Hesabınızdaki spot varlıkların değerini içerir."
       },
       "accountActions": {
         "pending": "Beklemede",
@@ -4029,17 +4085,26 @@
         "markPrice": "İşaret Fiyatı",
         "title": "Emir Defteri",
         "amount": "Miktar",
+        "size": "Boyut",
+        "sum": "Toplam",
         "trades": "İşlemler",
         "viewBoth": "İkisi de",
         "viewAsks": "Satış Teklifleri",
-        "viewBids": "Alım Emirleri"
+        "viewBids": "Alım Emirleri",
+        "avgPrice": "Ortalama Fiyat",
+        "sumBase": "{{base}} Toplam",
+        "sumUsd": "USD Toplam"
       },
       "editMargin": {
         "title": "Marjini Yönetimi",
         "shortLiquidationTips": "Yükselme {{percent}} likidasyonu tetikleyecektir.",
         "configureMargin": "Marjin Ayarla",
         "longLiquidationTips": "{{percent}} düşmek tasfiye işlemini tetikleyecektir.",
-        "currentPosition": "Mevcut Pozisyon"
+        "currentPosition": "Mevcut Pozisyon",
+        "currentPrice": "Mevcut Fiyat"
+      },
+      "topBar": {
+        "favoriteEmpty": "Favori listeniz boş"
       }
     },
     "perpsDetail": {
@@ -4524,7 +4589,7 @@
       "slippageTolerance": "Kayma toleransı",
       "singleTransactionGasLimit": "Tek İşlem Gas Limit",
       "startConvert": "Dönüştürmeyi başlat",
-      "unsupportedWalletType": "Yalnızca özel anahtar ve kurtarma cümlesi adresleri desteklenir.",
+      "unsupportedWalletType": "Bu adres türü desteklenmiyor",
       "stop": "Durdur",
       "selectLowValueTokens": "Düşük Değerli Tokenları Seç",
       "tokenColumn": "Token",
@@ -4537,7 +4602,13 @@
       "moreChains": "+{{count}} zincir",
       "swapFailed": "Swap başarısız oldu, {{reason}}",
       "completedTips": "Devam eden swap işlemi işlenmeye devam edecek",
-      "priceImpact": "Fiyat Etkisi Üst Limiti"
+      "priceImpact": "Fiyat Etkisi Üst Limiti",
+      "LedgerBtn": {
+        "start": "Ledger ile Başla",
+        "confirm": "Lütfen Ledger ile onaylayın",
+        "continue": "Devam",
+        "send": "İmza isteği gönderiliyor"
+      }
     },
     "staking": {
       "title": "Staking",
@@ -4932,7 +5003,7 @@
     },
     "DesktopSelectAccountList": {
       "addAddresses": "Adres ekle",
-      "smallSwapDisabledTips": "Şu anda yalnızca özel anahtar ve kurtarma ifadesi adresleri desteklenmektedir."
+      "smallSwapDisabledTips": "Bu adres türü desteklenmiyor"
     },
     "LpTokenTag": {
       "title": "Bu bir likidite sağlayıcı (LP) tokenıdır.",
@@ -4948,6 +5019,16 @@
     "UnknownTag": {
       "label": "Bilinmeyen",
       "tooltip": "Bilinmeyen token, lütfen kendi araştırmanızı yapın."
+    },
+    "screenshotModal": {
+      "title": "Geri bildirim için ekran görüntüsü",
+      "placeholder": "Sorunu açıklayın",
+      "placeholderRequired": "Sorunu açıklayın (gerekli)"
+    },
+    "feedbackPopup": {
+      "title": "Rabby Destek'ten Yanıt",
+      "issueReported": "İşte bildirdiğiniz sorun:",
+      "issueReplied": "Rabby Destek yanıtladı:"
     }
   },
   "global": {
@@ -4986,7 +5067,8 @@
     "tryAgain": "Tekrar Dene",
     "appDescription": "Ethereum ve EVM için gideceğiniz cüzdan.",
     "collapse": "Daralt",
-    "Yes": "Evet"
+    "Yes": "Evet",
+    "Submit": "Gönder"
   },
   "background": {
     "error": {
@@ -5033,6 +5115,9 @@
         "actionCancel": "İşlem iptal edildi",
         "deviceNeedsWebHIDPermission": "Cihaz bulunamadı veya WebHID izni gerekiyor"
       }
+    },
+    "feedback": {
+      "screenshotContextMenuTitle": "Geri bildirim için ekran görüntüsü"
     }
   },
   "constant": {

@@ -24,7 +24,11 @@ import { GnosisQueueModal } from './components/GnosisQueueModal';
 import { ApprovalsTabPane } from './components/ApprovalsTabPane';
 import { AddressDetailModal } from './components/AddressDetailModal';
 import { AddressBackupModal } from './components/AddressBackupModal';
-import { RcIconBackTopCC } from '@/ui/assets/desktop/profile';
+import {
+  RcIconBackTopCC,
+  RcIconQueueCC,
+  RcIconSpinCC,
+} from '@/ui/assets/desktop/profile';
 import TopShortcut, {
   PORTFOLIO_LIST_ID,
   TOP_SHORTCUT_SLOT_ID,
@@ -70,6 +74,11 @@ export const DesktopProfile: React.FC<{
 }> = ({ isActive = true, style }) => {
   const { t } = useTranslation();
   const currentAccount = useCurrentAccount();
+
+  const isGnosis = useMemo(
+    () => currentAccount?.type === KEYRING_TYPE.GnosisKeyring,
+    [currentAccount?.type]
+  );
 
   const history = useHistory();
   const location = useLocation();
@@ -250,6 +259,25 @@ export const DesktopProfile: React.FC<{
                       right: (
                         <>
                           <div className="flex items-center gap-[16px] pr-[20px]">
+                            {isGnosis ? (
+                              <div
+                                className={clsx(
+                                  'min-w-[88px] h-[32px] px-[10px] rounded-[8px]',
+                                  'flex items-center justify-center gap-[4px] cursor-pointer',
+                                  'text-rb-brand-default text-[14px] leading-[16px] font-medium',
+                                  'border-[0.5px] border-solid border-rb-brand-default',
+                                  'hover:bg-r-blue-light-1'
+                                )}
+                                onClick={() => {
+                                  history.replace(
+                                    `${history.location.pathname}?action=gnosis-queue`
+                                  );
+                                }}
+                              >
+                                <RcIconQueueCC />
+                                {t('page.desktopProfile.button.queue')}
+                              </div>
+                            ) : null}
                             <DesktopPending />
                             <DesktopChainSelector
                               value={chain}
@@ -355,13 +383,11 @@ export const DesktopProfile: React.FC<{
           </div>
         </div>
         <aside
-          className={clsx(
-            'flex-shrink-0 sticky z-20 top-0 h-full flex flex-col'
-          )}
+          className={clsx('shrink-0 sticky z-20 top-0 h-full flex flex-col')}
           // style={{ top: DESKTOP_NAV_HEIGHT }}
         >
           {/* <div
-            className="flex items-center justify-end flex-shrink-0"
+            className="flex items-center justify-end shrink-0"
             style={{ height: `${DESKTOP_NAV_HEIGHT}px` }}
           >
             <SwitchThemeBtn />
