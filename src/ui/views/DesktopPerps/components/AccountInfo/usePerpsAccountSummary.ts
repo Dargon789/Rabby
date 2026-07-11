@@ -97,13 +97,13 @@ export const usePerpsAccountSummary = (): AccountSummary => {
     if (isPortfolioMargin) {
       const ratio = computePortfolioMarginRatio(spotState);
       const ltvAdjusted = computeLtvAdjustedPortfolioValue(
-        spotState.balances,
+        spotState?.balances || [],
         spotAssetCtxs,
         spotMeta
       );
       const borrowCapUsed = computeBorrowCapUsed(spotState);
       const portfolioValue = computeSpotPortfolioValue(
-        spotState.balances,
+        spotState?.balances || [],
         spotAssetCtxs,
         spotMeta
       );
