@@ -408,7 +408,7 @@ const MAX_UNSIGNED_256_INT = new BigNumber(2).pow(256).minus(1).toString(10);
 
 const gnosisPQueue = new PQueue({
   interval: 1000,
-  intervalCap: 5,
+  intervalCap: 10,
   carryoverConcurrencyCount: false,
   concurrency: 2,
 });
@@ -447,6 +447,10 @@ export class WalletController extends BaseController {
   setWhitelist = async (password: string, addresses: string[]) => {
     await this.verifyPassword(password);
     whitelistService.setWhitelist(addresses);
+  };
+
+  updateWhitelistOrder = async (addresses: string[]) => {
+    whitelistService.updateWhitelistOrder(addresses);
   };
 
   addWhitelist = async (password: string, address: string) => {
@@ -4777,6 +4781,13 @@ export class WalletController extends BaseController {
 
     if (needUnlock) {
       await keyring?.unlock?.();
+      if (
+        !isNew &&
+        type === KEYRING_CLASS.HARDWARE.GRIDPLUS &&
+        keyring?.consumePairingCredsRefreshed?.()
+      ) {
+        await keyringService.persistAllKeyrings();
+      }
     }
 
     return stashKeyringId;
