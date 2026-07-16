@@ -6,6 +6,7 @@ import {
   SpotClearinghouseState,
   USDC_TOKEN_ID,
   UserAbstractionResp,
+  PerpDexsResponse,
 } from '@rabby-wallet/hyperliquid-sdk';
 import { perpsToast } from './components/PerpsToast';
 import i18n from '@/i18n';
@@ -23,7 +24,21 @@ import {
   HYPE_USDC_TOKEN_ID,
   HYPE_USDC_TOKEN_ITEM,
   HYPE_USDC_TOKEN_SERVER_CHAIN,
+  COLLATERAL_TOKEN_TO_QUOTE,
 } from '../Perps/constants';
+
+export interface SpotBalance {
+  coin: string;
+  token: number;
+  total: string;
+  hold: string;
+  available: string;
+  // Portfolio-margin per-token fields (present for PM accounts on eligible collateral)
+  ltv?: string;
+  borrowed?: string;
+  supplied?: string;
+  spotHold?: string;
+}
 
 export const getPositionDirection = (
   position: PositionAndOpenOrder['position']
@@ -200,11 +215,30 @@ export const handleDisplayFundingPayments = (fundingPayments: string) => {
 };
 
 export const formatPerpsCoin = (coin: string) => {
+  if (coin === '@150') {
+    return 'USDE';
+  }
+  if (coin === '@166') {
+    return 'USDT';
+  }
+  if (coin === '@230') {
+    return 'USDH';
+  }
+
   if (coin.includes(':')) {
     // is hip-3 coin
     return coin.split(':')[1];
   } else {
     return coin;
+  }
+};
+
+export const formatPerpsDexName = (coin: string) => {
+  if (coin.includes(':')) {
+    // is hip-3 coin
+    return coin.split(':')[0];
+  } else {
+    return '';
   }
 };
 
@@ -282,52 +316,74 @@ export const formatPerpsOrderStatus = (record: UserHistoricalOrders) => {
   };
 };
 
+// Cache the perp dex list at module scope. The dex list is global (not user-
+// scoped) and changes very rarely, so a one-shot fetch reused across callers
+// is safe. `perpDexsPromise` dedupes concurrent first-time fetches.
+let perpDexsCache: PerpDexsResponse | null = null;
+let perpDexsPromise: Promise<PerpDexsResponse> | null = null;
+
+export const getCachedPerpDexs = async (
+  sdk: ReturnType<typeof getPerpsSDK>
+): Promise<PerpDexsResponse> => {
+  if (perpDexsCache) {
+    return perpDexsCache;
+  }
+  if (!perpDexsPromise) {
+    perpDexsPromise = sdk.info
+      .getPerpDexs()
+      .then((res) => {
+        perpDexsCache = res;
+        return res;
+      })
+      .finally(() => {
+        perpDexsPromise = null;
+      });
+  }
+  return perpDexsPromise;
+};
+
+// Fetch raw per-dex ClearinghouseState for every known dex in parallel.
+// perpDexs[0] is null = the main hyperliquid dex (dexId='' by convention,
+// matching `formatMarkData`/`AccountInfo` lookups). Order is preserved so
+// `formatAllDexsClearinghouseState` can take index 0 as canonical.
+export const fetchAllDexsRaw = async (
+  address: string
+): Promise<[string, ClearinghouseState][]> => {
+  const sdk = getPerpsSDK();
+  const perpDexs = await getCachedPerpDexs(sdk);
+  return Promise.all(
+    perpDexs.map(
+      async (dex): Promise<[string, ClearinghouseState]> => {
+        const name = dex?.name ?? '';
+        const res = await sdk.info.getClearingHouseState(
+          address,
+          name || undefined
+        );
+        return [name, res];
+      }
+    )
+  );
+};
+
 export const getCustomClearinghouseState = async (address: string) => {
   const sdk = getPerpsSDK();
-  const getDefault = async () => {
-    const res = await sdk.info.getClearingHouseState(address);
-    return res;
-  };
-  const getXYX = async () => {
-    const res = await sdk.info.getClearingHouseState(address, 'xyz');
-    return res;
-  };
-  const [defaultRes, xyzRes] = await Promise.all([getDefault(), getXYX()]);
+  const allStates = await fetchAllDexsRaw(address);
+  const aggregated = formatAllDexsClearinghouseState(allStates);
+  if (!aggregated) {
+    return null;
+  }
 
-  let withdrawable = defaultRes.withdrawable;
-  if (Number(defaultRes.withdrawable) === 0) {
+  // Unified-account fallback: when no perp withdrawable, fall back to spot
+  // availableToTrade so the selector shows a meaningful balance.
+  if (Number(aggregated.withdrawable) < 1) {
     const userAbstraction = await sdk.info.getUserAbstraction(address);
     if (userAbstraction === UserAbstractionResp.unifiedAccount) {
       const spotState = await sdk.info.getSpotClearingHouseState(address);
-      withdrawable = formatSpotState(spotState).availableToTrade;
+      aggregated.withdrawable = formatSpotState(spotState).availableToTrade;
     }
   }
 
-  return {
-    assetPositions: [...defaultRes.assetPositions, ...xyzRes.assetPositions],
-    crossMaintenanceMarginUsed: new BigNumber(
-      defaultRes.crossMaintenanceMarginUsed
-    )
-      .plus(xyzRes.crossMaintenanceMarginUsed)
-      .toString(),
-    crossMarginSummary: defaultRes.crossMarginSummary,
-    marginSummary: {
-      accountValue: new BigNumber(defaultRes.marginSummary.accountValue)
-        .plus(xyzRes.marginSummary.accountValue)
-        .toString(),
-      totalMarginUsed: new BigNumber(defaultRes.marginSummary.totalMarginUsed)
-        .plus(xyzRes.marginSummary.totalMarginUsed)
-        .toString(),
-      totalNtlPos: new BigNumber(defaultRes.marginSummary.totalNtlPos)
-        .plus(xyzRes.marginSummary.totalNtlPos)
-        .toString(),
-      totalRawUsd: new BigNumber(defaultRes.marginSummary.totalRawUsd)
-        .plus(xyzRes.marginSummary.totalRawUsd)
-        .toString(),
-    },
-    time: defaultRes.time,
-    withdrawable: withdrawable,
-  } as ClearinghouseState;
+  return aggregated as ClearinghouseState;
 };
 
 export const sortTokenList = (
@@ -377,9 +433,28 @@ const calcAccountValueByAllDexs = (
   }, 0);
 };
 
+// Cross-margin equity summed across all dexes (mirrors calcAccountValueByAllDexs
+// for marginSummary). Used as the Cross Margin Ratio denominator so it shares the
+// all-dex scope of the already-aggregated crossMaintenanceMarginUsed numerator.
+const calcCrossAccountValueByAllDexs = (
+  allClearinghouseState: [string, ClearinghouseState][]
+) => {
+  return allClearinghouseState.reduce((acc, item) => {
+    return acc + Number(item[1]?.crossMarginSummary?.accountValue || 0);
+  }, 0);
+};
+
+/**
+ * the official ratio buckets it by collateral token, so we keep a flat
+ * `crossMaintByDex` map (dex name → that dex's `crossMaintenanceMarginUsed`)
+ */
+export type AggregatedClearinghouseState = ClearinghouseState & {
+  crossMaintByDex?: Record<string, string>;
+};
+
 export const formatAllDexsClearinghouseState = (
   allClearinghouseState: [string, ClearinghouseState][]
-): ClearinghouseState | null => {
+): AggregatedClearinghouseState | null => {
   if (!allClearinghouseState || !allClearinghouseState[0]) {
     return null;
   }
@@ -393,43 +468,122 @@ export const formatAllDexsClearinghouseState = (
     return acc + Number(item[1]?.withdrawable || 0);
   }, 0);
 
+  const crossMaintByDex: Record<string, string> = {};
+  let crossMaintenanceMarginUsed = 0;
+  for (const [dexName, state] of allClearinghouseState) {
+    if (!state) continue;
+    crossMaintByDex[dexName] = state.crossMaintenanceMarginUsed;
+    crossMaintenanceMarginUsed += Number(state.crossMaintenanceMarginUsed || 0);
+  }
+
   return {
     assetPositions: assetPositions,
-    crossMaintenanceMarginUsed:
-      hyperDexState?.crossMaintenanceMarginUsed || '0',
-    crossMarginSummary: hyperDexState?.crossMarginSummary || {},
+    crossMaintenanceMarginUsed: crossMaintenanceMarginUsed.toString(),
+    crossMaintByDex,
+    crossMarginSummary: {
+      ...(hyperDexState?.crossMarginSummary || {}),
+      // Aggregate cross equity across all dexes (matches HL's kRZ) so the Cross
+      // Margin Ratio / Margin Balance use the all-dex scope, consistent with the
+      // aggregated crossMaintenanceMarginUsed. Single-dex accounts are unchanged.
+      accountValue: calcCrossAccountValueByAllDexs(
+        allClearinghouseState
+      ).toString(),
+    },
     marginSummary: {
       ...hyperDexState.marginSummary,
       accountValue: calcAccountValueByAllDexs(allClearinghouseState).toString(),
     },
-    time: hyperDexState?.time || 0,
+    // Max across dexes (not just hyper) so a single-dex HTTP refresh on a
+    // non-hyper dex still advances aggregate time and passes the time guards.
+    time: Math.max(...allClearinghouseState.map(([, s]) => s?.time ?? 0), 0),
     withdrawable: withdrawable.toString(),
   };
 };
 
 export const formatSpotState = (spotState: SpotClearinghouseState) => {
+  // `tokenToAvailableAfterMaintenance` is the server-computed net free
+  // collateral per token (after LTV weighting and existing-position MM).
+  const tokenToAvailableAfterMaintenance = Array.isArray(
+    spotState?.tokenToAvailableAfterMaintenance
+  )
+    ? spotState.tokenToAvailableAfterMaintenance ?? null
+    : null;
+
+  // Portfolio-margin account-level fields (server-computed; present only for PM
+  // accounts). Surfaced raw so AccountInfo can read the PM ratio / borrow ratio
+  // verbatim, exactly as the Hyperliquid frontend does.
+  const portfolioMarginEnabled = spotState?.portfolioMarginEnabled;
+  const portfolioMarginRatio = spotState?.portfolioMarginRatio;
+  const tokenToPortfolioBorrowRatio = Array.isArray(
+    spotState?.tokenToPortfolioBorrowRatio
+  )
+    ? spotState.tokenToPortfolioBorrowRatio
+    : undefined;
+
   if (!spotState || !spotState.balances || spotState.balances.length === 0) {
     return {
       accountValue: '0',
       availableToTrade: '0',
+      balances: [] as SpotBalance[],
+      balancesMap: {} as Record<string, SpotBalance>,
+      tokenToAvailableAfterMaintenance,
+      portfolioMarginEnabled,
+      portfolioMarginRatio,
+      tokenToPortfolioBorrowRatio,
     };
   }
-  const availableToTrade = new BigNumber(
-    spotState.balances?.[0]?.total || '0'
-  ).minus(spotState.balances?.[0]?.hold || '0');
-  return {
-    accountValue: spotState.balances?.[0]?.total || '0',
-    availableToTrade: availableToTrade.toString(),
-  };
-  // const token = spotState.balances.find((i) => i.token === USDC_TOKEN_ID);
-  // const availableToTrade = spotState.tokenToAvailableAfterMaintenance?.find(
-  //   (i) => i?.[0] === USDC_TOKEN_ID
-  // );
 
-  // return {
-  //   accountValue: token?.total || '0',
-  //   availableToTrade: availableToTrade?.[1] || '0',
-  // };
+  // Keep ALL balances (not just the 4 stablecoins): portfolio-margin pricing
+  // needs volatile collateral (HYPE/UBTC/...) too. Per-token PM fields
+  // (ltv/borrowed/supplied/spotHold) are passed through for the PM layout.
+  const balances: SpotBalance[] = spotState.balances.map((b) => {
+    const available = new BigNumber(b.total || '0')
+      .minus(b.hold || '0')
+      .toString();
+    return {
+      coin: b.coin, // Hyperliquid's quirk: USDT is returned as 'USDT0'
+      token: b.token,
+      total: b.total || '0',
+      hold: b.hold || '0',
+      available,
+      ltv: b.ltv,
+      borrowed: b.borrowed,
+      supplied: b.supplied,
+      spotHold: b.spotHold,
+    };
+  });
+
+  // accountValue / availableToTrade stay the SETTLEMENT-stablecoin sums (1:1 USD)
+  // for backward-compat with unified-account consumers. Full portfolio /
+  // collateral USD values are computed separately from fastAssetCtxs prices.
+  const STABLECOIN_TOKEN_IDS = new Set(
+    Object.keys(COLLATERAL_TOKEN_TO_QUOTE).map(Number)
+  );
+  const stableBalances = balances.filter((b) =>
+    STABLECOIN_TOKEN_IDS.has(b.token)
+  );
+  const totalAccountValue = stableBalances
+    .reduce((sum, b) => sum.plus(b.total), new BigNumber(0))
+    .toString();
+  const totalAvailable = stableBalances
+    .reduce((sum, b) => sum.plus(b.available), new BigNumber(0))
+    .toString();
+
+  const balancesMap: Record<string, SpotBalance> = {};
+  for (const b of balances) {
+    balancesMap[b.coin] = b;
+  }
+
+  return {
+    accountValue: totalAccountValue,
+    availableToTrade: totalAvailable,
+    balances,
+    balancesMap,
+    tokenToAvailableAfterMaintenance,
+    portfolioMarginEnabled,
+    portfolioMarginRatio,
+    tokenToPortfolioBorrowRatio,
+  };
 };
 
 export const getStatsReportSide = (isBuy: boolean, isReduceOnly: boolean) => {
@@ -442,4 +596,28 @@ export const getStatsReportSide = (isBuy: boolean, isReduceOnly: boolean) => {
 export const formatPerpsValueWithUsdc = (num: string | number) => {
   const string = new BigNumber(num).toFixed(2);
   return `${splitNumberByStep(string)} USDC`;
+};
+
+/**
+ * Order book / trades number formatter. Abbreviates values >= 1K with K/M/B
+ * suffixes (no currency prefix — the unit lives in the column header), and
+ * keeps a plain number below 1K. `decimals` sets the sub-1K precision
+ * (defaults to 2).
+ */
+export const formatPerpsValueKMB = (
+  value: string | number,
+  decimals = 2
+): string => {
+  const bn = new BigNumber(value);
+  const num = bn.toNumber();
+  if (num >= 1e9) {
+    return `${(num / 1e9).toFixed(2)}B`;
+  }
+  if (num >= 1e6) {
+    return `${(num / 1e6).toFixed(2)}M`;
+  }
+  if (num >= 1e3) {
+    return `${(num / 1e3).toFixed(2)}K`;
+  }
+  return splitNumberByStep(bn.toFixed(decimals));
 };

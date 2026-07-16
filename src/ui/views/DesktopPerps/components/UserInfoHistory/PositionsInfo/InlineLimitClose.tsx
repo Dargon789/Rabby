@@ -28,6 +28,7 @@ import { EVENTS } from '@/constant';
 import { useThemeMode } from '@/ui/hooks/usePreference';
 import { PerpsBlueBorderedButton } from '@/ui/views/Perps/components/BlueBorderedButton';
 import { PerpsCheckbox } from '../../TradingPanel/components/PerpsCheckbox';
+import { ThousandsNativeInput } from '../../ThousandsNativeInput';
 
 const CLOSE_PERCENTAGES = [10, 25, 50, 75, 100];
 
@@ -45,7 +46,7 @@ const MarketCloseCheckbox: React.FC<{
         setChecked(val);
         onChange(val);
       }}
-      title={<span className="text-r-neutral-foot text-[12px]">{title}</span>}
+      title={<span className="text-r-neutral-foot text-12">{title}</span>}
     />
   );
 };
@@ -76,6 +77,7 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
 
   const szDecimals = marketData.szDecimals ?? 4;
   const pxDecimals = marketData.pxDecimals ?? 2;
+  const quoteAsset = marketData.quoteAsset || 'USDC';
   const midPrice = Number(marketData.midPx || marketData.markPx || 0);
   const positionSize = Math.abs(Number(record.size || 0));
   const entryPrice = Number(record.entryPx);
@@ -83,7 +85,7 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
 
   const closeLimitCount = record.closeLimitOrders.length;
   const coinUnit =
-    sizeDisplayUnit === 'usdc' ? 'USDC' : formatPerpsCoin(record.coin);
+    sizeDisplayUnit === 'usd' ? quoteAsset : formatPerpsCoin(record.coin);
 
   const [limitPrice, setLimitPrice] = useState(
     formatTpOrSlPrice(midPrice, szDecimals)
@@ -214,6 +216,7 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
 
       await handleOpenLimitOrder({
         coin: record.coin,
+        dex: marketData.dexId ?? '',
         isBuy,
         size: effectiveSize,
         limitPx: limitPrice,
@@ -250,6 +253,7 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
       const size = new BigNumber(positionSize).toFixed(szDecimals);
       const res = await handleCloseWithMarketOrder({
         coin: record.coin,
+        dex: marketData.dexId ?? '',
         isBuy,
         size,
         midPx: String(midPrice),
@@ -307,7 +311,7 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
       ),
       content: (
         <div className="flex items-center justify-center flex-col gap-12">
-          <div className="text-[16px] font-bold text-r-neutral-title-1 text-center">
+          <div className="text-[16px] text-r-neutral-title-1 text-center">
             {t('page.perpsPro.userInfo.positionInfo.marketCloseTitle')}
           </div>
           <div className="text-[13px] leading-[16px] text-rb-neutral-foot text-center mb-[20px]">
@@ -385,7 +389,7 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
     if (!priceNum) return null;
     const pnlIsUp = estPnl >= 0;
     return (
-      <div className="text-[12px] space-y-[2px]">
+      <div className="text-12 space-y-[2px]">
         <div>Price: {splitNumberByStep(limitPrice)}</div>
         {Boolean(Number(estPnl)) && (
           <div>
@@ -409,14 +413,15 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
     const coin = formatPerpsCoin(record.coin);
     const pnlIsUp = estPnl >= 0;
     return (
-      <div className="text-[12px] space-y-[2px]">
-        {sizeDisplayUnit === 'usdc' ? (
+      <div className="text-12 space-y-[2px]">
+        {sizeDisplayUnit === 'usd' ? (
           <>
             <div>
               Position Size: {positionSize} {coin}
             </div>
             <div>
-              Qty: {sizeInput} {coin} ≈ {splitNumberByStep(notionalValue)} USDC
+              Qty: {sizeInput} {coin} ≈ {splitNumberByStep(notionalValue)}{' '}
+              {quoteAsset}
             </div>
           </>
         ) : (
@@ -455,13 +460,13 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
       <div className="space-y-[4px] px-2">
         {record.closeLimitOrders.map((order) => {
           const orderSize =
-            sizeDisplayUnit === 'usdc'
+            sizeDisplayUnit === 'usd'
               ? new BigNumber(order.sz).multipliedBy(order.limitPx).toFixed(2)
               : order.sz;
           return (
             <div
               key={order.oid}
-              className="flex items-center justify-between gap-[28px] text-[12px]"
+              className="flex items-center justify-between gap-[28px] text-12"
             >
               <span>
                 {splitNumberByStep(orderSize)} {coinUnit} to be closed @$
@@ -490,8 +495,11 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
       <div className="flex items-center gap-[6px]">
         {/* Market link */}
         <span
-          className="text-rb-brand-default cursor-pointer font-bold text-[12px] hover:text-r-neutral-title-1 transition-colors"
-          onClick={() => !marketLoading && handleMarketCloseWithConfirm()}
+          className="text-rb-brand-default cursor-pointer text-12 hover:text-r-neutral-title-1 transition-colors"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!marketLoading) handleMarketCloseWithConfirm();
+          }}
         >
           Market
         </span>
@@ -507,9 +515,10 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
         >
           <span
             className={clsx(
-              'cursor-pointer font-bold text-[12px] transition-colors text-rb-brand-default hover:text-r-neutral-title-1'
+              'cursor-pointer text-12 transition-colors text-rb-brand-default hover:text-r-neutral-title-1'
             )}
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               if (isPriceValid && sizeNum > 0 && !loading) {
                 setShowValidation(false);
                 handleSubmit();
@@ -530,10 +539,10 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
         overlayClassName="rectangle"
         title={priceTooltipContent}
       >
-        <input
+        <ThousandsNativeInput
           className={clsx(
-            'w-[68px] h-[24px] px-[6px] text-[11px] rounded-[4px] outline-none',
-            'bg-transparent text-r-neutral-title-1',
+            'w-[68px] h-[24px] px-[6px] text-[11px] rounded-[3px] outline-none',
+            'bg-transparent text-r-neutral-body',
             'border border-solid',
             !isPriceValid
               ? 'border-rb-red-default'
@@ -543,6 +552,7 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
           )}
           placeholder="Price"
           value={limitPrice}
+          onClick={(e) => e.stopPropagation()}
           onChange={(e) => {
             handlePriceChange(e);
             if (showValidation) setShowValidation(false);
@@ -575,11 +585,13 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
               {CLOSE_PERCENTAGES.map((pct) => (
                 <span
                   key={pct}
-                  className="text-13 text-rb-neutral-title-1 bg-rb-neutral-line hover:text-rb-brand-default cursor-pointer px-[11px] h-[24px] flex items-center justify-center rounded-[4px]"
+                  className="text-13 text-rb-neutral-title-1 bg-rb-neutral-line hover:text-rb-brand-default cursor-pointer px-[11px] h-[24px] flex items-center justify-center rounded-[3px]"
                   onMouseDown={(e) => {
                     e.preventDefault();
+                    e.stopPropagation();
                     handlePercentageClick(pct);
                   }}
+                  onClick={(e) => e.stopPropagation()}
                 >
                   {pct}%
                 </span>
@@ -587,11 +599,11 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
             </div>
           }
         >
-          <input
+          <ThousandsNativeInput
             ref={sizeInputRef}
             className={clsx(
-              'w-[60px] h-[24px] px-[6px] text-[11px] rounded-[4px] outline-none',
-              'bg-transparent text-r-neutral-title-1',
+              'w-[60px] h-[24px] px-[6px] text-[11px] rounded-[3px] outline-none',
+              'bg-transparent text-r-neutral-body',
               'border border-solid',
               isSizeOverMax || sizeNum <= 0
                 ? 'border-rb-red-default'
@@ -601,6 +613,7 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
             )}
             placeholder="Size"
             value={sizeInput}
+            onClick={(e) => e.stopPropagation()}
             onChange={(e) => {
               handleSizeChange(e);
               if (showValidation) setShowValidation(false);

@@ -21,10 +21,16 @@ import { MiniTypedData } from '../../Approval/components/MiniSignTypedData/useTy
 import { supportedDirectSign } from '@/ui/hooks/useMiniApprovalDirectSign';
 import { create, maxBy, minBy } from 'lodash';
 import { useEnterPassphraseModal } from '@/ui/hooks/useEnterPassphraseModal';
-import { getPerpsSDK } from '../../Perps/sdkManager';
+import {
+  getPerpsSDK,
+  applyPerpsSigner,
+  isSelfSignPerpsAccount,
+  initPerpsAgentAccount,
+} from '../../Perps/sdkManager';
 import { useThemeMode } from '@/ui/hooks/usePreference';
 import { openDeleteAgentModal } from '../utils/openDeleteAgentModal';
 import perpsToast from '../components/PerpsToast';
+import { Abstraction } from '@rabby-wallet/hyperliquid-sdk';
 type SignActionType = 'approveAgent' | 'approveBuilderFee';
 
 export interface SignAction {
@@ -52,6 +58,13 @@ export const usePerpsProState = () => {
 
   const checkExtraAgent = useMemoizedFn(
     async (account, agentAddress: string) => {
+      // self-sign: master signs its own orders, there is no agent to expire.
+      if (
+        isSelfSignPerpsAccount(account.type) ||
+        account.type === KEYRING_CLASS.WATCH
+      ) {
+        return { isExpired: false };
+      }
       const sdk = getPerpsSDK();
       const extraAgents = await sdk.info.extraAgents(account.address);
       const item = extraAgents.find((agent) =>
@@ -66,7 +79,7 @@ export const usePerpsProState = () => {
           const handleDeleteAgent = async () => {
             const deleteItem = minBy(extraAgents, (agent) => agent.validUntil);
             if (deleteItem) {
-              sdk.initAccount(
+              initPerpsAgentAccount(
                 account.address,
                 DELETE_AGENT_EMPTY_ADDRESS,
                 DELETE_AGENT_EMPTY_ADDRESS,
@@ -234,15 +247,20 @@ export const usePerpsProState = () => {
     }
   }, []);
 
-  const handleSafeSetDexAbstraction = useCallback(async () => {
+  const handleSafeSetUnifiedAccount = useMemoizedFn(async () => {
     try {
       const sdk = getPerpsSDK();
-      const res = await sdk.exchange?.agentEnableDexAbstraction();
-      console.log('handleSafeSetDexAbstraction res', res);
-    } catch (e) {
-      console.log('Failed to handleSafeSetDexAbstraction:', e);
+      await sdk.exchange?.agentSetAbstraction(Abstraction.UNIFIED_ACCOUNT);
+      // Only refresh on success — refreshing after a failure shows stale
+      // state as if the operation succeeded.
+      setTimeout(() => {
+        // empty address makes perps sdk use current address
+        dispatch.perps.fetchUserAbstraction('');
+      }, 100);
+    } catch (e: any) {
+      console.log('Failed to agentSetAbstraction:', e);
     }
-  }, []);
+  });
 
   const handleDirectApprove = useCallback(
     async (signActions: SignAction[]): Promise<void> => {
@@ -270,19 +288,26 @@ export const usePerpsProState = () => {
       );
 
       setTimeout(() => {
-        handleSafeSetReference();
-        handleSafeSetDexAbstraction();
+        handleSafeSetUnifiedAccount();
       }, 100);
+      // delay a bit to avoid same nonces
+      setTimeout(() => {
+        handleSafeSetReference();
+      }, 200);
       const [approveAgentRes, approveBuilderFeeRes] = results;
       console.log('sendApproveAgentRes', approveAgentRes);
       console.log('sendApproveBuilderFeeRes', approveBuilderFeeRes);
     },
-    [handleSafeSetReference]
+    [handleSafeSetReference, handleSafeSetUnifiedAccount]
   );
 
   const ensureLoginApproveSign = useMemoizedFn(
     async (account: Account, agentAddress: string) => {
       try {
+        // self-sign has no agent; builder fee handled in login.
+        if (isSelfSignPerpsAccount(account.type)) {
+          return;
+        }
         const sdk = getPerpsSDK();
 
         const signActions: SignAction[] = [];
@@ -325,7 +350,7 @@ export const usePerpsProState = () => {
         if (signActions.length === 0) {
           dispatch.perps.setAccountNeedApproveAgent(false);
           dispatch.perps.setAccountNeedApproveBuilderFee(false);
-          handleSafeSetDexAbstraction();
+          handleSafeSetUnifiedAccount();
           return;
         }
 
@@ -392,7 +417,9 @@ export const usePerpsProState = () => {
 
       const signActions: SignAction[] = [];
       const sdk = getPerpsSDK();
-      if (accountNeedApproveAgent) {
+      const isSelfSign = isSelfSignPerpsAccount(currentPerpsAccount.type);
+      // self-sign master is its own signer — never approveAgent.
+      if (accountNeedApproveAgent && !isSelfSign) {
         signActions.push({
           action: sdk.exchange?.prepareApproveAgent(),
           type: 'approveAgent',
@@ -412,6 +439,10 @@ export const usePerpsProState = () => {
       }
 
       if (signActions.length === 0) {
+        // self-sign never needs approveAgent; clear any stale flag.
+        if (isSelfSign && accountNeedApproveAgent) {
+          dispatch.perps.setAccountNeedApproveAgent(false);
+        }
         isHandlingApproveStatus.current = false;
         return;
       }
@@ -461,7 +492,7 @@ export const usePerpsProState = () => {
       account.address
     );
     const sdk = getPerpsSDK();
-    sdk.initAccount(account.address, vault, agentAddress, PERPS_AGENT_NAME);
+    initPerpsAgentAccount(account.address, vault, agentAddress);
 
     const signActions = await prepareSignActions();
 
@@ -484,9 +515,6 @@ export const usePerpsProState = () => {
         await executeSignatures(signActions, account);
 
         await handleDirectApprove(signActions);
-        setTimeout(() => {
-          handleSafeSetReference();
-        }, 500);
         dispatch.perps.setAccountNeedApproveAgent(false);
         dispatch.perps.setAccountNeedApproveBuilderFee(false);
       }
@@ -517,6 +545,45 @@ export const usePerpsProState = () => {
   const login = useMemoizedFn(async (account: Account) => {
     try {
       const sdk = getPerpsSDK();
+      // self-sign (pk/mnemonic): no agent — install externalSign, log in, then
+      // silently approve the builder fee if missing.
+      if (isSelfSignPerpsAccount(account.type)) {
+        await applyPerpsSigner(account, wallet);
+        dispatch.perps.setCurrentPerpsAccount(account);
+        await dispatch.perps.loginPerpsAccount({ account, isPro: true });
+        dispatch.perps.setAccountNeedApproveAgent(false);
+        try {
+          const maxFee = await sdk.info.getMaxBuilderFee(
+            PERPS_BUILD_FEE_RECEIVE_ADDRESS
+          );
+          if (maxFee) {
+            dispatch.perps.setAccountNeedApproveBuilderFee(false);
+          } else {
+            const signActions: SignAction[] = [
+              {
+                action: sdk.exchange?.prepareApproveBuilderFee({
+                  builder: PERPS_BUILD_FEE_RECEIVE_ADDRESS,
+                }),
+                type: 'approveBuilderFee',
+                signature: '',
+              },
+            ];
+            signActions[0].signature = await wallet.signTypedData(
+              account.type,
+              account.address,
+              signActions[0].action,
+              { version: 'V4' }
+            );
+            await handleDirectApprove(signActions);
+            dispatch.perps.setAccountNeedApproveBuilderFee(false);
+          }
+        } catch (e) {
+          dispatch.perps.setAccountNeedApproveBuilderFee(true);
+        }
+        dispatch.perps.clearLocalLoadingHistory();
+        dispatch.perps.resetTradingState();
+        return true;
+      }
       const res = await wallet.getPerpsAgentWallet(account.address);
       const agentAddress = res?.preference?.agentAddress || '';
       const { isExpired, needDelete } = await checkExtraAgent(
@@ -532,11 +599,10 @@ export const usePerpsProState = () => {
       if (res) {
         // 如果存在 agent wallet, 则检查是否过期
         if (!isExpired) {
-          sdk.initAccount(
+          initPerpsAgentAccount(
             account.address,
             res.vault,
-            res.preference.agentAddress,
-            PERPS_AGENT_NAME
+            res.preference.agentAddress
           );
           // 未到过期时间无需签名直接登录即可
           dispatch.perps.setCurrentPerpsAccount(account);
@@ -601,7 +667,7 @@ export const usePerpsProState = () => {
     login,
     logout,
     handleActionApproveStatus,
-    handleSafeSetDexAbstraction,
+    handleSafeSetUnifiedAccount,
     needEnableTrading,
     handleSafeSetReference,
 

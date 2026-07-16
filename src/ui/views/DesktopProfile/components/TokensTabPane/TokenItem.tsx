@@ -2,8 +2,7 @@ import React, { useCallback } from 'react';
 import { TCell, TRow } from '@/ui/views/CommonPopup/AssetList/components/Table';
 import { AbstractPortfolioToken } from '@/ui/utils/portfolio/types';
 import IconUnknown from '@/ui/assets/token-default.svg';
-import { Image } from 'antd';
-import { TooltipWithMagnetArrow } from '@/ui/component/Tooltip/TooltipWithMagnetArrow';
+import { Image, Tooltip } from 'antd';
 import { findChain } from '@/utils/chain';
 import { useHistory } from 'react-router-dom';
 import { DesktopTokenLabel } from '../TransactionsTabPane/DesktopTokenLabel';
@@ -12,8 +11,9 @@ import { CustomTestnetToken } from '@/background/service/customTestnet';
 import { useTranslation } from 'react-i18next';
 import { isNil } from 'lodash';
 import clsx from 'clsx';
-import { isLpToken } from '@/ui/utils/portfolio/lpToken';
+import { isLpToken, isUnknownToken } from '@/ui/utils/portfolio/lpToken';
 import { LpTokenTag } from './components/LpTokenTag';
+import { UnknownTag } from '@/ui/component';
 
 const PADDING = 8;
 
@@ -100,30 +100,40 @@ export const TokenItemAsset: React.FC<Props> = ({
           fallback={IconUnknown}
           preview={false}
         />
-        <TooltipWithMagnetArrow
+        <Tooltip
           title={chain?.name}
-          className="rectangle w-[max-content]"
+          overlayClassName="rectangle"
+          overlayStyle={{
+            padding: 0,
+          }}
+          mouseEnterDelay={0}
         >
           <img
             className="w-14 h-14 absolute right-[-4px] bottom-[-4px] rounded-full"
             src={chain?.logo || IconUnknown}
             alt={item.chain}
           />
-        </TooltipWithMagnetArrow>
+        </Tooltip>
       </div>
       <div className="flex flex-1 flex-row items-center gap-[12px] overflow-hidden">
-        <div className="flex items-center gap-4 max-w-[190px]">
+        <div className="flex items-center max-w-[190px] min-w-0">
           <DesktopTokenLabel
             token={{ ...item, id: item._tokenId }}
             isNft={false}
             textClassName={`
               cursor-pointer no-underline
-              text-r-neutral-title1 text-14 whitespace-nowrap overflow-ellipsis overflow-hidden
+              text-r-neutral-title1 text-14 whitespace-nowrap text-ellipsis overflow-hidden
               hover:text-r-blue-default hover:underline 
             `}
           />
+          {isUnknownToken(item) && (
+            <UnknownTag className="ml-12 !bg-r-neutral-line shrink-0" />
+          )}
           {isLpToken(item) && (
-            <LpTokenTag protocolName={item.protocol_id || ''} />
+            <LpTokenTag
+              iconClassName="ml-4 inline-flex shrink-0"
+              protocolName={item.protocol_id || ''}
+            />
           )}
         </div>
         {!disableSwap && (
@@ -167,16 +177,20 @@ export const TestnetTokenItemAsset: React.FC<TestnetTokenItemProps> = ({
           fallback={IconUnknown}
           preview={false}
         />
-        <TooltipWithMagnetArrow
+        <Tooltip
           title={chain?.name}
-          className="rectangle w-[max-content]"
+          overlayClassName="rectangle"
+          overlayStyle={{
+            padding: 0,
+          }}
+          mouseEnterDelay={0}
         >
           <img
             className="w-14 h-14 absolute right-[-4px] bottom-[-4px] rounded-full"
             src={chain?.logo || IconUnknown}
             alt={chain?.name}
           />
-        </TooltipWithMagnetArrow>
+        </Tooltip>
       </div>
       <div className="flex flex-1 flex-row items-center gap-[12px] overflow-hidden">
         <DesktopTokenLabel
@@ -201,7 +215,7 @@ export const TestnetTokenItemAsset: React.FC<TestnetTokenItemProps> = ({
           isNft={false}
           textClassName={`
             cursor-pointer no-underline
-            text-r-neutral-title1 text-14 whitespace-nowrap overflow-ellipsis overflow-hidden
+            text-r-neutral-title1 text-14 whitespace-nowrap text-ellipsis overflow-hidden
             hover:text-r-blue-default hover:underline 
           `}
         />
@@ -228,7 +242,7 @@ const TokenItemAmount: React.FC<Props> = ({ item }) => {
         isNft={false}
         textClassName={`
             cursor-pointer no-underline
-            text-r-neutral-title1 text-14 whitespace-nowrap overflow-ellipsis overflow-hidden
+            text-r-neutral-title1 text-14 whitespace-nowrap text-ellipsis overflow-hidden
             hover:text-r-blue-default hover:underline 
           `}
       />

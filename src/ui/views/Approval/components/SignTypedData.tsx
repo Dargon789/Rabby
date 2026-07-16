@@ -2,7 +2,6 @@ import React, { ReactNode, useEffect, useMemo, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAsync } from 'react-use';
 import { Result } from '@rabby-wallet/rabby-security-engine';
-import TransportWebHID from '@ledgerhq/hw-transport-webhid';
 import { Button, Drawer, Modal, Skeleton } from 'antd';
 import { useScroll } from 'react-use';
 import { useSize, useDebounceFn } from 'ahooks';
@@ -68,6 +67,7 @@ import {
   MultiAction,
   TypeDataActionItem,
 } from '@rabby-wallet/rabby-api/dist/types';
+import { requestLedgerHIDPermission } from '@/ui/utils/ledger-dmk';
 
 interface SignTypedDataProps {
   method: string;
@@ -82,6 +82,51 @@ interface SignTypedDataProps {
   account?: Account;
   $ctx?: any;
 }
+
+const POLYGON_CHAIN_ID = 137;
+const POLYGON_META_TRANSACTION_PRIMARY_TYPES = new Set([
+  'MetaTransaction',
+  'NativeMetaTransaction',
+]);
+
+// Polygon legacy meta transactions may encode the chain as domain.salt instead
+// of domain.chainId. We only patch the typed-data copy used for parsing/display.
+const normalizePolygonMetaTransactionTypedData = (
+  typedData: Record<string, any> | null
+) => {
+  if (
+    !typedData?.domain ||
+    typedData.domain.chainId ||
+    !typedData.domain.salt ||
+    !typedData.message?.functionSignature
+  ) {
+    return typedData;
+  }
+
+  const primaryType = typedData.primaryType;
+  const hasMetaTransactionShape =
+    POLYGON_META_TRANSACTION_PRIMARY_TYPES.has(primaryType) ||
+    typedData.types?.[primaryType]?.some(
+      (field) => field?.name === 'functionSignature'
+    );
+  if (!hasMetaTransactionShape) {
+    return typedData;
+  }
+
+  let chainId: number;
+  try {
+    chainId = Number(BigInt(typedData.domain.salt));
+  } catch (error) {
+    return typedData;
+  }
+  if (chainId !== POLYGON_CHAIN_ID) {
+    return typedData;
+  }
+
+  const normalizedTypedData = cloneDeep(typedData);
+  normalizedTypedData.domain.chainId = chainId;
+  return normalizedTypedData;
+};
 
 const SignTypedData = ({
   params,
@@ -217,6 +262,10 @@ const SignTypedData = ({
     }
     return [null, null];
   }, [data, isSignTypedDataV1]);
+  const normalizedSignTypedData = useMemo(
+    () => normalizePolygonMetaTransactionTypedData(signTypedData),
+    [signTypedData]
+  );
 
   useEffect(() => {
     try {
@@ -248,10 +297,10 @@ const SignTypedData = ({
   }, []);
 
   const chain = useMemo(() => {
-    if (!isSignTypedDataV1 && signTypedData) {
+    if (!isSignTypedDataV1 && normalizedSignTypedData) {
       let chainId;
       try {
-        chainId = signTypedData?.domain?.chainId;
+        chainId = normalizedSignTypedData?.domain?.chainId;
       } catch (error) {
         console.error(error);
       }
@@ -261,7 +310,7 @@ const SignTypedData = ({
     }
 
     return undefined;
-  }, [data, isSignTypedDataV1, signTypedData]);
+  }, [data, isSignTypedDataV1, normalizedSignTypedData]);
 
   const getCurrentChainId = async () => {
     if (params.session.origin !== INTERNAL_REQUEST_ORIGIN) {
@@ -289,19 +338,19 @@ const SignTypedData = ({
         wallet.clearGnosisMessage();
       }
     }
-    if (!isSignTypedDataV1 && signTypedData) {
-      const chainId = signTypedData?.domain?.chainId;
+    if (!isSignTypedDataV1 && normalizedSignTypedData) {
+      const chainId = normalizedSignTypedData?.domain?.chainId;
       if (isTestnetChainId(chainId)) {
         return null;
       }
       return wallet.openapi.parseCommon({
-        typed_data: signTypedData,
+        typed_data: normalizedSignTypedData,
         user_addr: currentAccount!.address,
         origin: session.origin,
       });
     }
     return;
-  }, [data, isSignTypedDataV1, signTypedData]);
+  }, [data, isSignTypedDataV1, normalizedSignTypedData]);
 
   if (error) {
     console.error('error', error);
@@ -325,7 +374,7 @@ const SignTypedData = ({
       setIsWatch(true);
       setCantProcessReason(
         <div className="flex items-center gap-6">
-          <img src={IconGnosis} alt="" className="w-[24px] flex-shrink-0" />
+          <img src={IconGnosis} alt="" className="w-[24px] shrink-0" />
           {t('page.signTypedData.safeCantSignTypedData')}
         </div>
       );
@@ -446,8 +495,7 @@ const SignTypedData = ({
 
     if (currentAccount?.type === KEYRING_CLASS.HARDWARE.LEDGER) {
       try {
-        const transport = await TransportWebHID.create();
-        await transport.close();
+        await requestLedgerHIDPermission();
       } catch (e) {
         // ignore transport create error when ledger is not connected, it works but idk why
         console.log(e);
@@ -719,7 +767,7 @@ const SignTypedData = ({
             parseAction({
               type: 'typed_data',
               data: action as TypeDataActionItem,
-              typedData: signTypedData,
+              typedData: normalizedSignTypedData,
               sender,
               balanceChange:
                 typedDataActionData.pre_exec_result?.balance_change,
@@ -754,7 +802,7 @@ const SignTypedData = ({
           const parsed = parseAction({
             type: 'typed_data',
             data: typedDataActionData.action as any,
-            typedData: signTypedData,
+            typedData: normalizedSignTypedData,
             sender,
             balanceChange: typedDataActionData.pre_exec_result?.balance_change,
             preExecVersion:
@@ -780,7 +828,13 @@ const SignTypedData = ({
         setIsLoading(false);
       }
     }
-  }, [loading, typedDataActionData, signTypedData, params, isSignTypedDataV1]);
+  }, [
+    loading,
+    typedDataActionData,
+    normalizedSignTypedData,
+    params,
+    isSignTypedDataV1,
+  ]);
 
   useEffect(() => {
     if (scrollRef.current && scrollInfo && scrollRefSize) {

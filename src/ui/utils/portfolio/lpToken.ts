@@ -1,12 +1,22 @@
 import { TokenItem } from '@rabby-wallet/rabby-api/dist/types';
 import { AbstractPortfolioToken } from './types';
+import { isNil } from 'lodash';
+
+export const commonTokenFilter = (
+  token: AbstractPortfolioToken | TokenItem
+) => {
+  // null和false是两种情况，null表示没处理，false已经明确是诈骗token
+  if (token.is_verified === false || !!token.is_suspicious) {
+    return false;
+  }
+  return true;
+};
 
 // lpTokenMode is false
 export const defaultTokenFilter = (
   token: AbstractPortfolioToken | TokenItem
 ) => {
-  // null和false是两种情况，null表示没处理，false已经明确是诈骗token
-  if (token.is_verified === false || token.is_suspicious) {
+  if (!commonTokenFilter(token)) {
     return false;
   }
   if (token.is_core === false) {
@@ -20,7 +30,7 @@ export const defaultTokenFilter = (
 
 // lpTokenMode is true
 export const includeLpTokensFilter = (token: AbstractPortfolioToken) => {
-  if (token.is_verified === false || token.is_suspicious) {
+  if (!commonTokenFilter(token)) {
     return false;
   }
   if (token.is_core === false && !token.protocol_id) {
@@ -36,4 +46,8 @@ interface IsLpTokenProps {
 }
 export const isLpToken = (token: IsLpTokenProps) => {
   return token.is_verified !== false && !token.is_core && !!token.protocol_id;
+};
+
+export const isUnknownToken = (data: IsLpTokenProps) => {
+  return isNil(data.is_core) && !isLpToken(data);
 };

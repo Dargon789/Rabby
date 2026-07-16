@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo } from 'react';
 import { TokenSearchInput } from './TokenSearchInput';
-import AddTokenEntry, { AddTokenEntryInst } from './AddTokenEntry';
 import { useRabbySelector } from '@/ui/store';
 import { HomeTokenList } from './TokenList';
 import useSortTokens from 'ui/hooks/useSortTokens';
@@ -17,18 +16,19 @@ import { useAppChain } from '@/ui/hooks/useAppChain';
 import { useCommonPopupView } from '@/ui/utils';
 import { useTranslation } from 'react-i18next';
 import { LpTokenSwitch } from '../../DesktopProfile/components/TokensTabPane/components/LpTokenSwitch';
-import clsx from 'clsx';
-import { ReactComponent as SearchSVG } from '@/ui/assets/search.svg';
 import { HomePerpsPositionList } from './HomePerpsPositionList';
 import { uniqBy } from 'lodash';
+import omit from 'lodash/omit';
 import { concatAndSort } from '@/ui/utils/portfolio/tokenUtils';
+import { NftPreviewSection } from './NftPreviewSection';
+import type { NftPreviewItem } from './NftPreviewSection';
+import { useNFTCollections } from '@/ui/hooks/useNFTCollections';
 
 interface Props {
   className?: string;
   selectChainId: string | null;
   visible: boolean;
   onEmptyAssets: (isEmpty: boolean) => void;
-  isTestnet?: boolean;
 }
 
 export const AssetListContainer: React.FC<Props> = ({
@@ -36,7 +36,6 @@ export const AssetListContainer: React.FC<Props> = ({
   selectChainId,
   visible,
   onEmptyAssets,
-  isTestnet = false,
 }) => {
   const { t } = useTranslation();
   const [search, setSearch] = React.useState<string>('');
@@ -47,6 +46,13 @@ export const AssetListContainer: React.FC<Props> = ({
   const { currentAccount } = useRabbySelector((s) => ({
     currentAccount: s.account.currentAccount,
   }));
+  const {
+    collections: nftCollections,
+    isLoading: isNftLoading,
+  } = useNFTCollections(currentAccount?.address, {
+    preferCacheOnExists: true,
+    visible,
+  });
 
   const { setApps } = useCommonPopupView();
   const {
@@ -56,22 +62,16 @@ export const AssetListContainer: React.FC<Props> = ({
     portfolios,
     tokens: tokenList,
     hasTokens,
-    blockedTokens,
-    customizeTokens,
     removeProtocol,
-  } = useQueryProjects(
-    currentAccount?.address,
-    false,
+  } = useQueryProjects(currentAccount?.address, {
     visible,
-    isTestnet,
-    lpTokenMode ? lpTokenMode : undefined,
-    undefined,
-    !!search
-  );
+    lpTokenMode: lpTokenMode ? lpTokenMode : undefined,
+    searchMode: !!search,
+  });
   const {
     data: appPortfolios,
     isLoading: isAppPortfoliosLoading,
-  } = useAppChain(currentAccount?.address, visible, isTestnet);
+  } = useAppChain(currentAccount?.address, visible);
 
   const inputRef = React.useRef<InputRef>(null);
   const { isLoading: isSearching, list } = useSearchToken(
@@ -80,7 +80,7 @@ export const AssetListContainer: React.FC<Props> = ({
     {
       chainServerId: selectChainId ? selectChainId : undefined,
       withBalance: true,
-      isTestnet: isTestnet,
+      isTestnet: false,
     }
   );
   const displayTokenList = useMemo(() => {
@@ -106,30 +106,39 @@ export const AssetListContainer: React.FC<Props> = ({
     }
     return combinedPortfolios;
   }, [portfolios, appPortfolios, selectChainId]);
+  const nftPreviewList = useMemo<NftPreviewItem[]>(() => {
+    const result: NftPreviewItem[] = [];
 
-  const displayBlockedTokens = useMemo(() => {
-    if (selectChainId) {
-      return blockedTokens?.filter((item) => item.chain === selectChainId);
-    }
-    return blockedTokens;
-  }, [blockedTokens, selectChainId]);
+    nftCollections
+      .filter((collection) => {
+        return !collection.is_hidden && collection.is_core;
+      })
+      .forEach((collection) => {
+        const baseCollection = omit(collection, 'nft_list');
+        collection.nft_list.forEach((nft) => {
+          result.push({
+            nft,
+            collection: baseCollection,
+          });
+        });
+      });
 
-  const displayCustomizeTokens = useMemo(() => {
-    if (selectChainId) {
-      return customizeTokens?.filter((item) => item.chain === selectChainId);
-    }
-    return customizeTokens;
-  }, [customizeTokens, selectChainId]);
+    return result.sort(
+      (a, b) =>
+        (b?.collection?.credit_score || 0) - (a?.collection?.credit_score || 0)
+    );
+  }, [nftCollections]);
 
   const isEmptyAssets =
     !isTokensLoading &&
     !displayTokenList.length &&
     !isPortfoliosLoading &&
     !displayPortfolios?.length &&
-    !displayBlockedTokens?.length &&
-    !displayCustomizeTokens?.length &&
     !isAppPortfoliosLoading &&
-    !appPortfolios?.length;
+    !appPortfolios?.length &&
+    !isNftLoading &&
+    !nftPreviewList.length &&
+    !search;
 
   React.useEffect(() => {
     onEmptyAssets(isEmptyAssets && !lpTokenMode);
@@ -140,10 +149,6 @@ export const AssetListContainer: React.FC<Props> = ({
     list: displayPortfolios,
     kw: search,
   });
-
-  const handleFocusInput = React.useCallback(() => {
-    inputRef.current?.focus();
-  }, []);
 
   React.useEffect(() => {
     if (!visible) {
@@ -169,8 +174,6 @@ export const AssetListContainer: React.FC<Props> = ({
   const appIds = useMemo(() => {
     return [...new Set(appPortfolios?.map((item) => item.id) || [])];
   }, [appPortfolios]);
-
-  const addTokenEntryRef = React.useRef<AddTokenEntryInst>(null);
 
   if (isTokensLoading && !hasTokens) {
     return <TokenListViewSkeleton />;
@@ -202,49 +205,55 @@ export const AssetListContainer: React.FC<Props> = ({
             onLpTokenModeChange={setLpTokenMode}
           />
         </div>
-        {/* {isFocus || search ? null : <AddTokenEntry ref={addTokenEntryRef} />} */}
       </div>
-      {isTokensLoading || isSearching || (lpTokenMode && isAllTokenLoading) ? (
-        <TokenListSkeleton />
-      ) : (
-        <div className="mt-[12px]">
+      <div className="flex flex-col gap-24 mt-12">
+        {isTokensLoading ||
+        isSearching ||
+        (lpTokenMode && isAllTokenLoading) ? (
+          <TokenListSkeleton />
+        ) : (
           <HomeTokenList
             list={sortTokens}
-            onFocusInput={handleFocusInput}
-            onOpenAddEntryPopup={() => {
-              addTokenEntryRef.current?.startAddToken();
-            }}
             isSearch={!!search}
             lpTokenMode={lpTokenMode}
             isNoResults={isNoResults}
-            blockedTokens={displayBlockedTokens}
-            customizeTokens={displayCustomizeTokens}
-            isTestnet={isTestnet}
-            selectChainId={selectChainId}
+          />
+        )}
+
+        <div
+          className="empty:hidden"
+          style={{
+            display: visible ? 'block' : 'none',
+          }}
+        >
+          {isPortfoliosLoading && isAppPortfoliosLoading ? (
+            <TokenListSkeleton />
+          ) : (
+            <>
+              {visible && !search ? (
+                <HomePerpsPositionList needFetchMarket />
+              ) : null}
+              <ProtocolList
+                removeProtocol={removeProtocol}
+                appIds={appIds}
+                isSearch={!!search}
+                list={filteredPortfolios}
+                className="mt-0"
+              />
+            </>
+          )}
+        </div>
+        <div
+          style={{
+            display: visible && !search && !selectChainId ? 'block' : 'none',
+          }}
+        >
+          <NftPreviewSection
+            className="cursor-pointer"
+            isLoading={isNftLoading}
+            list={nftPreviewList}
           />
         </div>
-      )}
-
-      <div
-        style={{
-          display: visible ? 'block' : 'none',
-        }}
-        className="pt-[24px]"
-      >
-        {isPortfoliosLoading && isAppPortfoliosLoading ? (
-          <TokenListSkeleton />
-        ) : (
-          <>
-            {visible && !search ? <HomePerpsPositionList /> : null}
-            <ProtocolList
-              removeProtocol={removeProtocol}
-              appIds={appIds}
-              isSearch={!!search}
-              list={filteredPortfolios}
-              className="mt-0"
-            />
-          </>
-        )}
       </div>
     </div>
   );

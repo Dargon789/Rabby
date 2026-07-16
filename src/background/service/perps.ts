@@ -2,10 +2,12 @@ import { last } from 'lodash';
 import { createPersistStore } from 'background/utils';
 import { getRandomBytesSync } from 'ethereum-cryptography/random.js';
 import { secp256k1 } from 'ethereum-cryptography/secp256k1.js';
-import { bytesToHex, publicToAddress } from '@ethereumjs/util';
+import { bytesToHex, publicToAddress, hexToBytes } from '@ethereumjs/util';
 import { keyringService } from '.';
 import { SendApproveParams } from '@rabby-wallet/hyperliquid-sdk';
 import { Account } from '@/background/service/preference';
+import eventBus from '@/eventBus';
+import { EVENTS } from '@/constant';
 export interface AgentWalletInfo {
   vault: string;
   preference: {
@@ -23,6 +25,17 @@ interface StoreAccount {
 export type ApproveSignatures = (SendApproveParams & {
   type: 'approveAgent' | 'approveBuilderFee';
 })[];
+
+export type PerpsTpslModePreference = 'pnl' | 'roi';
+export type PerpsTpslModePreferences = Record<
+  'tp' | 'sl',
+  PerpsTpslModePreference
+>;
+
+const DEFAULT_TPSL_MODE_PREFERENCES: PerpsTpslModePreferences = {
+  tp: 'pnl',
+  sl: 'pnl',
+};
 
 export interface PerpsServiceStore {
   agentVaults: string; // encrypted JSON string of {[address: string]: string}
@@ -43,12 +56,15 @@ export interface PerpsServiceStore {
   hasDoneNewUserProcess: boolean;
   hasDismissedNewUserGuideV2: boolean;
   favoritedCoins: string[];
+  marginModePreferences: Record<string, 'cross' | 'isolated'>;
   soundEnabled: boolean;
   marketSlippage: number; // 0-1, default 0.05 (5%)
   quoteUnit: 'base' | 'usd';
   firstOpenPerpsNeedDark: boolean;
   selectedCoin: string;
   skipMarketCloseConfirm: boolean;
+  candleInterval: string;
+  tpslModePreferences: PerpsTpslModePreferences;
 }
 export interface PerpsServiceMemoryState {
   agentWallets: {
@@ -78,12 +94,15 @@ class PerpsService {
         hasDoneNewUserProcess: false,
         hasDismissedNewUserGuideV2: false,
         favoritedCoins: [],
+        marginModePreferences: {},
         marketSlippage: 0.05, // default 5%
         soundEnabled: true,
         quoteUnit: 'base',
         firstOpenPerpsNeedDark: true,
         selectedCoin: 'BTC',
         skipMarketCloseConfirm: false,
+        candleInterval: '15M',
+        tpslModePreferences: DEFAULT_TPSL_MODE_PREFERENCES,
       },
     });
 
@@ -166,6 +185,55 @@ class PerpsService {
     return agentWallet.preference.approveSignatures;
   };
 
+  // Derive the agent address from the vault key, not the stored preference — a
+  // concurrent createAgentWallet can desync preference.agentAddress from the
+  // vault across the decrypt await in unlockAgentWallets.
+  private deriveAgentAddress = (vault: string): string => {
+    const privateKey = hexToBytes(
+      vault.startsWith('0x') ? vault : `0x${vault}`
+    );
+    const publicKey = secp256k1.getPublicKey(privateKey, false);
+    return bytesToHex(publicToAddress(publicKey, true)).toLowerCase();
+  };
+
+  // Agent vaults aren't re-encrypted on password change, so old ciphertext can
+  // fail to decrypt. An agent is re-creatable, so on a genuine mismatch (unlocked
+  // but still "Incorrect password") drop the stale data and rebuild.
+  private safeDecryptAgentVaults = async (): Promise<{
+    [address: string]: string;
+  }> => {
+    if (!this.store?.agentVaults) {
+      return {};
+    }
+    try {
+      return await keyringService.decryptWithPassword(
+        this.store.agentVaults,
+        true,
+        'perps'
+      );
+    } catch (error) {
+      // not unlocked yet → password not ready, not a real mismatch
+      if (!keyringService.isUnlocked()) {
+        throw error;
+      }
+      // only "Incorrect password" is a real key mismatch; let other errors
+      // (corrupted blob, crypto failure) propagate rather than wipe agent data.
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/incorrect password/i.test(message)) {
+        throw error;
+      }
+      console.warn(
+        '[perpsService] failed to decrypt agentVaults while unlocked, resetting stale agent data',
+        message
+      );
+      if (this.store) {
+        this.store.agentVaults = '';
+        this.store.agentPreferences = {};
+      }
+      return {};
+    }
+  };
+
   unlockAgentWallets = async () => {
     const unlock = async () => {
       if (!this.store) {
@@ -173,24 +241,25 @@ class PerpsService {
       }
       // Decrypt and load agent vaults
       if (this.store.agentVaults) {
-        const vaultsMap: {
-          [address: string]: string;
-        } = await keyringService.decryptWithPassword(
-          this.store.agentVaults,
-          true,
-          'perps'
-        );
+        const vaultsMap = await this.safeDecryptAgentVaults();
 
         // Format data for memory state
         for (const masterAddress in vaultsMap) {
           const privateKey = vaultsMap[masterAddress];
+          // empty vault → deriveAgentAddress would throw; skip it.
+          if (!privateKey) {
+            continue;
+          }
           const preference = this.store.agentPreferences[masterAddress] || {
             agentAddress: '',
+            approveSignatures: [],
           };
           this.memoryState.agentWallets[masterAddress] = {
             vault: privateKey,
             preference: {
               ...preference,
+              // derived from the vault key, not the stale stored preference
+              agentAddress: this.deriveAgentAddress(privateKey),
               approveSignatures: preference.approveSignatures || [],
             },
           };
@@ -211,16 +280,13 @@ class PerpsService {
     if (!this.store) {
       throw new Error('PerpsService not initialized');
     }
-    const privateKey = getRandomBytesSync(32);
-    const publicKey = secp256k1.getPublicKey(privateKey, false);
-    const agentAddress = bytesToHex(
-      publicToAddress(publicKey, true)
-    ).toLowerCase();
-    this.addAgentWallet(masterAddress, bytesToHex(privateKey), {
+    const vault = bytesToHex(getRandomBytesSync(32));
+    const agentAddress = this.deriveAgentAddress(vault);
+    await this.addAgentWallet(masterAddress, vault, {
       agentAddress,
       approveSignatures: [],
     });
-    return { agentAddress, vault: bytesToHex(privateKey) };
+    return { agentAddress, vault };
   };
 
   addAgentWallet = async (
@@ -242,14 +308,7 @@ class PerpsService {
       },
     };
 
-    let vaultsMap: { [address: string]: string } = {};
-    if (this.store.agentVaults) {
-      vaultsMap = await keyringService.decryptWithPassword(
-        this.store.agentVaults,
-        true,
-        'perps'
-      );
-    }
+    const vaultsMap = await this.safeDecryptAgentVaults();
 
     vaultsMap[normalizedAddress] = vault;
 
@@ -329,6 +388,10 @@ class PerpsService {
     } else {
       this.store.currentAccount = null;
     }
+    eventBus.emit(
+      EVENTS.PERPS.WIDGET_ACCOUNT_CHANGED,
+      account ? account.address : null
+    );
   };
 
   getLastUsedAccount = async () => {
@@ -352,14 +415,7 @@ class PerpsService {
 
     const normalizedAddress = address.toLowerCase();
 
-    let vaultsMap: { [address: string]: string } = {};
-    if (this.store.agentVaults) {
-      vaultsMap = await keyringService.decryptWithPassword(
-        this.store.agentVaults,
-        true,
-        'perps'
-      );
-    }
+    const vaultsMap = await this.safeDecryptAgentVaults();
 
     delete vaultsMap[normalizedAddress];
 
@@ -426,6 +482,54 @@ class PerpsService {
       throw new Error('PerpsService not initialized');
     }
     this.store.favoritedCoins = coins;
+  };
+
+  getPerpsMarginModePreferences = async () => {
+    if (!this.store) {
+      throw new Error('PerpsService not initialized');
+    }
+    return this.store.marginModePreferences || {};
+  };
+
+  setPerpsMarginModePreference = async (
+    coin: string,
+    mode: 'cross' | 'isolated'
+  ) => {
+    if (!this.store) {
+      throw new Error('PerpsService not initialized');
+    }
+    if (!coin) return;
+    this.store.marginModePreferences = {
+      ...(this.store.marginModePreferences || {}),
+      [coin]: mode,
+    };
+  };
+
+  getTpslModePreferences = async () => {
+    if (!this.store) {
+      throw new Error('PerpsService not initialized');
+    }
+    return {
+      ...DEFAULT_TPSL_MODE_PREFERENCES,
+      ...(this.store.tpslModePreferences || {}),
+    };
+  };
+
+  setTpslModePreference = async (
+    side: 'tp' | 'sl',
+    mode: PerpsTpslModePreference
+  ) => {
+    if (!this.store) {
+      throw new Error('PerpsService not initialized');
+    }
+    if (!['tp', 'sl'].includes(side)) return;
+    if (!['pnl', 'roi'].includes(mode)) return;
+
+    this.store.tpslModePreferences = {
+      ...DEFAULT_TPSL_MODE_PREFERENCES,
+      ...(this.store.tpslModePreferences || {}),
+      [side]: mode,
+    };
   };
 
   getMarketSlippage = async () => {
@@ -531,6 +635,20 @@ class PerpsService {
     this.store.skipMarketCloseConfirm = skip;
   };
 
+  getCandleInterval = async () => {
+    if (!this.store) {
+      throw new Error('PerpsService not initialized');
+    }
+    return this.store.candleInterval ?? '15M';
+  };
+
+  setCandleInterval = async (interval: string) => {
+    if (!this.store) {
+      throw new Error('PerpsService not initialized');
+    }
+    this.store.candleInterval = interval;
+  };
+
   // only test use
   resetStore = async () => {
     if (!this.store) {
@@ -545,12 +663,15 @@ class PerpsService {
       hasDoneNewUserProcess: false,
       inviteConfig: {},
       favoritedCoins: [],
+      marginModePreferences: {},
       marketSlippage: 0.05,
       soundEnabled: true,
       quoteUnit: 'base',
       firstOpenPerpsNeedDark: true,
       selectedCoin: 'BTC',
       skipMarketCloseConfirm: false,
+      candleInterval: '15M',
+      tpslModePreferences: DEFAULT_TPSL_MODE_PREFERENCES,
     };
     this.memoryState.agentWallets = {};
   };

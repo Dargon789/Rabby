@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useRabbySelector } from '@/ui/store';
-import { formatUsdValue, splitNumberByStep } from '@/ui/utils';
+import { formatNumber, formatUsdValue, splitNumberByStep } from '@/ui/utils';
 import {
   LimitOrderType,
   OrderSide,
@@ -23,10 +23,10 @@ import { EVENTS } from '@/constant';
 
 import { PerpsCheckbox } from '../components/PerpsCheckbox';
 import { DesktopPerpsInputV2 as DesktopPerpsInput } from '../../DesktopPerpsInputV2';
-import { TradingButton } from '../components/TradingButton';
+import { TradingButton } from '../components/TradingButtons';
 import { BigNumber } from 'bignumber.js';
 import stats from '@/stats';
-import { getStatsReportSide } from '../../../utils';
+import { formatPerpsCoin, getStatsReportSide } from '../../../utils';
 
 export const ScaleTradingContainer: React.FC<TradingContainerProps> = () => {
   const { t } = useTranslation();
@@ -47,6 +47,7 @@ export const ScaleTradingContainer: React.FC<TradingContainerProps> = () => {
     markPrice,
     midPrice,
     szDecimals,
+    quoteAsset,
     pxDecimals,
     leverage,
     leverageType,
@@ -305,19 +306,24 @@ export const ScaleTradingContainer: React.FC<TradingContainerProps> = () => {
     return {
       start: `${startOrderSize} ${selectedCoin} @ ${splitNumberByStep(
         startPrice || '0'
-      )} USDC`,
+      )} ${quoteAsset}`,
       end: `${endOrderSize} ${selectedCoin} @ ${splitNumberByStep(
         endPrice || '0'
-      )} USDC`,
+      )} ${quoteAsset}`,
       orderValue:
-        scaleOrdersValue > 0 ? formatUsdValue(scaleOrdersValue) : '$0.00',
-      marginRequired: formatUsdValue(marginRequired),
-      marginUsage: `${formatUsdValue(marginRequired)} (${formatPercent(
+        scaleOrdersValue > 0
+          ? `${formatNumber(scaleOrdersValue)} ${quoteAsset}`
+          : `0 ${quoteAsset}`,
+      marginRequired: `${formatNumber(marginRequired)} ${quoteAsset}`,
+      marginUsage: `${formatNumber(
+        marginRequired
+      )} ${quoteAsset} (${formatPercent(
         marginRequired / availableBalance,
         1
       )})`,
     };
   }, [
+    quoteAsset,
     scaleOrders,
     leverage,
     marginRequired,
@@ -398,11 +404,14 @@ export const ScaleTradingContainer: React.FC<TradingContainerProps> = () => {
   };
 
   return (
-    <div className="space-y-[10px]">
-      <OrderSideAndFunds availableBalance={availableBalance} />
+    <div className="flex flex-col gap-[12px]">
+      <OrderSideAndFunds
+        availableBalance={availableBalance}
+        quoteAsset={quoteAsset}
+      />
 
-      <div className="flex flex-col gap-[6px]">
-        <span className="text-rb-neutral-secondary text-[12px]">
+      <div className="flex flex-col gap-[6px] mt-[6px]">
+        <span className="text-rb-neutral-secondary text-12">
           {t('page.perpsPro.tradingPanel.startPrice')}
         </span>
         <DesktopPerpsInput
@@ -410,15 +419,15 @@ export const ScaleTradingContainer: React.FC<TradingContainerProps> = () => {
           onChange={handleStartPriceChange}
           className="text-left"
           suffix={
-            <span className="text-15 font-medium text-rb-neutral-title-1">
-              USDC
+            <span className="text-15 text-rb-neutral-title-1">
+              {quoteAsset}
             </span>
           }
         />
       </div>
 
-      <div className="flex flex-col gap-[6px]">
-        <span className="text-rb-neutral-secondary text-[12px]">
+      <div className="flex flex-col gap-[6px] mt-[6px]">
+        <span className="text-rb-neutral-secondary text-12">
           {t('page.perpsPro.tradingPanel.endPrice')}
         </span>
         <DesktopPerpsInput
@@ -426,15 +435,15 @@ export const ScaleTradingContainer: React.FC<TradingContainerProps> = () => {
           onChange={handleEndPriceChange}
           className="text-left"
           suffix={
-            <span className="text-15 font-medium text-rb-neutral-title-1">
-              USDC
+            <span className="text-15 text-rb-neutral-title-1">
+              {quoteAsset}
             </span>
           }
         />
       </div>
 
-      <div className="flex flex-col gap-[6px]">
-        <span className="text-rb-neutral-secondary text-[12px]">
+      <div className="flex flex-col gap-[6px] mt-[6px]">
+        <span className="text-rb-neutral-secondary text-12">
           {t('page.perpsPro.tradingPanel.size')}
         </span>
         <DesktopPerpsInput
@@ -453,15 +462,15 @@ export const ScaleTradingContainer: React.FC<TradingContainerProps> = () => {
           }}
           className="text-left"
           suffix={
-            <span className="text-15 font-medium text-rb-neutral-title-1">
-              {selectedCoin}
+            <span className="text-15 text-rb-neutral-title-1">
+              {formatPerpsCoin(selectedCoin)}
             </span>
           }
         />
       </div>
 
-      <div className="flex flex-col gap-[6px]">
-        <span className="text-rb-neutral-secondary text-[12px]">
+      <div className="flex flex-col gap-[6px] mt-[6px]">
+        <span className="text-rb-neutral-secondary text-12">
           {t('page.perpsPro.tradingPanel.orderCount')}
         </span>
         <DesktopPerpsInput
@@ -471,13 +480,13 @@ export const ScaleTradingContainer: React.FC<TradingContainerProps> = () => {
         />
       </div>
 
-      <div className="flex flex-col gap-[6px]">
+      <div className="flex flex-col gap-[6px] mt-[6px]">
         <Tooltip
           placement="topLeft"
           overlayClassName={clsx('rectangle')}
           title={t('page.perpsPro.tradingPanel.sizeSkewTooltip')}
         >
-          <span className="text-rb-neutral-secondary text-[12px] cursor-help">
+          <span className="text-rb-neutral-secondary text-12 cursor-help">
             {t('page.perpsPro.tradingPanel.sizeSkew')}
           </span>
         </Tooltip>
@@ -490,7 +499,7 @@ export const ScaleTradingContainer: React.FC<TradingContainerProps> = () => {
 
       {/* Action Radio */}
       <div className="flex flex-col gap-[6px]">
-        <span className="text-rb-neutral-secondary text-[12px]">
+        <span className="text-rb-neutral-secondary text-12">
           {t('page.perpsPro.tradingPanel.action')}
         </span>
         <div className="flex items-center gap-[16px]">
@@ -541,7 +550,7 @@ export const ScaleTradingContainer: React.FC<TradingContainerProps> = () => {
           <span className="text-r-neutral-foot text-[13px]">
             {t('page.perpsPro.tradingPanel.orderValue')}
           </span>
-          <span className="text-r-neutral-title-1 font-medium text-[13px]">
+          <span className="text-r-neutral-body text-[13px]">
             {orderSummary.orderValue}
           </span>
         </div>
@@ -550,7 +559,7 @@ export const ScaleTradingContainer: React.FC<TradingContainerProps> = () => {
           <span className="text-r-neutral-foot text-[13px]">
             {t('page.perpsPro.tradingPanel.marginUsage')}
           </span>
-          <span className="text-r-neutral-title-1 font-medium text-[13px]">
+          <span className="text-r-neutral-body text-[13px]">
             {orderSummary.marginUsage}
           </span>
         </div>

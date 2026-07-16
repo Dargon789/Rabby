@@ -218,6 +218,8 @@ import Logo1inch from 'ui/assets/swap/1inch.svg';
 import LogoOdos from 'ui/assets/swap/odos.png';
 import LogoParaswap from 'ui/assets/swap/paraswap.png';
 import LogoMagpie from 'ui/assets/swap/magpie.png';
+import LogoSushi from 'ui/assets/swap/sushi.png';
+import LogoUniswap from 'ui/assets/swap/uniswap.png';
 
 import RabbyChainLogo from '@/ui/assets/rabby-chain-logo.png';
 import LogoBinance from 'ui/assets/swap/binance.png';
@@ -572,12 +574,16 @@ export const EVENTS = {
     LOG_IN: 'LOG_IN',
     LOG_OUT: 'LOG_OUT',
     CLOSE_WINDOW: 'CLOSE_WINDOW',
+    DISCOVERY_UPDATED: 'DISCOVERY_UPDATED',
   },
   PERPS: {
     LOG_OUT: 'PERPS_LOG_OUT',
     HANDLE_CLICK_PRICE: 'PERPS_HANDLE_CLICK_PRICE',
     SWITCH_LIMIT_FILL_PRICE: 'SWITCH_LIMIT_FILL_PRICE',
     USER_INFO_HISTORY_TAB_CHANGED: 'PERPS_USER_INFO_HISTORY_TAB_CHANGED',
+    WIDGET_ACCOUNT_CHANGED: 'PERPS_WIDGET_ACCOUNT_CHANGED',
+    WIDGET_ENABLED_CHANGED: 'PERPS_WIDGET_ENABLED_CHANGED',
+    WIDGET_BLOCKED_HOSTS_CHANGED: 'PERPS_WIDGET_BLOCKED_HOSTS_CHANGED',
   },
   INNER_HISTORY_ITEM_PENDING: 'INNER_HISTORY_ITEM_PENDING',
   INNER_HISTORY_ITEM_COMPLETE: 'INNER_HISTORY_ITEM_COMPLETE',
@@ -1602,6 +1608,18 @@ export const DEX = {
     logo: LogoMagpie,
     name: 'Fly',
     chains: DEX_SUPPORT_CHAINS[DEX_ENUM.MAGPIE],
+  },
+  [DEX_ENUM.SUSHI]: {
+    id: DEX_ENUM.SUSHI,
+    logo: LogoSushi,
+    name: 'Sushi',
+    chains: DEX_SUPPORT_CHAINS[DEX_ENUM.SUSHI],
+  },
+  [DEX_ENUM.UNI]: {
+    id: DEX_ENUM.UNI,
+    logo: LogoUniswap,
+    name: 'Uniswap',
+    chains: DEX_SUPPORT_CHAINS[DEX_ENUM.UNI],
   },
 };
 

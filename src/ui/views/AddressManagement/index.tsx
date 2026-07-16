@@ -183,7 +183,10 @@ const AddressManagement = () => {
   const currentAccount = useRabbySelector((s) => s.account.currentAccount);
 
   const { hasBackup } = useCheckSeedPhraseBackup(
-    currentAccount?.address || '',
+    {
+      address: currentAccount?.address || '',
+      type: currentAccount?.type || '',
+    },
     {
       refreshOnWindowFocus: true,
     }
@@ -207,7 +210,11 @@ const AddressManagement = () => {
           action: 'address-backup',
         },
       });
-      browser.action.openPopup();
+      try {
+        await browser.action.openPopup();
+      } catch (e) {
+        console.error('open popup failed', e);
+      }
     } else {
       await AuthenticationModal({
         confirmText: t('global.confirm'),
@@ -267,14 +274,11 @@ const AddressManagement = () => {
     return (
       <div
         onClick={gotoAddAddress}
-        className="mt-24 h-[52px] flex items-center justify-center gap-[8px] bg-r-neutral-card-1 rounded-lg cursor-pointer"
+        className="address-add-button mt-20 h-[52px] flex items-center justify-center gap-[8px] rounded-lg cursor-pointer transition-colors"
       >
-        <RcIconAddAddress
-          viewBox="0 0 20 20"
-          className={clsx('text-r-blue-default w-[20px] h-[20px] ')}
-        />
+        <RcIconAddAddress className={clsx('w-[20px] h-[20px]')} />
 
-        <span className="text-13 text-r-blue-default font-medium">
+        <span className="text-13 font-medium">
           {t('page.manageAddress.addNewAddress')}
         </span>
       </div>
@@ -457,13 +461,13 @@ const AddressManagement = () => {
 
   const getItemSize = React.useCallback(
     (i: number) => {
-      const lastAddAddrBtn = 52 + 24;
+      const lastAddAddrBtn = 52 + 20;
       const lastPadding =
         i === filteredAccounts.length - 1 ? 24 + lastAddAddrBtn : 0;
       if (addressSortStore.sortType === 'addressType') {
         return (
           52 * (filteredAccounts as typeof accountsList[])[i].length +
-          16 +
+          20 +
           lastPadding
         );
       }
@@ -479,18 +483,15 @@ const AddressManagement = () => {
 
   return (
     <div className="page-address-management px-0 overflow-hidden">
-      <PageHeader className="pt-[24px] mx-[20px]">
+      <PageHeader className="address-page-header mx-[20px]">
         {enableSwitch
           ? t('page.manageAddress.current-address')
           : t('page.manageAddress.address-management')}
-        <div className="bg-r-neutral-card1 rounded absolute top-20 right-0 w-[32px] h-[28px] flex items-center justify-center">
-          <RcIconAddAddress
-            viewBox="0 0 20 20"
-            className={clsx(
-              'text-r-blue-default w-[20px] h-[20px] cursor-pointer'
-            )}
-            onClick={gotoAddAddress}
-          />
+        <div
+          className="address-header-add rounded absolute top-20 right-0 w-[32px] h-[28px] flex items-center justify-center cursor-pointer transition-colors"
+          onClick={gotoAddAddress}
+        >
+          <RcIconAddAddress className={clsx('w-[20px] h-[20px]')} />
         </div>
       </PageHeader>
       {currentAccountIndex !== -1 && accountList[currentAccountIndex] && (
@@ -549,7 +550,7 @@ const AddressManagement = () => {
                     className="mx-[16px] mb-[16px] px-[8px] h-[28px] bg-[rgba(0,0,0,0.1)] rounded-[4px] flex items-center cursor-pointer"
                     onClick={handleBackupSeedPhrase}
                   >
-                    <div className="w-[6px] h-[6px] rounded-full bg-r-orange-default flex-shrink-0" />
+                    <div className="w-[6px] h-[6px] rounded-full bg-r-orange-default shrink-0" />
                     <span className="text-13 text-r-orange-default font-medium flex-1 ml-[4px]">
                       {t('page.manageAddress.seedPhraseNotBackedUp')}
                     </span>
@@ -565,13 +566,13 @@ const AddressManagement = () => {
           </div>
         </>
       )}
-      <div className="flex justify-between items-center text-r-neutral-body text-13 px-20 py-[12px]">
+      <div className="address-toolbar flex justify-between items-center text-r-neutral-body text-13 px-20 pt-[20px] pb-[8px]">
         <SortInput
           value={searchKeyword}
           onChange={(e) => setSearchKeyword(e.target.value)}
         />
         <div
-          className="flex items-center cursor-pointer "
+          className="flex items-center cursor-pointer"
           onClick={gotoManageAddress}
         >
           <span>{t('page.manageAddress.manage-address')}</span>
@@ -589,12 +590,12 @@ const AddressManagement = () => {
             key={addressSortStore.sortType + debouncedSearchKeyword}
             height={
               currentAccountIndex === -1
-                ? 471
+                ? 461
                 : hasStatusBar
-                ? 368
+                ? 358
                 : showBackupWarning
-                ? 382
-                : 426
+                ? 372
+                : 416
             }
             width="100%"
             itemData={filteredAccounts}

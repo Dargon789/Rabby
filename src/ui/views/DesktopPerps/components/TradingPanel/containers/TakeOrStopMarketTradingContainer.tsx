@@ -42,6 +42,7 @@ export const TakeOrStopMarketTradingContainer: React.FC<TakeOrStopMarketTradingC
     leverage,
     leverageType,
     availableBalance,
+    quoteAsset,
     reduceOnly,
     setReduceOnly,
     tradeUsdAmount,
@@ -316,11 +317,14 @@ export const TakeOrStopMarketTradingContainer: React.FC<TakeOrStopMarketTradingC
   };
 
   return (
-    <div className="space-y-[16px]">
-      <OrderSideAndFunds availableBalance={availableBalance} />
+    <div className="flex flex-col gap-[12px]">
+      <OrderSideAndFunds
+        availableBalance={availableBalance}
+        quoteAsset={quoteAsset}
+      />
 
-      <div className="flex flex-col gap-[6px]">
-        <span className="text-rb-neutral-secondary text-[12px]">
+      <div className="flex flex-col gap-[6px] mt-[6px] mb-[6px]">
+        <span className="text-rb-neutral-secondary text-12">
           {t('page.perpsPro.tradingPanel.triggerPrice')}
         </span>
         <div className="flex items-center gap-8">
@@ -329,8 +333,8 @@ export const TakeOrStopMarketTradingContainer: React.FC<TakeOrStopMarketTradingC
             onChange={handleTriggerPriceChange}
             className="text-left"
             suffix={
-              <span className="text-15 font-medium text-rb-neutral-title-1">
-                USDC
+              <span className="text-15 text-rb-neutral-title-1">
+                {quoteAsset}
               </span>
             }
           />
@@ -347,13 +351,14 @@ export const TakeOrStopMarketTradingContainer: React.FC<TakeOrStopMarketTradingC
         percentage={percentage}
         setPercentage={setPercentage}
         baseAsset={selectedCoin}
+        quoteAsset={quoteAsset}
         szDecimals={szDecimals}
         sizeDisplayUnit={sizeDisplayUnit}
         onUnitChange={setSizeDisplayUnit}
         reduceOnly={reduceOnly}
       />
 
-      <div className="h-[1px] bg-rb-neutral-line" />
+      <div className="h-[1px] bg-rb-neutral-line my-[12px]" />
 
       <div className="flex items-center justify-between">
         <PerpsCheckbox
@@ -385,6 +390,7 @@ export const TakeOrStopMarketTradingContainer: React.FC<TakeOrStopMarketTradingC
         selectedCoin={selectedCoin}
         reduceOnly={reduceOnly}
         price={midPrice}
+        quoteAsset={quoteAsset}
       />
     </div>
   );

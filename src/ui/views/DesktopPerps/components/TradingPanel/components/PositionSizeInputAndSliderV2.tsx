@@ -17,6 +17,7 @@ import { PerpsDropdown } from './PerpsDropdown';
 import { ReactComponent as RcIconSwitchCC } from '@/ui/assets/swap/switch-cc.svg';
 import { useRabbySelector } from '@/ui/store';
 import { splitNumberByStep } from '@/ui/utils';
+import type { PerpsQuoteAsset } from '@/ui/views/Perps/constants';
 
 const PRESET_POINTS = [0, 25, 50, 75, 100];
 
@@ -34,6 +35,7 @@ interface PositionSizeInputAndSliderV2Props {
   percentage: number;
   setPercentage: (percentage: number) => void;
   baseAsset: string;
+  quoteAsset: PerpsQuoteAsset;
   szDecimals: number;
   sizeDisplayUnit: SizeDisplayUnit;
   onUnitChange: (unit: SizeDisplayUnit) => void;
@@ -49,6 +51,7 @@ export const PositionSizeInputAndSliderV2: React.FC<PositionSizeInputAndSliderV2
   percentage,
   setPercentage,
   baseAsset,
+  quoteAsset,
   szDecimals,
   sizeDisplayUnit,
   onUnitChange,
@@ -268,14 +271,14 @@ export const PositionSizeInputAndSliderV2: React.FC<PositionSizeInputAndSliderV2
   // Preview: show separate buy/sell amounts
   const { buyPreview, sellPreview } = useMemo(() => {
     const unit =
-      sizeDisplayUnit === 'usdc' ? 'USDC' : formatPerpsCoin(baseAsset);
+      sizeDisplayUnit === 'usd' ? quoteAsset : formatPerpsCoin(baseAsset);
 
     if (isSliderMode || positionSize.inputSource === 'slider') {
       // Percentage mode: each direction has its own amount
       const buyAmt = calcDirectionAmount(maxBuyTradeSize, percentage);
       const sellAmt = calcDirectionAmount(maxSellTradeSize, percentage);
 
-      if (sizeDisplayUnit === 'usdc') {
+      if (sizeDisplayUnit === 'usd') {
         const buyNotional =
           Number(buyAmt) > 0 ? calcAssetNotionalByAmount(buyAmt, price) : '0';
         const sellNotional =
@@ -292,18 +295,19 @@ export const PositionSizeInputAndSliderV2: React.FC<PositionSizeInputAndSliderV2
     }
 
     // Numeric mode: both directions show the same value
-    if (sizeDisplayUnit === 'usdc') {
-      // USDC mode: convert input USDC → size (rounded) → size * price = actual USDC
+    if (sizeDisplayUnit === 'usd') {
+      // USD mode: convert input USD → size (rounded) → size * price = actual USD
       const actualNotional =
         positionSize.amount && Number(price)
           ? calcAssetNotionalByAmount(positionSize.amount, price)
           : '0';
-      const display = `${actualNotional} ${unit}`;
+      const display = `${splitNumberByStep(actualNotional)} ${unit}`;
       return { buyPreview: display, sellPreview: display };
     }
-    const display = `${positionSize.amount || '0'} ${unit}`;
+    const display = `${splitNumberByStep(positionSize.amount || '0')} ${unit}`;
     return { buyPreview: display, sellPreview: display };
   }, [
+    quoteAsset,
     isSliderMode,
     positionSize.inputSource,
     positionSize.amount,
@@ -318,8 +322,9 @@ export const PositionSizeInputAndSliderV2: React.FC<PositionSizeInputAndSliderV2
   ]);
 
   const unitLabel = useMemo(
-    () => (sizeDisplayUnit === 'base' ? formatPerpsCoin(baseAsset) : 'USDC'),
-    [sizeDisplayUnit, baseAsset]
+    () =>
+      sizeDisplayUnit === 'base' ? formatPerpsCoin(baseAsset) : quoteAsset,
+    [sizeDisplayUnit, baseAsset, quoteAsset]
   );
 
   // Tooltip: show equivalent amount in the other unit when focused
@@ -327,13 +332,10 @@ export const PositionSizeInputAndSliderV2: React.FC<PositionSizeInputAndSliderV2
     if (!positionSize.amount || !price) return null;
     if (sizeDisplayUnit === 'base') {
       return null;
-      // Input is in base → tooltip shows USDC equivalent
-      const notional = positionSize.notionalValue || '0';
-      return `≈ ${notional} USDC`;
     }
     // Input is in USDC → tooltip shows base equivalent
     const coin = formatPerpsCoin(baseAsset);
-    return `≈ ${positionSize.amount} ${coin}`;
+    return `≈ ${splitNumberByStep(positionSize.amount)} ${coin}`;
   }, [
     positionSize.amount,
     positionSize.notionalValue,
@@ -368,15 +370,15 @@ export const PositionSizeInputAndSliderV2: React.FC<PositionSizeInputAndSliderV2
   }, [baseAsset, currentPerpsAccount?.address]);
 
   const handleChangeUnit = useMemoizedFn(() => {
-    const newUnit = sizeDisplayUnit === 'base' ? 'usdc' : 'base';
+    const newUnit = sizeDisplayUnit === 'base' ? 'usd' : 'base';
     onUnitChange(newUnit);
   });
 
   return (
-    <div className="w-full gap-[8px] flex flex-col">
+    <div className="w-full gap-[6px] flex flex-col">
       {/* Size label */}
       <div className="flex items-center justify-between">
-        <span className="text-rb-neutral-secondary text-[12px]">
+        <span className="text-rb-neutral-secondary text-[12px] leading-[14px]">
           {t('page.perpsPro.tradingPanel.size')}
         </span>
       </div>
@@ -396,7 +398,7 @@ export const PositionSizeInputAndSliderV2: React.FC<PositionSizeInputAndSliderV2
           onBlur={() => setIsFocused(false)}
           suffix={
             <div
-              className="text-15 font-medium text-rb-neutral-title-1 px-[10px] h-[28px] flex items-center gap-[2px] cursor-pointer whitespace-nowrap bg-rb-neutral-line rounded-[6px]"
+              className="text-15 text-rb-neutral-title-1 px-[8px] h-[28px] flex items-center gap-[6px] cursor-pointer whitespace-nowrap bg-rb-neutral-line rounded-[6px]"
               onClick={handleChangeUnit}
             >
               {unitLabel}
@@ -407,7 +409,7 @@ export const PositionSizeInputAndSliderV2: React.FC<PositionSizeInputAndSliderV2
       </Tooltip>
 
       {/* Slider — always shows percentage, syncs when input is "XX%" */}
-      <div className="px-[4px] mt-[12px] mb-[8px]">
+      <div className="px-[4px]">
         <DesktopPerpsSliderV2
           min={0}
           max={100}
@@ -420,18 +422,18 @@ export const PositionSizeInputAndSliderV2: React.FC<PositionSizeInputAndSliderV2
         />
       </div>
 
-      <div className="flex items-center justify-between text-[12px]">
+      <div className="flex flex-wrap items-center justify-between gap-x-[8px] gap-y-[4px] text-12">
         <div className="flex items-center gap-[4px]">
           <span className="text-rb-neutral-secondary">
             {t('page.perpsPro.tradingPanel.Buy')}
           </span>
-          <span className="text-rb-neutral-title-1">{buyPreview}</span>
+          <span className="text-rb-neutral-body">{buyPreview}</span>
         </div>
         <div className="flex items-center gap-[4px]">
           <span className="text-rb-neutral-secondary">
             {t('page.perpsPro.tradingPanel.Sell')}
           </span>
-          <span className="text-rb-neutral-title-1">{sellPreview}</span>
+          <span className="text-rb-neutral-body">{sellPreview}</span>
         </div>
       </div>
     </div>

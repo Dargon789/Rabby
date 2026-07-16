@@ -10,6 +10,8 @@ import { clearClipboard } from '@/ui/utils/clipboard';
 import IconSuccess from 'ui/assets/success.svg';
 import styled from 'styled-components';
 import { useWallet } from '@/ui/utils';
+import { privateKeyToAddress } from 'viem/accounts';
+import { ellipsisAddress } from '@/ui/utils/address';
 
 const Container = styled.div`
   .ant-input {
@@ -17,9 +19,8 @@ const Container = styled.div`
     border: 1px solid var(--r-neutral-line, #e0e5ec);
     font-size: 15px;
     line-height: 18px;
-    /* &:not(:placeholder-shown) {
-      font-size: 24px;
-    } */
+    color: var(--r-neutral-title-1, #192945) !important;
+    background: var(--r-neutral-card1, #fff) !important;
     &::placeholder {
       color: var(--r-neutral-foot, #6a7587);
       font-weight: 400;
@@ -41,6 +42,19 @@ const Container = styled.div`
   }
 `;
 
+const getPrivateKeyAddress = (value: string) => {
+  const normalized = value.trim().replace(/^0x/i, '');
+  if (!normalized) {
+    return '';
+  }
+
+  try {
+    return privateKeyToAddress(`0x${normalized}` as `0x${string}`);
+  } catch {
+    return '';
+  }
+};
+
 export const ImportPrivateKey = () => {
   const { t } = useTranslation();
   const { setStore, clearStore } = useNewUserGuideStore();
@@ -48,6 +62,7 @@ export const ImportPrivateKey = () => {
 
   const history = useHistory();
   const wallet = useWallet();
+  const address = React.useMemo(() => getPrivateKeyAddress(value), [value]);
 
   const [form] = Form.useForm<{
     privateKey: string;
@@ -124,6 +139,12 @@ export const ImportPrivateKey = () => {
             />
           </Form.Item>
         </Form>
+        {address ? (
+          <div className="mt-[12px] flex items-center justify-between text-[13px] leading-[16px] font-medium text-r-neutral-foot">
+            <div>{t('page.addressDetail.address')}</div>
+            <div>{ellipsisAddress(address)}</div>
+          </div>
+        ) : null}
       </div>
 
       <footer className="mt-auto">

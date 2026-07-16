@@ -7,8 +7,16 @@ import { OpenApiService } from '@rabby-wallet/rabby-api';
 import { openapiService } from 'background/service';
 import { TokenItem } from './openapi';
 import * as Sentry from '@sentry/browser';
+import { getTxMatchData } from '@/utils/tempo';
+import { findChainByEnum } from '@/utils/chain';
 
 type ViewKey = keyof typeof CEX | keyof typeof DEX;
+
+const isTokenOnChain = (token: TokenItem | undefined, chain: CHAINS_ENUM) => {
+  const chainInfo = findChainByEnum(chain);
+
+  return !!token && !!chainInfo && token.chain === chainInfo.serverId;
+};
 
 export type SwapServiceStore = {
   selectedChain: CHAINS_ENUM | null;
@@ -85,6 +93,14 @@ class SwapService {
       if (storage.selectedDex && !values.includes(storage.selectedDex)) {
         storage.selectedDex = null;
       }
+      if (storage.selectedChain) {
+        if (!isTokenOnChain(storage.selectedFromToken, storage.selectedChain)) {
+          storage.selectedFromToken = undefined;
+        }
+        if (!isTokenOnChain(storage.selectedToToken, storage.selectedChain)) {
+          storage.selectedToToken = undefined;
+        }
+      }
     }
     this.store = storage || this.store;
   };
@@ -146,6 +162,13 @@ class SwapService {
 
   setSelectedChain = (chain: CHAINS_ENUM) => {
     this.store.selectedChain = chain;
+
+    if (!isTokenOnChain(this.store.selectedFromToken, chain)) {
+      this.store.selectedFromToken = undefined;
+    }
+    if (!isTokenOnChain(this.store.selectedToToken, chain)) {
+      this.store.selectedToToken = undefined;
+    }
   };
 
   getSelectedFromToken = () => {
@@ -216,7 +239,7 @@ class SwapService {
     data: string,
     quoteInfo: Omit<Parameters<OpenApiService['postSwap']>[0], 'tx' | 'tx_id'>
   ) => {
-    this.txQuotes[`${chain}-${data}`] = quoteInfo;
+    this.txQuotes[`${chain}-${getTxMatchData({ data })}`] = quoteInfo;
   };
 
   postSwap = (
@@ -226,7 +249,7 @@ class SwapService {
   ) => {
     const { postSwap } = openapiService;
     const { txQuotes } = this;
-    const key = `${chain}-${tx.data}`;
+    const key = `${chain}-${getTxMatchData(tx as any)}`;
     const quoteInfo = txQuotes[key];
     if (quoteInfo) {
       delete txQuotes[key];

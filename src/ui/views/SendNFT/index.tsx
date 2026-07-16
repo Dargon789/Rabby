@@ -96,12 +96,29 @@ const SendNFT = () => {
   const chainInfo = useMemo(() => {
     return findChain({ enum: chain });
   }, [chain]);
-
-  const { openDirect, prefetch } = useMiniSigner({
+  const { instance, openDirect, prefetch } = useMiniSigner({
     account: currentAccount!,
     chainServerId: chainInfo?.serverId || '',
     autoResetGasStoreOnChainChange: true,
   });
+  const prefetchDirectSendNftTx = useCallback(
+    (tx: Tx) => {
+      prefetch({
+        txs: [tx],
+        ga: {
+          category: 'Send',
+          source: 'sendNFT',
+          trigger: filterRbiSource('sendNFT', rbisource) && rbisource,
+        },
+        getContainer,
+      }).catch((error) => {
+        if (error !== MINI_SIGN_ERROR.PREFETCH_FAILURE) {
+          console.error('send nft prefetch error', error);
+        }
+      });
+    },
+    [prefetch, rbisource]
+  );
 
   const nftItem = useMemo(() => {
     const query = new URLSearchParams(search);
@@ -246,7 +263,7 @@ const SendNFT = () => {
 
   const getNFTTransferParams = useCallback(
     (amount: number): Record<string, any> | null => {
-      if (!nftItem || !chainInfo || !currentAccount) {
+      if (!nftItem || !chainInfo || !currentAccount?.address) {
         // throw new Error('Missing required data for NFT transfer');
         return null;
       }
@@ -296,7 +313,7 @@ const SendNFT = () => {
 
       return params;
     },
-    [nftItem, chainInfo, currentAccount, toAddress]
+    [nftItem, chainInfo, currentAccount?.address, toAddress]
   );
 
   const amount = form.getFieldValue('amount');
@@ -305,19 +322,7 @@ const SendNFT = () => {
     if (canUseDirectSubmitTx) {
       const params = getNFTTransferParams(amount);
       if (params) {
-        prefetch({
-          txs: [params as Tx],
-          ga: {
-            category: 'Send',
-            source: 'sendNFT',
-            trigger: filterRbiSource('sendNFT', rbisource) && rbisource,
-          },
-          getContainer,
-        }).catch((error) => {
-          if (error !== MINI_SIGN_ERROR.PREFETCH_FAILURE) {
-            console.error('send nft prefetch error', error);
-          }
-        });
+        prefetchDirectSendNftTx(params as Tx);
       }
     } else {
       prefetch({
@@ -336,7 +341,7 @@ const SendNFT = () => {
     getNFTTransferParams,
     freshId,
     prefetch,
-    rbisource,
+    prefetchDirectSendNftTx,
   ]);
 
   const { runAsync: handleSubmit, loading: isSubmitLoading } = useRequest(
@@ -420,6 +425,7 @@ const SendNFT = () => {
               error === MINI_SIGN_ERROR.USER_CANCELLED ||
               error === MINI_SIGN_ERROR.CANT_PROCESS
             ) {
+              prefetchDirectSendNftTx(params as Tx);
               return;
             }
             shouldForceSignPage = true;
@@ -594,7 +600,7 @@ const SendNFT = () => {
           rightSlot={
             isTab || isDesktop ? null : (
               <div
-                className="text-r-neutral-title1 absolute right-0 cursor-pointer top-1/2 -translate-y-1/2"
+                className="text-r-neutral-title1 hover:text-r-blue-default absolute right-0 cursor-pointer top-1/2 -translate-y-1/2"
                 onClick={() => {
                   // openInternalPageInTab(`send-nft${history.location.search}`);
                   wallet.openInDesktop(
@@ -730,6 +736,7 @@ const SendNFT = () => {
                   <ShowMoreOnSend
                     chainServeId={chainInfo?.serverId}
                     open
+                    signatureInstance={instance}
                     // setOpen={setGasFeeOpen}
                   />
                 </div>
@@ -756,6 +763,7 @@ const SendNFT = () => {
             canSubmit={canSubmit}
             miniSignLoading={miniSignLoading}
             canUseDirectSubmitTx={canUseDirectSubmitTx}
+            signatureInstance={instance}
             onConfirm={() => {
               handleSubmit({
                 amount: form.getFieldValue('amount'),

@@ -12,7 +12,10 @@ const tsImportPluginFactory = require('ts-import-plugin');
 const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
 // const AssetReplacePlugin = require('./plugins/AssetReplacePlugin');
 const CopyPlugin = require('copy-webpack-plugin');
-const { resolveManifestFilename } = require('./manifest-utils');
+const {
+  resolveManifestFilename,
+  resolveManifestVersion,
+} = require('./manifest-utils');
 const ReactRefreshTypeScript = require('react-refresh-typescript');
 
 const createStyledComponentsTransformer = require('typescript-plugin-styled-components')
@@ -48,6 +51,12 @@ const MANIFEST_FILENAME = resolveManifestFilename({
   manifestType: MANIFEST_TYPE,
   buildEnv: 'dev',
 });
+const APP_VERSION =
+  process.env.VERSION ||
+  resolveManifestVersion({
+    manifestType: MANIFEST_TYPE,
+    buildEnv: 'dev',
+  });
 
 // 通用配置
 const commonConfig = {
@@ -55,7 +64,13 @@ const commonConfig = {
   devtool: 'inline-cheap-module-source-map',
   watch: !isHot,
   watchOptions: {
-    ignored: ['**/public', '**/node_modules'],
+    ignored: [
+      '**/public',
+      '**/node_modules',
+      '**/dist/**',
+      '**/dist-mv2/**',
+      '**/tmp/**',
+    ],
     followSymlinks: false,
   },
   output: {
@@ -86,6 +101,7 @@ const commonConfig = {
       zlib: require.resolve('browserify-zlib'),
       https: require.resolve('https-browserify'),
       http: require.resolve('stream-http'),
+      vm: false,
     },
     extensions: ['.js', 'jsx', '.ts', '.tsx'],
   },
@@ -153,8 +169,8 @@ const commonPlugins = [
     dayjs: 'dayjs',
   }),
   new webpack.DefinePlugin({
-    'process.env.version': JSON.stringify(`version: ${process.env.VERSION}`),
-    'process.env.release': JSON.stringify(process.env.VERSION),
+    'process.env.version': JSON.stringify(`version: ${APP_VERSION}`),
+    'process.env.release': JSON.stringify(APP_VERSION),
     'process.env.RABBY_BUILD_GIT_HASH': JSON.stringify(BUILD_GIT_HASH),
     'process.env.ETHERSCAN_KEY': JSON.stringify(process.env.ETHERSCAN_KEY),
   }),
@@ -299,6 +315,15 @@ const uiConfig = {
           },
           {
             loader: 'postcss-loader',
+            options: {
+              postcssOptions: {
+                plugins: [
+                  require('postcss-nested'),
+                  require('postcss-custom-properties'),
+                  require('autoprefixer'),
+                ],
+              },
+            },
           },
           {
             loader: 'less-loader',
