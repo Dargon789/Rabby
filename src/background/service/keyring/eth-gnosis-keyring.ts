@@ -522,17 +522,23 @@ class GnosisKeyring extends EventEmitter {
 
     const multiSendData = encodeMultiSendData(
       transactions.map((tx) => ({
-        to: tx.to,
+        to: this._normalize(tx.to),
         value: tx.value || '0',
         data: tx.data || '0x',
-        operation: tx.operation || 0,
+        operation: Number(tx.operation || 0),
       }))
     ) as `0x${string}`;
 
     const safeProvider = new SafeProvider({
       provider: {
         request: async ({ method, params }) => {
-          return provider.send(method, params);
+          if (typeof provider.request === 'function') {
+            return provider.request({ method, params });
+          }
+          if (typeof provider.send === 'function') {
+            return provider.send(method, params);
+          }
+          throw new Error('Provider does not support request or send');
         },
       },
     });
@@ -549,7 +555,7 @@ class GnosisKeyring extends EventEmitter {
     const tx = {
       data: multiSendCallData,
       from: address,
-      to: multiSendContract.contractAddress,
+      to: multiSendContract.getAddress(),
       value: '0',
       operation: Number(Operation.DELEGATE), // DelegateCall
     };
