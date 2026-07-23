@@ -55,7 +55,10 @@ import type {
   SecurityResult,
   SignerConfig,
 } from '@/ui/component/MiniSignV2/domain/types';
-import { isLedgerLockError } from '@/ui/utils/ledger';
+import {
+  isLedgerConnectionRecoverableError,
+  isLedgerLockError,
+} from '@/ui/utils/ledger';
 import { t } from 'i18next';
 import AuthenticationModalPromise from '../../AuthenticationModal';
 import { DrawerProps, ModalProps } from 'antd';
@@ -421,6 +424,7 @@ export class SignatureSteps {
               chainId: chain.serverId,
               sender: account.address,
               walletProvider: {
+                ethRpc: wallet.requestETHRpc,
                 findChain,
                 ALIAS_ADDRESS,
                 hasPrivateKeyInWallet: wallet.hasPrivateKeyInWallet,
@@ -479,6 +483,7 @@ export class SignatureSteps {
           chainId: chain.serverId,
           sender: account.address,
           walletProvider: {
+            ethRpc: wallet.requestETHRpc,
             hasPrivateKeyInWallet: wallet.hasPrivateKeyInWallet,
             hasAddress: wallet.hasAddress,
             getWhitelist: wallet.getWhitelist,
@@ -1120,7 +1125,7 @@ export class SignatureSteps {
       if (
         !(
           isLedgerLockError(msg) ||
-          msg === 'DISCONNECTED' ||
+          isLedgerConnectionRecoverableError(msg) ||
           msg === 'No OneKey Device found'
         )
       ) {

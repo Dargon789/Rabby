@@ -517,6 +517,7 @@ export const sendTransaction = async ({
     chainId: chain.serverId,
     sender: address,
     walletProvider: {
+      ethRpc: wallet.requestETHRpc,
       hasPrivateKeyInWallet: wallet.hasPrivateKeyInWallet,
       hasAddress: wallet.hasAddress,
       getWhitelist: wallet.getWhitelist,
@@ -696,6 +697,7 @@ export const sendTransaction = async ({
 
     return {
       txHash: hash,
+      preExecResult,
       gasCost: {
         ...estimateGasCost,
         gasCostUsd,
@@ -705,6 +707,7 @@ export const sendTransaction = async ({
   } else {
     return {
       txHash: hash,
+      preExecResult,
       gasCost: {
         ...estimateGasCost,
       },
@@ -894,6 +897,7 @@ export const sendTransactionByMiniSignV2 = async ({
       chainId: chain.serverId,
       sender: currentAccount.address,
       walletProvider: {
+        ethRpc: wallet.requestETHRpc,
         hasPrivateKeyInWallet: wallet.hasPrivateKeyInWallet,
         hasAddress: wallet.hasAddress,
         getWhitelist: wallet.getWhitelist,

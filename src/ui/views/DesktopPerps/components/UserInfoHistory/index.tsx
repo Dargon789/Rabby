@@ -20,6 +20,7 @@ import { EVENTS } from '@/constant';
 import eventBus from '@/eventBus';
 import { usePerpsAccount } from '@/ui/views/Perps/hooks/usePerpsAccount';
 import { ALL_PERPS_QUOTE_ASSETS } from '@/ui/views/Perps/constants';
+import { FloatingWidgetToggle } from './FloatingWidgetToggle';
 
 interface Tab {
   key: string;
@@ -48,7 +49,9 @@ export const UserInfoHistory: React.FC = () => {
 
   const tabs: Tab[] = useMemo(() => {
     const assetPositionNum = clearinghouseState?.assetPositions?.length || 0;
-    const openOrdersNum = openOrders.length;
+    const openOrdersNum = openOrders.filter(
+      (o) => o.coin.includes('@') === false
+    ).length;
     const twapNum = twapStates.length;
     // Non-unified mode shows two rows: USDC(Spot) + USDC(Perps).
     const assetsNum = isUnifiedAccount ? ALL_PERPS_QUOTE_ASSETS.length : 2;
@@ -129,9 +132,13 @@ export const UserInfoHistory: React.FC = () => {
     if (activeButton && container) {
       const containerRect = container.getBoundingClientRect();
       const buttonRect = activeButton.getBoundingClientRect();
+      // Fixed-length underline, centered under the active tab.
+      const INDICATOR_WIDTH = 20;
+      const buttonCenter =
+        buttonRect.left - containerRect.left + buttonRect.width / 2;
       setIndicatorStyle({
-        left: buttonRect.left - containerRect.left,
-        width: buttonRect.width,
+        left: buttonCenter - INDICATOR_WIDTH / 2,
+        width: INDICATOR_WIDTH,
       });
     }
   }, [activeTab, tabs]);
@@ -154,44 +161,43 @@ export const UserInfoHistory: React.FC = () => {
 
   return (
     <div className="flex-1 h-full bg-rb-neutral-bg-1 flex flex-col min-w-0 overflow-hidden">
-      <div
-        ref={tabsContainerRef}
-        className="relative flex border-b border-solid border-rb-neutral-line flex-shrink-0"
-      >
-        {tabs.map((tab) => {
-          return (
-            <button
-              key={tab.key}
-              ref={(el) => {
-                tabRefs.current[tab.key] = el;
-              }}
-              className={clsx(
-                'px-[16px] py-[16px] text-[14px] flex items-center gap-[4px]',
-                activeTab === tab.key
-                  ? 'text-r-blue-default'
-                  : 'hover:text-r-blue-default text-r-neutral-foot'
-              )}
-              onClick={() => setActiveTab(tab.key)}
-            >
-              {tab.label}
-              {tab.number ? (
-                <div className="h-[16px] px-6 text-[12px] text-rb-brand-default bg-rb-brand-light-1 rounded-[4px] flex items-center justify-center">
-                  {tab.number}
-                </div>
-              ) : null}
-            </button>
-          );
-        })}
+      <div className="h-[38px] px-[12px] border-b border-solid border-rb-neutral-line shrink-0 flex items-center justify-between gap-[24px]">
         <div
-          className="absolute bottom-0 h-[2px] bg-rb-brand-default transition-all duration-300 ease-out"
-          style={{
-            left: indicatorStyle.left,
-            width: indicatorStyle.width,
-          }}
-        />
+          ref={tabsContainerRef}
+          className="relative flex h-full min-w-0 flex-1 gap-[36px] overflow-x-auto trades-container-no-scrollbar"
+        >
+          {tabs.map((tab) => {
+            return (
+              <button
+                key={tab.key}
+                ref={(el) => {
+                  tabRefs.current[tab.key] = el;
+                }}
+                className={clsx(
+                  'h-[38px] text-12 font-medium flex items-center justify-center gap-[4px] shrink-0 whitespace-nowrap',
+                  activeTab === tab.key
+                    ? 'text-rb-neutral-title-1'
+                    : 'hover:text-rb-neutral-title-1 text-rb-neutral-secondary'
+                )}
+                onClick={() => setActiveTab(tab.key)}
+              >
+                {tab.label}
+                {tab.number ? <span>({tab.number})</span> : null}
+              </button>
+            );
+          })}
+          <div
+            className="absolute bottom-0 h-[2px] bg-rb-brand-default transition-all duration-300 ease-out"
+            style={{
+              left: indicatorStyle.left,
+              width: indicatorStyle.width,
+            }}
+          />
+        </div>
+        <FloatingWidgetToggle />
       </div>
       <div className="flex-1 overflow-hidden min-h-0">
-        <div className="text-r-neutral-foot text-[12px] whitespace-nowrap h-full">
+        <div className="text-rb-neutral-secondary text-12 whitespace-nowrap h-full">
           {ActiveComponent ? <ActiveComponent /> : null}
         </div>
       </div>

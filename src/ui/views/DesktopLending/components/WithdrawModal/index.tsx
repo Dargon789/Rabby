@@ -497,7 +497,8 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
               value={inner_amount ?? ''}
               onValueChange={handleChangeAmount}
               placeholder="0"
-              className="text-right w-[200px] border-0 bg-transparent p-0 h-auto hover:border-r-0"
+              wrapperClassName="w-[200px]"
+              className="text-right w-full border-0 bg-transparent p-0 h-auto hover:border-r-0"
             />
           </div>
           <div className="w-full flex flex-row justify-between min-w-0 gap-4">
@@ -580,7 +581,7 @@ export const WithdrawModal: React.FC<WithdrawModalProps> = ({
             <div className="flex items-center gap-8 py-8 px-10 rounded-[8px] bg-rb-red-light-1">
               <RcIconWarningCC
                 viewBox="0 0 16 16"
-                className="w-15 h-15 text-rb-red-default flex-shrink-0"
+                className="w-15 h-15 text-rb-red-default shrink-0"
               />
               <span className="text-[14px] leading-[18px] font-medium text-rb-red-default flex-1">
                 {t('page.lending.risk.withdrawWarning')}

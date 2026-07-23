@@ -80,16 +80,26 @@ const ManageApprovalsContent: React.FC = () => {
   const { t } = useTranslation();
   const { filterType, setFilterType } = useApprovalsPage();
   const { totalCount: eip7702TotalCount } = useEIP7702Approvals();
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  const scrollTabsToTop = React.useCallback(() => {
+    const tabsContentHolder = containerRef.current?.querySelector<HTMLElement>(
+      '.ant-tabs-content-holder'
+    );
+    if (tabsContentHolder) {
+      tabsContentHolder.scrollTop = 0;
+    }
+  }, []);
 
   return (
-    <Container className="bg-r-neutral-bg-2">
+    <Container ref={containerRef} className="bg-r-neutral-bg-2">
       <PageHeader
         className="mx-[20px] mb-[3px]"
         isShowAccount
         rightSlot={
           <div className="absolute right-0 top-[50%] flex items-center gap-[16px] translate-y-[-50%]">
             <div
-              className="relative cursor-pointer text-r-neutral-title1 hit-slop-8"
+              className="relative cursor-pointer text-r-neutral-title1 hover:text-r-blue-default hit-slop-8"
               onClick={() => {
                 openInTab('desktop.html#/desktop/manage-approvals');
               }}
@@ -105,6 +115,7 @@ const ManageApprovalsContent: React.FC = () => {
       <Tabs
         activeKey={filterType}
         onChange={(activeKey) => {
+          scrollTabsToTop();
           setFilterType(
             activeKey as typeof FILTER_TYPES[keyof typeof FILTER_TYPES]
           );

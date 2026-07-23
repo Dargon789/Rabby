@@ -60,8 +60,14 @@ export const HYPE_SEND_ASSET_TOKEN_MAP = {
   USDE: 'USDE:0x2e6d84f2d7ca82e6581e03523e4389f7',
   USDH: 'USDH:0x54e00a5988577cb0b0c9ab0cb6ef7f4b',
 };
-// default 0.00002 HYPE, add 0.00001 buffer for price fluctuation
-export const HYPE_GAS_FEE_IN_HYPE = 0.00003;
+// Core->EVM gas is paid in HYPE, but auto-deducted from the transferred
+// stablecoin when the account holds no HYPE, so a withdrawal must reserve it.
+// https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm/hypercore-less-than-greater-than-hyperevm-transfers
+export const HYPE_CORE_TO_EVM_GAS = 200_000;
+// Absorbs base-fee swings before the next block executes + HYPE/USD slippage.
+export const HYPE_GAS_RESERVE_BUFFER = 2;
+// Fallback when the live gas estimate is unavailable.
+export const HYPE_GAS_FEE_IN_HYPE = 0.001;
 
 export const HYPE_USDC_TOKEN_ITEM = {
   id: HYPE_USDC_TOKEN_ID,
@@ -232,22 +238,13 @@ export const PERPS_MINI_USD_VALUE = 10; // $10
 export const PERPS_INVITE_URL = `https://app.hyperliquid.xyz/join/${PERPS_REFERENCE_CODE}`;
 
 // =============== Multi-stablecoin / HIP-3 ===============
-
-export type PerpsQuoteAsset = 'USDC' | 'USDT' | 'USDH' | 'USDE';
-
-export const ALL_PERPS_QUOTE_ASSETS: PerpsQuoteAsset[] = [
-  'USDC',
-  'USDT',
-  'USDH',
-  'USDE',
-];
-
-export const COLLATERAL_TOKEN_TO_QUOTE: Record<number, PerpsQuoteAsset> = {
-  0: 'USDC',
-  268: 'USDT',
-  235: 'USDE',
-  360: 'USDH',
-};
+import type { PerpsQuoteAsset } from '@/utils/perps/quoteAsset';
+import {
+  ALL_PERPS_QUOTE_ASSETS,
+  COLLATERAL_TOKEN_TO_QUOTE,
+} from '@/utils/perps/quoteAsset';
+export type { PerpsQuoteAsset };
+export { ALL_PERPS_QUOTE_ASSETS, COLLATERAL_TOKEN_TO_QUOTE };
 
 export const STABLE_COIN_INDEX_ID_MAP: Record<PerpsQuoteAsset, number> = {
   USDC: 0,
@@ -281,3 +278,11 @@ export const SPOT_STABLE_COIN_NAME: Record<
 
 export const PERPS_MIN_SWAP_AMOUNT = 15;
 export const STABLECOIN_SLIPPAGE = 0.01;
+
+// =============== Limit order open ===============
+
+export type PerpsOpenOrderType = 'market' | 'limit';
+
+export const PERPS_LIMIT_PRICE_CONFIRM_PCT = 0.05;
+export const PERPS_LIMIT_PRICE_BLOCK_PCT = 0.1;
+export const PERPS_LIMIT_TIF_DEFAULT = 'Gtc' as const;

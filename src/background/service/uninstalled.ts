@@ -2,6 +2,7 @@ import { createPersistStore } from 'background/utils';
 import { keyringService, transactionHistoryService } from '.';
 import { KEYRING_CLASS } from '@/constant';
 import browser from 'webextension-polyfill';
+import i18n from './i18n';
 
 export type UninstalledStore = {
   imported: boolean;
@@ -30,6 +31,12 @@ class Uninstalled {
     });
 
     this.store = storage || this.store;
+    i18n.off('languageChanged', this.handleLanguageChanged);
+    i18n.on('languageChanged', this.handleLanguageChanged);
+  };
+
+  private handleLanguageChanged = () => {
+    this.setUninstalled();
   };
 
   syncStatus = async () => {
@@ -96,26 +103,30 @@ class Uninstalled {
     }
   };
 
-  setUninstalled = () => {
-    let search = '';
-    if (this.store.imported) {
-      search = 'i';
-    }
-    if (this.store.wallet) {
-      search += 'w';
-    }
+  setUninstalled = async () => {
+    try {
+      let search = '';
+      if (this.store.imported) {
+        search = 'i';
+      }
+      if (this.store.wallet) {
+        search += 'w';
+      }
 
-    if (this.store.tx) {
-      search += 't';
+      if (this.store.tx) {
+        search += 't';
+      }
+      if (this.store.local) {
+        search += 'l';
+      }
+      await browser.runtime.setUninstallURL(
+        `https://rabby.io/uninstalled?r=${encodeURIComponent(search)}&v=${
+          browser.runtime.getManifest().version
+        }&lang=${encodeURIComponent(i18n.language)}`
+      );
+    } catch (e) {
+      // ignore
     }
-    if (this.store.local) {
-      search += 'l';
-    }
-    browser.runtime.setUninstallURL(
-      `https://rabby.io/uninstalled?r=${encodeURIComponent(search)}&v=${
-        browser.runtime.getManifest().version
-      }`
-    );
   };
 }
 

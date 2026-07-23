@@ -7,7 +7,44 @@ import { FixedSizeList as List, ListChildComponentProps } from 'react-window';
 import ResizeObserver from 'rc-resize-observer';
 import { useThemeMode } from '@/ui/hooks/usePreference';
 
-const Wrapper = styled.div`
+// Two stacked triangles used as the column sort indicator. The active direction
+// (up = ascend, down = descend) is painted with the title colour, the other
+// stays muted. `order === null` keeps both muted (the hover / inactive look).
+const activeIconColor = 'var(--rb-neutral-title-1)';
+const inactiveIconColor = 'var(--rb-neutral-secondary)';
+
+const SortIcon: React.FC<{ order: 'ascend' | 'descend' | null }> = ({
+  order,
+}) => {
+  const upColor = order === 'ascend' ? activeIconColor : inactiveIconColor;
+  const downColor = order === 'descend' ? activeIconColor : inactiveIconColor;
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="12"
+      height="12"
+      viewBox="0 0 12 12"
+      fill="none"
+    >
+      {/* upward triangle (top) — highlighted when ascending */}
+      <path
+        d="M3 4.5L6 1.5L9 4.5L3 4.5Z"
+        style={{ fill: upColor, stroke: upColor }}
+        strokeWidth="0.75"
+        strokeLinejoin="round"
+      />
+      {/* downward triangle (bottom) — highlighted when descending */}
+      <path
+        d="M9 7.5L6 10.5L3 7.5H9Z"
+        style={{ fill: downColor, stroke: downColor }}
+        strokeWidth="0.75"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+};
+
+const Wrapper = styled.div<{ $rowHeight?: number }>`
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -40,6 +77,13 @@ const Wrapper = styled.div`
     overflow: hidden;
     display: flex;
     flex-direction: column;
+  }
+
+  /* Columns keep their fixed widths as a baseline; when the container is wider
+     the extra space is distributed across the columns (option A: stretch),
+     and when narrower the body scrolls horizontally. */
+  .ant-table table {
+    min-width: 100%;
   }
 
   .ant-table-container {
@@ -75,24 +119,28 @@ const Wrapper = styled.div`
   }
 
   .ant-table-thead > tr > th {
-    color: var(--rb-neutral-foot, #6a7587);
-    font-size: 13px;
-    font-weight: 400;
+    color: var(--rb-neutral-secondary, #9a9ca9);
+    font-size: 12px;
+    line-height: 14px;
+    /* antd forces table headers to 500; keep an explicit 350 so they match the
+       page's regular weight (plain inheritance can't override antd here). */
+    font-weight: 350;
     background-color: var(--rb-neutral-bg-1, #fff);
     border: none;
 
-    padding: 12px 8px;
+    height: 38px;
+    padding: 0 8px;
 
     &::before {
       display: none !important;
     }
 
     &:first-child {
-      padding-left: 16px;
+      padding-left: 12px;
     }
 
     &:last-child {
-      padding-right: 16px;
+      padding-right: 12px;
     }
 
     &.ant-table-column-has-sorters {
@@ -102,7 +150,7 @@ const Wrapper = styled.div`
       transition: none;
 
       .ant-table-column-sorters {
-        padding: 12px 0;
+        padding: 0;
       }
 
       /* Hover state */
@@ -121,28 +169,58 @@ const Wrapper = styled.div`
     .ant-table-column-sorter {
       display: none;
     }
+
+    /* Custom sort indicator: hidden until the header is hovered (muted look) or
+       the column is the active sort (highlighted look). */
+    .sort-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 12px;
+      height: 12px;
+      margin-left: 4px;
+      vertical-align: middle;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    &:hover .sort-icon,
+    &.ant-table-column-sort .sort-icon {
+      opacity: 1;
+    }
   }
 
   .ant-table-tbody > tr > td {
-    border-bottom: none;
+    height: ${({ $rowHeight }) => $rowHeight ?? 44}px;
+    vertical-align: middle;
+    /* 1px gap between content rows, painted in the panel background colour. */
+    border-bottom: 1px solid var(--rb-neutral-bg-1, #fff);
 
-    padding: 8px;
+    padding: 0 8px;
 
     &:first-child {
-      padding-left: 16px;
+      padding-left: 12px;
     }
 
     &:last-child {
-      padding-right: 16px;
+      padding-right: 12px;
     }
 
     .is-long-bg {
-      background: linear-gradient(to right, #58c66920, #58c66900);
-      border-left: 2px solid var(--rb-green-default, #58c669);
+      background: linear-gradient(
+        to right,
+        rgba(var(--rb-green-default-rgb), 0.125),
+        rgba(var(--rb-green-default-rgb), 0)
+      );
+      border-left: 2px solid var(--rb-green-default, #2abb7f);
     }
     .is-short-bg {
-      background: linear-gradient(to right, #ff453a20, #ff453a00);
-      border-left: 2px solid var(--rb-red-default, #ff453a);
+      background: linear-gradient(
+        to right,
+        rgba(var(--rb-red-default-rgb), 0.125),
+        rgba(var(--rb-red-default-rgb), 0)
+      );
+      border-left: 2px solid var(--rb-red-default, #e34935);
     }
   }
 
@@ -178,23 +256,27 @@ const VirtualWrapper = styled.div<{ isDarkTheme: boolean }>`
     }
 
     .ant-table-thead > tr > th {
-      color: var(--rb-neutral-foot, #6a7587);
-      font-size: 13px;
-      font-weight: 400;
+      color: var(--rb-neutral-secondary, #9a9ca9);
+      font-size: 12px;
+      line-height: 14px;
+      /* antd forces table headers to 500; keep an explicit 350 so they match the
+         page's regular weight (plain inheritance can't override antd here). */
+      font-weight: 350;
       background-color: var(--rb-neutral-bg-1, #fff);
       border: none;
-      padding: 12px 8px;
+      height: 38px;
+      padding: 0 8px;
 
       &::before {
         display: none !important;
       }
 
       &:first-child {
-        padding-left: 16px;
+        padding-left: 12px;
       }
 
       &:last-child {
-        padding-right: 16px;
+        padding-right: 12px;
       }
 
       &.ant-table-column-has-sorters {
@@ -204,7 +286,7 @@ const VirtualWrapper = styled.div<{ isDarkTheme: boolean }>`
         transition: none;
 
         .ant-table-column-sorters {
-          padding: 12px 0;
+          padding: 0;
         }
 
         &:hover {
@@ -219,6 +301,25 @@ const VirtualWrapper = styled.div<{ isDarkTheme: boolean }>`
 
       .ant-table-column-sorter {
         display: none;
+      }
+
+      /* Custom sort indicator: hidden until hovered (muted) or active sort
+         (highlighted). */
+      .sort-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 12px;
+        height: 12px;
+        margin-left: 4px;
+        vertical-align: middle;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+
+      &:hover .sort-icon,
+      &.ant-table-column-sort .sort-icon {
+        opacity: 1;
       }
     }
 
@@ -245,16 +346,19 @@ const VirtualWrapper = styled.div<{ isDarkTheme: boolean }>`
     .virtual-cell {
       flex: 1;
       // flex-shrink: 0;
-      padding: 8px;
+      /* No vertical padding: the row height is fixed and content is centred via
+         align-items:center, so vertical padding would only push content past the
+         row edge once the height shrinks (28px single-line / 44px two-line). */
+      padding: 0 8px;
       // overflow: hidden;
       box-sizing: border-box;
 
       &:first-child {
-        padding-left: 16px;
+        padding-left: 12px;
       }
 
       &:last-child {
-        padding-right: 16px;
+        padding-right: 12px;
       }
     }
   }
@@ -347,10 +451,10 @@ export const CommonTable = <T extends object>({
   onChange,
   dataSource,
   defaultSortField,
-  defaultSortOrder = 'ascend',
+  defaultSortOrder = 'descend',
   emptyMessage,
   virtual = false,
-  rowHeight = 48,
+  rowHeight = 44,
   ...restProps
 }: CommonTableProps<T>) => {
   const { isDarkTheme } = useThemeMode();
@@ -386,13 +490,14 @@ export const CommonTable = <T extends object>({
           singleSorter.order = newOrder;
         }
       } else {
+        // First click on a new column sorts descending.
         setSortedInfo({
           field: clickedField || null,
-          order: clickedField ? 'ascend' : null,
+          order: clickedField ? 'descend' : null,
         });
 
         if (singleSorter && clickedField) {
-          singleSorter.order = 'ascend';
+          singleSorter.order = 'descend';
         }
       }
 
@@ -423,14 +528,10 @@ export const CommonTable = <T extends object>({
         title: (
           <>
             {renderedTitle}
-            <span
-              className="w-[16px] text-center"
-              style={{
-                opacity:
-                  sortedInfo.field === fieldKey && sortedInfo.order ? 1 : 0,
-              }}
-            >
-              {sortedInfo.order === 'ascend' ? '↑' : '↓'}
+            <span className="sort-icon">
+              <SortIcon
+                order={sortedInfo.field === fieldKey ? sortedInfo.order : null}
+              />
             </span>
           </>
         ),
@@ -507,7 +608,7 @@ export const CommonTable = <T extends object>({
 
   if (dataSource.length === 0) {
     return (
-      <Wrapper>
+      <Wrapper $rowHeight={rowHeight}>
         <div className="flex flex-col items-center justify-center gap-[4px] pt-[100px]">
           <RcIconEmpty className="text-rb-neutral-foot" />
           <div className="text-[12px] leading-[14px] text-rb-neutral-foot text-center">
@@ -556,7 +657,7 @@ export const CommonTable = <T extends object>({
   }
 
   return (
-    <Wrapper>
+    <Wrapper $rowHeight={rowHeight}>
       <Table<T>
         {...restProps}
         dataSource={sortedData}

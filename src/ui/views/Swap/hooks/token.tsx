@@ -2,7 +2,10 @@ import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
 import { getUiType, isSameAddress, useWallet } from '@/ui/utils';
 import { CHAINS_ENUM } from '@debank/common';
 import { TokenItem } from '@rabby-wallet/rabby-api/dist/types';
-import { WrapTokenAddressMap } from '@rabby-wallet/rabby-swap';
+import {
+  isSameTypeTokenPair,
+  WrapTokenAddressMap,
+} from '@rabby-wallet/rabby-swap';
 import BigNumber from 'bignumber.js';
 import {
   useCallback,
@@ -39,9 +42,57 @@ import {
 } from '@/utils/transaction';
 import { isTempoChain } from '@/utils/tempo';
 import { useGasAccountDepositFlowActive } from '@/ui/views/GasAccount/hooks/runtime';
+import { isQuoteReceiveValueTooLowForEarlyDisplay } from '@/ui/utils/quote';
+import { getDefaultSwapToTokenItem } from '@/constant/dex-swap';
 const isTab = getUiType().isTab;
 
 export const enableInsufficientQuote = true;
+const FREE_TOKEN_PAIR_AUTO_SLIPPAGE = '0.1';
+
+const getDexQuoteReceiveAmount = (
+  quote: TDexQuoteData,
+  receiveToken: TokenItem
+) =>
+  new BigNumber(quote.data?.toTokenAmount || 0)
+    .div(10 ** (quote.data?.toTokenDecimals || receiveToken.decimals))
+    .toString();
+
+const isDexQuoteSelectable = (quote: TDexQuoteData) =>
+  !quote.loading &&
+  !!quote.data &&
+  !!quote.preExecResult &&
+  !!quote.preExecResult.isSdkPass;
+
+const isTokenOnChain = (token: TokenItem | undefined, chain: CHAINS_ENUM) => {
+  const chainInfo = findChainByEnum(chain);
+
+  return !!token && !!chainInfo && token.chain === chainInfo.serverId;
+};
+
+const getDexQuoteScore = ({
+  quote,
+  receiveToken,
+  inSufficient,
+}: {
+  quote: TDexQuoteData;
+  receiveToken: TokenItem;
+  inSufficient: boolean;
+}) => {
+  if (!isDexQuoteSelectable(quote)) {
+    return new BigNumber(Number.MIN_SAFE_INTEGER);
+  }
+
+  const price = receiveToken.price ? receiveToken.price : 1;
+  const receiveUsdValue = new BigNumber(
+    getDexQuoteReceiveAmount(quote, receiveToken)
+  ).times(price);
+
+  if (inSufficient) {
+    return receiveUsdValue;
+  }
+
+  return receiveUsdValue.minus(quote.preExecResult?.gasUsdValue || 0);
+};
 
 const useTokenInfo = ({
   userAddress,
@@ -108,13 +159,27 @@ export const useTokenPair = (userAddress: string) => {
     defaultSelectedFromToken,
     defaultSelectedToToken,
   } = useRabbySelector((state) => {
+    const selectedChain = state.swap.selectedChain || CHAINS_ENUM.ETH;
+    const selectedFromToken = isTokenOnChain(
+      state.swap.selectedFromToken,
+      selectedChain
+    )
+      ? state.swap.selectedFromToken
+      : undefined;
+    const selectedToToken = isTokenOnChain(
+      state.swap.selectedToToken,
+      selectedChain
+    )
+      ? state.swap.selectedToToken
+      : undefined;
+
     return {
       initialSelectedChain: state.swap.$$initialSelectedChain,
-      oChain: state.swap.selectedChain || CHAINS_ENUM.ETH,
-      defaultSelectedFromToken: state.swap.selectedFromToken,
+      oChain: selectedChain,
+      defaultSelectedFromToken: selectedFromToken,
       defaultSelectedToToken:
-        state.swap.selectedToToken?.id !== state.swap.selectedFromToken?.id
-          ? state.swap.selectedToToken
+        selectedToToken?.id !== selectedFromToken?.id
+          ? selectedToToken
           : undefined,
     };
   });
@@ -132,9 +197,6 @@ export const useTokenPair = (userAddress: string) => {
   );
   const [refreshTokenId, updateRefreshTokenId] = useState(0);
   const reloadTxRefreshPausedRef = useRef(false);
-  const setReloadTxRefreshPaused = useCallback((paused: boolean) => {
-    reloadTxRefreshPausedRef.current = paused;
-  }, []);
   const refreshTokensInfo = useCallback(
     () => updateRefreshTokenId((e) => e + 1),
     [updateRefreshTokenId]
@@ -173,7 +235,6 @@ export const useTokenPair = (userAddress: string) => {
     defaultToken: defaultSelectedToToken,
     refreshTokenId,
   });
-
   const {
     lowCreditToken,
     lowCreditVisible,
@@ -199,13 +260,21 @@ export const useTokenPair = (userAddress: string) => {
   const setActiveProvider: React.Dispatch<
     React.SetStateAction<QuoteProvider | undefined>
   > = useCallback((p) => {
+    if (reloadTxRefreshPausedRef.current) {
+      return;
+    }
+
     if (expiredTimer.current) {
       clearTimeout(expiredTimer.current);
+      expiredTimer.current = undefined;
     }
 
     if (p && !depositFlowActiveRef.current) {
       expiredTimer.current = setTimeout(() => {
-        if (!depositFlowActiveRef.current) {
+        if (
+          !depositFlowActiveRef.current &&
+          !reloadTxRefreshPausedRef.current
+        ) {
           setRefreshId((e) => e + 1);
         }
       }, 1000 * 20);
@@ -245,6 +314,12 @@ export const useTokenPair = (userAddress: string) => {
     receiveTokenId?: string;
     isMax?: boolean;
   }>(query2obj(search));
+  const [chainInitialized, setChainInitialized] = useState(
+    !!initialSelectedChain ||
+      !!searchObj?.chain ||
+      !!searchObj?.payTokenId ||
+      !!searchObj?.receiveTokenId
+  );
 
   useAsyncInitializeChainList({
     // NOTICE: now `useTokenPair` is only used for swap page, so we can use `SWAP_SUPPORT_CHAINS` here
@@ -259,6 +334,7 @@ export const useTokenPair = (userAddress: string) => {
       ) {
         switchChain(firstEnum);
       }
+      setChainInitialized(true);
     },
   });
 
@@ -537,6 +613,15 @@ export const useTokenPair = (userAddress: string) => {
     return false;
   }, [payToken, receiveToken]);
 
+  const isFreeTokenPair = useMemo(
+    () => isSameTypeTokenPair(payToken, receiveToken),
+    [payToken, receiveToken]
+  );
+
+  const autoSlippageValue = isFreeTokenPair
+    ? FREE_TOKEN_PAIR_AUTO_SLIPPAGE
+    : getSwapAutoSlippageValue(isStableCoin);
+
   const [isWrapToken, wrapTokenSymbol] = useMemo(() => {
     if (payToken?.id && receiveToken?.id) {
       const res = isSwapWrapToken(payToken?.id, receiveToken?.id, chain);
@@ -571,19 +656,27 @@ export const useTokenPair = (userAddress: string) => {
       feeRate
     ) && inSufficientCanGetQuote;
 
+  const [autoSuggestSlippage, setAutoSuggestSlippage] = useState(
+    autoSlippageValue
+  );
+
   useEffect(() => {
     if (isWrapToken) {
       setFeeRate('0');
     }
     if (slippageObj.autoSlippage) {
-      slippageObj.setSlippage(getSwapAutoSlippageValue(isStableCoin));
+      slippageObj.setSlippage(autoSlippageValue);
+      setAutoSuggestSlippage(autoSlippageValue);
     }
-  }, [slippageObj.autoSlippage, isWrapToken, isStableCoin]);
+  }, [slippageObj.autoSlippage, isWrapToken, autoSlippageValue]);
 
   const [quoteList, setQuotesList] = useState<TDexQuoteData[]>([]);
+  const fetchIdRef = useRef(0);
+  const [quoteRequestId, setQuoteRequestId] = useState(0);
 
   useLayoutEffect(() => {
     fetchIdRef.current += 1;
+    setQuoteRequestId(fetchIdRef.current);
     setQuotesList([]);
     setActiveProvider(undefined);
     setPending(canRunQuoteRequest);
@@ -627,10 +720,6 @@ export const useTokenPair = (userAddress: string) => {
 
   const [pending, setPending] = useState(false);
 
-  const [autoSuggestSlippage, setAutoSuggestSlippage] = useState(
-    getSwapAutoSlippageValue(isStableCoin)
-  );
-
   const setAutoSlippage = useCallback(() => {
     slippageObj.setAutoSlippage(true);
   }, [slippageObj.setAutoSlippage]);
@@ -642,19 +731,19 @@ export const useTokenPair = (userAddress: string) => {
     onSetAutoSlippage: setAutoSlippage,
   });
 
-  const fetchIdRef = useRef(0);
   const { getAllQuotes, validSlippage } = useQuoteMethods();
   const [
     { loading: quoteLoading, error: quotesError },
     getQuotes,
   ] = useAsyncFn(async () => {
-    if (depositFlowActiveRef.current) {
+    if (depositFlowActiveRef.current || reloadTxRefreshPausedRef.current) {
       setPending(false);
       return;
     }
 
     fetchIdRef.current += 1;
     const currentFetchId = fetchIdRef.current;
+    setQuoteRequestId(currentFetchId);
     if (canRunQuoteRequest && receiveToken && !isDraggingSlider) {
       refreshTokensInfo();
 
@@ -662,7 +751,12 @@ export const useTokenPair = (userAddress: string) => {
         e.map((q) => ({ ...q, loading: true, isBest: false }))
       );
       let slippage = slippageObj.slippage;
-      if (slippageObj.autoSlippage) {
+      if (slippageObj.autoSlippage && isFreeTokenPair) {
+        slippage = autoSlippageValue;
+        if (currentFetchId === fetchIdRef.current) {
+          setAutoSuggestSlippage(slippage);
+        }
+      } else if (slippageObj.autoSlippage) {
         try {
           const suggestSlippage = await wallet.openapi.suggestSlippage({
             chain_id: findChainByEnum(chain)!.serverId,
@@ -721,11 +815,13 @@ export const useTokenPair = (userAddress: string) => {
     feeRate,
     slippageObj.slippage,
     slippageObj.autoSlippage,
+    isFreeTokenPair,
+    autoSlippageValue,
     isDraggingSlider,
   ]);
 
   useEffect(() => {
-    if (canRunQuoteRequest) {
+    if (canRunQuoteRequest && !reloadTxRefreshPausedRef.current) {
       setPending(true);
     } else {
       setPending(false);
@@ -745,10 +841,30 @@ export const useTokenPair = (userAddress: string) => {
     [getQuotes]
   );
 
+  const setReloadTxRefreshPaused = useCallback(
+    (paused: boolean) => {
+      reloadTxRefreshPausedRef.current = paused;
+
+      if (!paused) {
+        return;
+      }
+
+      fetchIdRef.current += 1;
+      setPending(false);
+      cancelQuoteDebounce();
+      if (expiredTimer.current) {
+        clearTimeout(expiredTimer.current);
+        expiredTimer.current = undefined;
+      }
+    },
+    [cancelQuoteDebounce]
+  );
+
   useEffect(() => {
     if (depositFlowActive) {
       if (expiredTimer.current) {
         clearTimeout(expiredTimer.current);
+        expiredTimer.current = undefined;
       }
       setPending(false);
       cancelQuoteDebounce();
@@ -759,89 +875,135 @@ export const useTokenPair = (userAddress: string) => {
     previousDepositFlowActiveRef.current = depositFlowActive;
   }, [cancelQuoteDebounce, depositFlowActive, setRefreshId]);
 
+  const rawQuoteLoading = quoteLoading || pending;
+  const allQuotesLoaded = !rawQuoteLoading;
+  const quoteListForDisplay = useMemo(() => {
+    if (allQuotesLoaded || !payToken || !receiveToken) {
+      return quoteList;
+    }
+
+    return quoteList.filter((quote) => {
+      if (quote.loading) {
+        return false;
+      }
+
+      if (!quote.data) {
+        return true;
+      }
+
+      return !isQuoteReceiveValueTooLowForEarlyDisplay({
+        fromToken: payToken,
+        toToken: receiveToken,
+        fromAmount: inputAmount,
+        toAmount: getDexQuoteReceiveAmount(quote, receiveToken),
+      });
+    });
+  }, [allQuotesLoaded, inputAmount, payToken, quoteList, receiveToken]);
+  const selectableQuoteListForDisplay = useMemo(
+    () => quoteListForDisplay.filter(isDexQuoteSelectable),
+    [quoteListForDisplay]
+  );
+  const displayQuoteLoading =
+    rawQuoteLoading && selectableQuoteListForDisplay.length === 0;
+
+  useEffect(() => {
+    if (selectableQuoteListForDisplay.length) {
+      setShowMoreVisible(true);
+    }
+  }, [selectableQuoteListForDisplay.length]);
+
   useEffect(() => {
     if (
-      !quoteLoading &&
-      !pending &&
-      receiveToken &&
-      quoteList.every((q, idx) => !q.loading)
+      reloadTxRefreshPausedRef.current ||
+      !canRunQuoteRequest ||
+      !receiveToken
     ) {
-      const sortIncludeGasFee = true;
-      const sortedList = [
-        ...(quoteList?.sort((a, b) => {
-          const getNumber = (quote: typeof a) => {
-            const price = receiveToken.price ? receiveToken.price : 1;
-            if (inSufficient) {
-              return new BigNumber(quote.data?.toTokenAmount || 0)
-                .div(
-                  10 ** (quote.data?.toTokenDecimals || receiveToken.decimals)
-                )
-                .times(price);
-            }
-            if (!quote.preExecResult || !quote.preExecResult.isSdkPass) {
-              return new BigNumber(Number.MIN_SAFE_INTEGER);
-            }
-            const balanceChangeReceiveTokenAmount =
-              new BigNumber(quote.data?.toTokenAmount || 0)
-                .div(
-                  10 ** (quote?.data?.toTokenDecimals || receiveToken.decimals)
-                )
-                .toString() || 0;
-
-            if (sortIncludeGasFee) {
-              return new BigNumber(balanceChangeReceiveTokenAmount)
-                .times(price)
-                .minus(quote?.preExecResult?.gasUsdValue || 0);
-            }
-
-            return new BigNumber(balanceChangeReceiveTokenAmount).times(price);
-          };
-          return getNumber(b).minus(getNumber(a)).toNumber();
-        }) || []),
-      ];
-      setActiveProvider(undefined);
-      if (sortedList?.[0]) {
-        const bestQuote = sortedList[0];
-        const { preExecResult } = bestQuote;
-
-        setBestQuoteDex(bestQuote.name);
-
-        setActiveProvider((preItem) =>
-          !bestQuote.preExecResult || !bestQuote.preExecResult.isSdkPass
-            ? undefined
-            : preItem?.manualClick
-            ? preItem
-            : {
-                name: bestQuote.name,
-                quote: bestQuote.data,
-                preExecResult: bestQuote.preExecResult,
-                gasPrice: preExecResult?.gasPrice,
-                shouldApproveToken: !!preExecResult?.shouldApproveToken,
-                shouldTwoStepApprove: !!preExecResult?.shouldTwoStepApprove,
-                error: !preExecResult,
-                halfBetterRate: '',
-                quoteWarning: undefined,
-                actualReceiveAmount:
-                  new BigNumber(bestQuote.data?.toTokenAmount || 0)
-                    .div(
-                      10 **
-                        (bestQuote?.data?.toTokenDecimals ||
-                          receiveToken.decimals)
-                    )
-                    .toString() || '',
-                gasUsd: preExecResult?.gasUsd,
-              }
-        );
-      }
+      return;
     }
+
+    if (!selectableQuoteListForDisplay.length) {
+      if (allQuotesLoaded) {
+        setBestQuoteDex('');
+        setActiveProvider(undefined);
+      }
+      return;
+    }
+
+    const sortedList = [...selectableQuoteListForDisplay].sort((a, b) =>
+      getDexQuoteScore({
+        quote: b,
+        receiveToken,
+        inSufficient,
+      })
+        .minus(
+          getDexQuoteScore({
+            quote: a,
+            receiveToken,
+            inSufficient,
+          })
+        )
+        .toNumber()
+    );
+    const bestQuote = sortedList[0];
+    const { preExecResult } = bestQuote;
+
+    if (!bestQuote.data || !preExecResult) {
+      return;
+    }
+
+    const buildActiveProvider = (
+      quote: TDexQuoteData,
+      manualClick?: boolean
+    ): QuoteProvider | undefined => {
+      const quotePreExecResult = quote.preExecResult;
+
+      if (!quote.data || !quotePreExecResult) {
+        return undefined;
+      }
+
+      return {
+        ...(manualClick ? { manualClick } : {}),
+        name: quote.name,
+        quote: quote.data,
+        preExecResult: quotePreExecResult,
+        gasPrice: quotePreExecResult.gasPrice,
+        shouldApproveToken: !!quotePreExecResult.shouldApproveToken,
+        shouldTwoStepApprove: !!quotePreExecResult.shouldTwoStepApprove,
+        error: false,
+        halfBetterRate: '',
+        quoteWarning: undefined,
+        actualReceiveAmount: getDexQuoteReceiveAmount(quote, receiveToken),
+        gasUsd: quotePreExecResult.gasUsd,
+      };
+    };
+    const bestActiveProvider = buildActiveProvider(bestQuote);
+
+    if (!bestActiveProvider) {
+      return;
+    }
+
+    setBestQuoteDex(bestQuote.name);
+
+    setActiveProvider((preItem) => {
+      const refreshedManualQuote = preItem?.manualClick
+        ? selectableQuoteListForDisplay.find(
+            (quote) => quote.name === preItem.name
+          )
+        : undefined;
+      const manualActiveProvider = refreshedManualQuote
+        ? buildActiveProvider(refreshedManualQuote, true)
+        : undefined;
+
+      return manualActiveProvider || bestActiveProvider;
+    });
   }, [
-    quoteList,
-    quoteLoading,
+    allQuotesLoaded,
+    canRunQuoteRequest,
+    selectableQuoteListForDisplay,
     receiveToken?.id,
     receiveToken?.chain,
+    receiveToken,
     inSufficient,
-
-    pending,
   ]);
 
   if (quotesError) {
@@ -876,12 +1038,14 @@ export const useTokenPair = (userAddress: string) => {
   useEffect(() => {
     if (expiredTimer.current) {
       clearTimeout(expiredTimer.current);
+      expiredTimer.current = undefined;
     }
   }, [payToken?.id, receiveToken?.id, chain, inputAmount]);
 
   useEffect(() => {
     if (expiredTimer.current) {
       clearTimeout(expiredTimer.current);
+      expiredTimer.current = undefined;
     }
   }, [inSufficientCanGetQuote]);
 
@@ -952,6 +1116,61 @@ export const useTokenPair = (userAddress: string) => {
     searchObj?.isMax,
   ]);
 
+  useEffect(() => {
+    const targetSearchChain = searchObj?.chain
+      ? findChain({ serverId: searchObj.chain })
+      : undefined;
+    if (
+      !chainInitialized ||
+      searchObj?.receiveTokenId ||
+      (targetSearchChain && targetSearchChain.enum !== chain) ||
+      receiveToken ||
+      !payToken ||
+      !userAddress
+    ) {
+      return;
+    }
+
+    const defaultToToken = getDefaultSwapToTokenItem(chain);
+    const chainInfo = findChainByEnum(chain);
+    if (
+      !defaultToToken ||
+      !chainInfo ||
+      isSameAddress(payToken.id, defaultToToken.id)
+    ) {
+      return;
+    }
+
+    let active = true;
+
+    setReceiveToken(defaultToToken);
+
+    wallet.openapi
+      .getToken(userAddress, chainInfo.serverId, defaultToToken.id)
+      .then((token) => {
+        if (active && token) {
+          setReceiveToken(token);
+        }
+      })
+      .catch((error) => {
+        console.error('default swap to token error', error);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    chain,
+    chainInitialized,
+    payToken,
+    receiveToken,
+    searchObj?.chain,
+    searchObj?.receiveTokenId,
+    setReceiveToken,
+    userAddress,
+    wallet.openapi,
+  ]);
+
   const isSetMaxRef = useRef(false);
   useEffect(() => {
     if (isSetMaxRef.current) {
@@ -987,6 +1206,7 @@ export const useTokenPair = (userAddress: string) => {
   const clearExpiredTimer = useCallback(() => {
     if (expiredTimer.current) {
       clearTimeout(expiredTimer.current);
+      expiredTimer.current = undefined;
     }
   }, []);
 
@@ -994,7 +1214,7 @@ export const useTokenPair = (userAddress: string) => {
     return () => {
       clearExpiredTimer();
     };
-  }, []);
+  }, [clearExpiredTimer]);
 
   return {
     setReloadTxRefreshPaused,
@@ -1021,6 +1241,7 @@ export const useTokenPair = (userAddress: string) => {
     inputAmount,
 
     isWrapToken,
+    isFreeTokenPair,
     wrapTokenSymbol,
     inSufficient,
     inSufficientCanGetQuote,
@@ -1029,8 +1250,10 @@ export const useTokenPair = (userAddress: string) => {
 
     //quote
     openQuotesList,
-    quoteLoading: quoteLoading || pending,
-    quoteList,
+    quoteLoading: displayQuoteLoading,
+    allQuotesLoaded,
+    quoteRequestId,
+    quoteList: quoteListForDisplay,
     currentProvider,
     setActiveProvider,
 
@@ -1041,7 +1264,6 @@ export const useTokenPair = (userAddress: string) => {
     swapUseSlider,
     onChangeSlider,
 
-    clearExpiredTimer,
     lowCreditToken,
     lowCreditVisible,
     setLowCreditToken,

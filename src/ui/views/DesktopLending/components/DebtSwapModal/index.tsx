@@ -1052,7 +1052,8 @@ export const DebtSwapModal: React.FC<DebtSwapModalProps> = ({
                   onValueChange={handleFromAmountChange}
                   placeholder="0"
                   fontSize={24}
-                  className="h-[40px] border-0 bg-transparent p-0 text-right font-medium leading-[40px] text-r-neutral-title-1 hover:border-r-0"
+                  wrapperClassName="w-full"
+                  className="w-full h-[40px] border-0 bg-transparent p-0 text-right font-medium leading-[40px] text-r-neutral-title-1 hover:border-r-0"
                 />
                 <div className="mt-12 flex items-center gap-8">
                   {fromAmount && new BigNumber(fromAmount).gt(0) ? (
@@ -1234,14 +1235,14 @@ export const DebtSwapModal: React.FC<DebtSwapModalProps> = ({
 
         {isExceedMaxLtvAfterSwap ? (
           <div className="mb-12 rounded-[8px] border border-rb-red-default bg-rb-red-light-1 px-12 py-10 flex items-start gap-8">
-            <RcIconWarningCC className="w-16 h-16 flex-shrink-0 text-rb-red-default mt-[1px]" />
+            <RcIconWarningCC className="w-16 h-16 shrink-0 text-rb-red-default mt-[1px]" />
             <span className="text-[13px] leading-[16px] text-rb-red-default">
               {t('page.lending.debtSwap.maxLtvWarning')}
             </span>
           </div>
         ) : isLiquidatable ? (
           <div className="mb-12 rounded-[8px] border border-rb-red-default bg-rb-red-light-1 px-12 py-10 flex items-start gap-8">
-            <RcIconWarningCC className="w-16 h-16 flex-shrink-0 text-rb-red-default mt-[1px]" />
+            <RcIconWarningCC className="w-16 h-16 shrink-0 text-rb-red-default mt-[1px]" />
             <span className="text-[13px] leading-[16px] text-rb-red-default">
               {t('page.lending.debtSwap.lpDangerWarning')}
             </span>
@@ -1252,7 +1253,7 @@ export const DebtSwapModal: React.FC<DebtSwapModalProps> = ({
           <>
             {!!riskDesc && (
               <div className="mb-8 rounded-[8px] border border-rb-orange-default bg-rb-orange-light-1 px-12 py-10 flex items-start gap-8">
-                <RcIconWarningCC className="w-16 h-16 flex-shrink-0 text-rb-orange-default mt-[1px]" />
+                <RcIconWarningCC className="w-16 h-16 shrink-0 text-rb-orange-default mt-[1px]" />
                 <span className="text-[13px] leading-[16px] text-rb-orange-default">
                   {riskDesc}
                 </span>

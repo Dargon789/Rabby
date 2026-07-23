@@ -8,7 +8,7 @@ import { OrderSide } from '../../../types';
 import { usePerpsTradingGate } from '../hooks/usePerpsTradingGate';
 
 const PRIMARY_BTN_CLASS =
-  'w-full h-[40px] rounded-[8px] font-medium text-[13px] border-transparent text-rb-neutral-InvertHighlight';
+  'w-full h-[40px] rounded-[6px] font-medium text-[15px] leading-[18px] border-transparent text-rb-neutral-InvertHighlight';
 
 const useTradingGate = ({
   error,
@@ -18,6 +18,7 @@ const useTradingGate = ({
   orderSide?: OrderSide;
 }) => {
   const { t } = useTranslation();
+  const hasPermission = useRabbySelector((s) => s.perps.hasPermission);
 
   const {
     quoteAsset,
@@ -30,33 +31,35 @@ const useTradingGate = ({
   } = usePerpsTradingGate({ orderSide });
 
   const bannerNode = useMemo(() => {
+    const banner = (text: React.ReactNode) => (
+      <div className="bg-r-orange-light rounded-[6px] px-[12px] py-[8px] flex items-center gap-[4px]">
+        <RcIconInfoCC className="text-r-orange-default" />
+        <div className="flex-1 text-left text-[12px] leading-[14px] text-r-orange-default">
+          {text}
+        </div>
+      </div>
+    );
+
+    // Region gate trumps everything: if trading isn't allowed here, nothing else applies.
+    if (!hasPermission) {
+      return banner(t('page.perpsPro.tradingPanel.notAvailableInRegion'));
+    }
     // Priority matches gateButton: needDepositFirst > needEnableTrading > needSwapStableCoin > error.
     // needEnableTrading suppresses the banner (the enable-trading button alone is enough),
     // but a pending deposit still needs the banner above it.
     if (needDepositFirst) {
-      return (
-        <div className="bg-r-orange-light rounded-[8px] px-[12px] py-[8px] flex items-center gap-[4px]">
-          <RcIconInfoCC className="text-r-orange-default" />
-          <div className="flex-1 text-left font-medium text-[12px] leading-[14px] text-r-orange-default">
-            {t('page.perpsPro.tradingPanel.addFundsToGetStarted')}
-          </div>
-        </div>
-      );
+      return banner(t('page.perpsPro.tradingPanel.addFundsToGetStarted'));
     }
     if (needEnableTrading) return null;
     if (!error && !needSwapStableCoin) return null;
-    return (
-      <div className="bg-r-orange-light rounded-[8px] px-[12px] py-[8px] flex items-center gap-[4px]">
-        <RcIconInfoCC className="text-r-orange-default" />
-        <div className="flex-1 text-left font-medium text-[12px] leading-[14px] text-r-orange-default">
-          {needSwapStableCoin
-            ? t('page.perps.PerpsSpotSwap.swapBeforeTrading', { quoteAsset })
-            : error}
-        </div>
-      </div>
+    return banner(
+      needSwapStableCoin
+        ? t('page.perps.PerpsSpotSwap.swapBeforeTrading', { quoteAsset })
+        : error
     );
   }, [
     error,
+    hasPermission,
     needDepositFirst,
     needSwapStableCoin,
     quoteAsset,
@@ -148,10 +151,10 @@ export const TradingButtons: React.FC<TradingButtonsProps> = ({
   const [sellHovered, setSellHovered] = useState(false);
 
   return (
-    <div className="flex flex-col gap-[12px]">
+    <div className="flex flex-col gap-[12px] mt-12">
       {bannerNode}
       {gateButton ?? (
-        <div className="flex items-center gap-[8px]">
+        <div className="flex items-center gap-[6px]">
           <Button
             type="primary"
             size="large"
@@ -161,13 +164,13 @@ export const TradingButtons: React.FC<TradingButtonsProps> = ({
             style={{
               boxShadow:
                 buyHovered && !buyDisabled && !buyError
-                  ? '0px 8px 16px rgba(42, 187, 127, 0.3)'
+                  ? '0px 8px 16px rgba(var(--rb-green-default-rgb), 0.3)'
                   : 'none',
             }}
             onMouseEnter={() => setBuyHovered(true)}
             onMouseLeave={() => setBuyHovered(false)}
             className={clsx(
-              'flex-1 h-[40px] rounded-[8px] font-medium text-[13px] border-transparent',
+              'flex-1 h-[40px] rounded-[6px] font-medium text-[15px] leading-[18px] border-transparent',
               'bg-rb-green-default text-rb-neutral-InvertHighlight',
               (buyDisabled || buyError || !hasPermission) &&
                 'cursor-not-allowed'
@@ -185,13 +188,13 @@ export const TradingButtons: React.FC<TradingButtonsProps> = ({
             style={{
               boxShadow:
                 sellHovered && !sellDisabled && !sellError
-                  ? '0px 8px 16px rgba(227, 73, 53, 0.3)'
+                  ? '0px 8px 16px rgba(var(--rb-red-default-rgb), 0.3)'
                   : 'none',
             }}
             onMouseEnter={() => setSellHovered(true)}
             onMouseLeave={() => setSellHovered(false)}
             className={clsx(
-              'flex-1 h-[40px] rounded-[8px] font-medium text-[13px] border-transparent',
+              'flex-1 h-[40px] rounded-[6px] font-medium text-[15px] leading-[18px] border-transparent',
               'bg-rb-red-default text-rb-neutral-InvertHighlight',
               (sellDisabled || sellError || !hasPermission) &&
                 'cursor-not-allowed'
@@ -244,14 +247,14 @@ export const TradingButton: React.FC<TradingButtonProps> = ({
             boxShadow:
               hovered && isValid && !error
                 ? orderSide === OrderSide.BUY
-                  ? '0px 8px 16px rgba(42, 187, 127, 0.3)'
-                  : '0px 8px 16px rgba(227, 73, 53, 0.3)'
+                  ? '0px 8px 16px rgba(var(--rb-green-default-rgb), 0.3)'
+                  : '0px 8px 16px rgba(var(--rb-red-default-rgb), 0.3)'
                 : 'none',
           }}
           onMouseEnter={() => setHovered(true)}
           onMouseLeave={() => setHovered(false)}
           className={clsx(
-            'w-full h-[40px] rounded-[8px] font-medium text-[13px] border-transparent text-rb-neutral-InvertHighlight',
+            'w-full h-[40px] rounded-[6px] font-medium text-[15px] leading-[18px] border-transparent text-rb-neutral-InvertHighlight',
             !(isValid && !error && hasPermission) && 'cursor-not-allowed',
             orderSide === OrderSide.BUY
               ? 'bg-rb-green-default'

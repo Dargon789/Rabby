@@ -114,7 +114,7 @@ export const Assets: React.FC = () => {
         width: 100,
         sorter: (a, b) => a.label.localeCompare(b.label),
         render: (_, record) => (
-          <div className="text-[13px] leading-[16px] font-medium text-r-neutral-title-1">
+          <div className="text-[13px] leading-[16px] text-r-neutral-title-1">
             {record.label}
           </div>
         ),
@@ -126,8 +126,8 @@ export const Assets: React.FC = () => {
         width: 200,
         sorter: (a, b) => a.total - b.total,
         render: (_, record) => (
-          <div className="text-[13px] leading-[16px] text-r-neutral-title-1">
-            {new BigNumber(record.total).toFixed(4)} {record.coin}
+          <div className="text-[13px] leading-[16px] text-r-neutral-body">
+            {new BigNumber(record.total).toFixed(2)} {record.coin}
           </div>
         ),
       },
@@ -146,10 +146,10 @@ export const Assets: React.FC = () => {
               className={
                 isLow
                   ? 'text-[13px] leading-[16px] text-r-neutral-foot'
-                  : 'text-[13px] leading-[16px] text-r-neutral-title-1'
+                  : 'text-[13px] leading-[16px] text-r-neutral-body'
               }
             >
-              {new BigNumber(record.available).toFixed(4)} {record.coin}
+              {new BigNumber(record.available).toFixed(2)} {record.coin}
             </div>
           );
         },
@@ -168,7 +168,7 @@ export const Assets: React.FC = () => {
               : t('page.perpsPro.userInfo.assets.transferToPerps');
           return (
             <a
-              className="text-[13px] leading-[16px] text-r-blue-default cursor-pointer font-medium"
+              className="text-[13px] leading-[16px] text-r-blue-default cursor-pointer"
               onClick={() => onActionClick(record)}
             >
               {label}
@@ -191,7 +191,7 @@ export const Assets: React.FC = () => {
       showSorterTooltip={false}
       defaultSortField="total"
       defaultSortOrder="descend"
-      rowHeight={32}
+      rowHeight={28}
       tableLayout="fixed"
     />
   );

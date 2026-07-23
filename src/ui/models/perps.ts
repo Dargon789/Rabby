@@ -21,16 +21,15 @@ import {
   UserTwapSliceFill,
   WsAllClearinghouseStates,
   SpotClearinghouseState,
+  SpotMeta,
+  FFastAssetCtx,
+  WsFastAssetCtxs,
   UserAbstractionResp,
 } from '@rabby-wallet/hyperliquid-sdk';
 import { Account } from '@/background/service/preference';
 import { RootModel, RabbyRootState } from '.';
 import { getPerpsSDK } from '@/ui/views/Perps/sdkManager';
-import {
-  formatMarkData,
-  getMaxTimeFromAccountHistory,
-  getPxDecimals,
-} from '../views/Perps/utils';
+import { formatMarkData, getPxDecimals } from '../views/Perps/utils';
 import {
   DEFAULT_TOP_ASSET,
   DEFAULT_ASSET_CATEGORY,
@@ -38,7 +37,11 @@ import {
   PerpsQuoteAsset,
   CANDLE_MENU_KEY_V2,
 } from '../views/Perps/constants';
-import { ApproveSignatures } from '@/background/service/perps';
+import type {
+  ApproveSignatures,
+  PerpsTpslModePreference,
+  PerpsTpslModePreferences,
+} from '@/background/service/perps';
 import { maxBy } from 'lodash';
 import eventBus from '@/eventBus';
 import { EVENTS } from '@/constant';
@@ -53,6 +56,7 @@ import {
   formatSpotState,
   SpotBalance,
   getCachedPerpDexs,
+  fetchAllDexsRaw,
 } from '../views/DesktopPerps/utils';
 import {
   OrderType,
@@ -83,6 +87,7 @@ export interface MarketData {
   displayName: string;
   quoteAsset: PerpsQuoteAsset;
   category?: string;
+  categoryId: string;
   brief?: string;
   description?: string;
   maxLeverage: number;
@@ -122,6 +127,10 @@ export interface AccountHistoryItem {
 }
 
 const VALID_TPSL_MODES = ['price', 'pnl', 'roi'] as const;
+const DEFAULT_POSITION_TPSL_MODE_PREFERENCES: PerpsTpslModePreferences = {
+  tp: 'pnl',
+  sl: 'pnl',
+};
 
 const getSavedTpslMode = (
   type: 'takeProfit' | 'stopLoss'
@@ -190,6 +199,10 @@ export interface PerpsState {
   perpFee: number;
   isLogin: boolean;
   isInitialized: boolean;
+  // True after the first WS clearinghouseState frame for the current user.
+  isUserDataReady: boolean;
+  // True after the first WS asset ticker frame.
+  isMarketTickerReady: boolean;
   approveSignatures: ApproveSignatures;
   userFills: WsFill[];
   userAccountHistory: AccountHistoryItem[];
@@ -202,19 +215,37 @@ export interface PerpsState {
   selectedTokenDetail: PerpTopTokenV3 | null;
   favoritedCoins: string[];
   marginModePreferences: Record<string, 'cross' | 'isolated'>;
+  tpslModePreferences: PerpsTpslModePreferences;
   chartInterval: string;
   wsActiveAssetCtx: WsActiveAssetCtx | null;
   wsActiveAssetData: WsActiveAssetData | null;
   clearinghouseState: AggregatedClearinghouseState | null;
   openOrders: OpenOrder[];
+  // Aggregated state keyed by **account address** — populated for every known
+  // perps account so the account selector can show their balances. Not the
+  // same as `dexClearinghouseStates` below.
   clearinghouseStateMap: Record<string, ClearinghouseState | null>;
+  // Raw per-dex cache for the **current account** keyed by dex name
+  // ('' = hyper main). WS and HTTP both write here with time guards; the
+  // aggregated `clearinghouseState` / `clearinghouseStateMap` are rebuilt
+  // from this map.
+  dexClearinghouseStates: Record<string, ClearinghouseState>;
   spotState: {
     accountValue: string;
     availableToTrade: string;
     balances: SpotBalance[];
     balancesMap: Record<string, SpotBalance>;
     tokenToAvailableAfterMaintenance: [number, string][] | null;
+    // Portfolio-margin account-level fields (passed through from the WS spotState)
+    portfolioMarginEnabled?: boolean;
+    portfolioMarginRatio?: string;
+    tokenToPortfolioBorrowRatio?: [number, string][];
   };
+  // Combined spot+perp mark/mid price map from the `fastAssetCtxs` WS feed,
+  // merged across delta frames. Keyed by coin (perp) / '@index' (spot) / '#n'.
+  spotAssetCtxs: Record<string, FFastAssetCtx>;
+  // Static spot metadata (token list + pair universe); fetched once on login.
+  spotMeta: SpotMeta | null;
   userAbstraction: UserAbstractionResp;
   historicalOrders: UserHistoricalOrders[];
   userFunding: WsUserFunding['fundings'];
@@ -285,9 +316,39 @@ const applyAssetCtxsToList = (
     return {
       ...item,
       ...ctx,
-      pxDecimals: getPxDecimals(String(ctx.markPx ?? item.markPx ?? '')),
+      // Tick precision follows the price MAGNITUDE (5-sig-figs rule), so it
+      // only changes when the price crosses a power of ten — stable per tick.
+      pxDecimals: getPxDecimals(item.szDecimals, ctx.markPx ?? item.markPx),
     };
   });
+};
+
+// Overlay fresh markPx/midPx from the fastAssetCtxs feed onto the perp
+// marketData list (matched by coin name). fastAssetCtxs is HL's upgraded combined
+// feed that supersedes the throttled allDexsAssetCtxs for PRICES; the rest of each
+// ctx (oraclePx / funding / openInterest / ...) still comes from allDexsAssetCtxs
+// via applyAssetCtxsToList. Returns the same reference when nothing changed so the
+// map rebuild + re-render is skipped.
+const overlayFastCtxsToMarketData = (
+  list: MarketData[],
+  fastCtxs: WsFastAssetCtxs
+): MarketData[] => {
+  let changed = false;
+  const next = list.map((item) => {
+    const fc = fastCtxs[item.name];
+    if (!fc) return item;
+    const markPx = fc.markPx != null ? fc.markPx : item.markPx;
+    const midPx = fc.midPx != null ? fc.midPx : item.midPx;
+    if (markPx === item.markPx && midPx === item.midPx) return item;
+    changed = true;
+    return {
+      ...item,
+      markPx,
+      midPx,
+      pxDecimals: getPxDecimals(item.szDecimals, markPx ?? item.markPx),
+    };
+  });
+  return changed ? next : list;
 };
 
 export const perps = createModel<RootModel>()({
@@ -307,6 +368,8 @@ export const perps = createModel<RootModel>()({
     marketDataMap: {},
     isLogin: false,
     isInitialized: false,
+    isUserDataReady: false,
+    isMarketTickerReady: false,
     userFills: [],
     approveSignatures: [],
     wsSubscriptions: [],
@@ -316,11 +379,13 @@ export const perps = createModel<RootModel>()({
     selectedCoin: 'BTC',
     favoritedCoins: [],
     marginModePreferences: {},
+    tpslModePreferences: DEFAULT_POSITION_TPSL_MODE_PREFERENCES,
     chartInterval: '15m',
     wsActiveAssetCtx: null,
     wsActiveAssetData: null,
     clearinghouseState: null,
     clearinghouseStateMap: {},
+    dexClearinghouseStates: {},
     openOrders: [],
     historicalOrders: [],
     userAbstraction: 'default',
@@ -330,7 +395,12 @@ export const perps = createModel<RootModel>()({
       balances: [],
       balancesMap: {},
       tokenToAvailableAfterMaintenance: null,
+      portfolioMarginEnabled: false,
+      portfolioMarginRatio: undefined,
+      tokenToPortfolioBorrowRatio: undefined,
     },
+    spotAssetCtxs: {},
+    spotMeta: null,
     userFunding: [],
     nonFundingLedgerUpdates: [],
     twapStates: [],
@@ -356,6 +426,35 @@ export const perps = createModel<RootModel>()({
       return {
         ...state,
         ...payload,
+      };
+    },
+
+    // fastAssetCtxs frames are deltas: the first frame is a snapshot, later
+    // frames carry only updated coins and omit unchanged fields. Merge per-coin
+    // so a markPx-only (or midPx-only) update doesn't wipe the other field.
+    mergeFastAssetCtxs(state, payload: WsFastAssetCtxs) {
+      if (!payload) return state;
+      // 1) spot price map — collateral valuation (AccountInfo PM/unified rows).
+      const nextSpot: Record<string, FFastAssetCtx> = {
+        ...state.spotAssetCtxs,
+      };
+      for (const coin of Object.keys(payload)) {
+        nextSpot[coin] = { ...nextSpot[coin], ...payload[coin] };
+      }
+      // 2) Overlay fresh perp markPx/midPx onto marketData (fastAssetCtxs is the
+      //    upgraded combined feed; allDexsAssetCtxs was throttled post-upgrade).
+      const nextMarketData = overlayFastCtxsToMarketData(
+        state.marketData,
+        payload
+      );
+      return {
+        ...state,
+        spotAssetCtxs: nextSpot,
+        marketData: nextMarketData,
+        marketDataMap:
+          nextMarketData === state.marketData
+            ? state.marketDataMap
+            : buildMarketDataMap(nextMarketData),
       };
     },
 
@@ -494,31 +593,41 @@ export const perps = createModel<RootModel>()({
         });
 
       if (isSnapshot) {
+        // Mirror mobile usePerpsStore: snapshot replays a (possibly large)
+        // historical batch on WS reconnect. Take the latest ledger time per
+        // type, then drop pending entries whose time is at or before that
+        // cutoff — HL has already confirmed them.
+        const maxTimeByType: Record<string, number> = {};
+        for (const item of newList) {
+          const prev = maxTimeByType[item.type];
+          if (prev === undefined || item.time > prev) {
+            maxTimeByType[item.type] = item.time;
+          }
+        }
+        const filteredLocalHistory = state.localLoadingHistory.filter((p) => {
+          const cutoff = maxTimeByType[p.type];
+          return cutoff === undefined || p.time > cutoff;
+        });
+
         return {
           ...state,
+          localLoadingHistory: filteredLocalHistory,
           userAccountHistory: newList.reverse().slice(0, 200),
         };
       } else {
-        const {
-          depositMaxTime,
-          withdrawMaxTime,
-          receiveMaxTime,
-        } = getMaxTimeFromAccountHistory(newList);
-
         if (needShowToast) {
           newList.forEach((item) => showDepositAndWithdrawToast(item));
         }
-        const filteredLocalHistory = state.localLoadingHistory.filter(
-          (item) => {
-            if (item.type === 'deposit') {
-              return item.time >= depositMaxTime;
-            } else if (item.type === 'withdraw') {
-              return item.time >= withdrawMaxTime;
-            } else {
-              return item.time >= receiveMaxTime;
-            }
-          }
-        );
+        // Mirror mobile usePerpsStore: any newly-arrived ledger event of type
+        // X means we now have authoritative history for it — drop ALL pending
+        // of that type wholesale. Simpler than time-bucket filtering and keeps
+        // both clients behaving the same way.
+        let filteredLocalHistory = [...state.localLoadingHistory];
+        newList.forEach((item) => {
+          filteredLocalHistory = filteredLocalHistory.filter(
+            (i) => i.type !== item.type
+          );
+        });
 
         return {
           ...state,
@@ -551,11 +660,19 @@ export const perps = createModel<RootModel>()({
       if (!payload.address || !payload.clearinghouseState) {
         return state;
       }
+      const key = payload.address.toLowerCase();
+      const existing = state.clearinghouseStateMap?.[key];
+      if (
+        existing &&
+        (payload.clearinghouseState.time ?? 0) <= (existing.time ?? 0)
+      ) {
+        return state;
+      }
       return {
         ...state,
         clearinghouseStateMap: {
           ...state.clearinghouseStateMap,
-          [payload.address.toLowerCase()]: payload.clearinghouseState,
+          [key]: payload.clearinghouseState,
         },
       };
     },
@@ -568,6 +685,26 @@ export const perps = createModel<RootModel>()({
       return {
         ...state,
         clearinghouseState: payload,
+        isUserDataReady: true,
+      };
+    },
+
+    // Per-dex write with time guard so stale HTTP never clobbers fresh WS.
+    patchDexClearinghouseState(
+      state,
+      payload: { dex: string; state: ClearinghouseState }
+    ) {
+      if (!payload.state) return state;
+      const existing = state.dexClearinghouseStates?.[payload.dex];
+      if (existing && (payload.state.time ?? 0) <= (existing.time ?? 0)) {
+        return state;
+      }
+      return {
+        ...state,
+        dexClearinghouseStates: {
+          ...state.dexClearinghouseStates,
+          [payload.dex]: payload.state,
+        },
       };
     },
 
@@ -678,7 +815,11 @@ export const perps = createModel<RootModel>()({
       lastCtxsByDex = buildCtxsByDex(payload);
 
       if (state.marketData.length === 0) {
-        return state;
+        // First WS ticker frame arrived before HTTP meta — still mark
+        // ticker as ready so `waitForInitialWsData` can resolve.
+        return state.isMarketTickerReady
+          ? state
+          : { ...state, isMarketTickerReady: true };
       }
 
       const newMarketData = applyAssetCtxsToList(
@@ -687,6 +828,7 @@ export const perps = createModel<RootModel>()({
       );
       return {
         ...state,
+        isMarketTickerReady: true,
         marketData: newMarketData,
         marketDataMap: buildMarketDataMap(newMarketData),
       };
@@ -867,6 +1009,31 @@ export const perps = createModel<RootModel>()({
       };
     },
 
+    setTpslModePreferences(state, payload: PerpsTpslModePreferences) {
+      return {
+        ...state,
+        tpslModePreferences: {
+          ...DEFAULT_POSITION_TPSL_MODE_PREFERENCES,
+          ...(payload || {}),
+        },
+      };
+    },
+
+    patchTpslModePreference(
+      state,
+      payload: { side: 'tp' | 'sl'; mode: PerpsTpslModePreference }
+    ) {
+      if (!payload.side) return state;
+      return {
+        ...state,
+        tpslModePreferences: {
+          ...DEFAULT_POSITION_TPSL_MODE_PREFERENCES,
+          ...state.tpslModePreferences,
+          [payload.side]: payload.mode,
+        },
+      };
+    },
+
     setChartInterval(state, payload: string) {
       return {
         ...state,
@@ -990,6 +1157,18 @@ export const perps = createModel<RootModel>()({
       }
     },
 
+    // Static spot metadata (token list + pair universe). Fetched once on login;
+    // maps a held token name -> its spot pair key ('@index') for spot pricing.
+    async fetchSpotMeta() {
+      try {
+        const sdk = getPerpsSDK();
+        const spotMeta = await sdk.info.getSpotMeta();
+        dispatch.perps.patchState({ spotMeta });
+      } catch (error) {
+        console.error('Failed to fetch spot meta:', error);
+      }
+    },
+
     async loginPerpsAccount(
       payload: {
         account: Account;
@@ -999,12 +1178,9 @@ export const perps = createModel<RootModel>()({
     ) {
       const { account, isPro } = payload;
       await rootState.app.wallet.setPerpsCurrentAccount(account);
+      rootState.app.wallet.switchDesktopPerpsAccount(account);
       // await dispatch.perps.refreshData();
-      if (isPro) {
-        await dispatch.perps.fetchClearinghouseState();
-        // other use subscribe to data
-      } else {
-        await dispatch.perps.fetchPositionAndOpenOrders();
+      if (!isPro) {
         dispatch.perps.fetchUserHistoricalOrders();
       }
 
@@ -1017,6 +1193,7 @@ export const perps = createModel<RootModel>()({
 
       // dispatch.perps.startPolling(undefined);
       dispatch.perps.fetchUserAbstraction(account.address);
+      isPro && dispatch.perps.fetchSpotMeta();
       dispatch.perps.fetchPerpPermission(account.address);
       setTimeout(() => {
         // avoid 429 error
@@ -1025,15 +1202,86 @@ export const perps = createModel<RootModel>()({
       console.log('loginPerpsAccount success', account.address);
     },
 
-    /* @deprecated use websocket subscription push */
-    async fetchClearinghouseState() {
+    // `{ dex }` refreshes one dex (single-position actions). No arg refreshes
+    // all dexes (close-all / withdraw / legacy callers).
+    async fetchClearinghouseState(payload?: { dex?: string }) {
+      if (payload && typeof payload.dex === 'string') {
+        await dispatch.perps.fetchSingleDexClearinghouseState({
+          dex: payload.dex,
+        });
+        return;
+      }
+      await dispatch.perps.fetchAllDexsClearinghouseState();
+    },
+
+    async fetchSingleDexClearinghouseState(
+      payload: { dex: string },
+      rootState
+    ) {
+      const address = rootState.perps.currentPerpsAccount?.address;
+      if (!address) return;
       const sdk = getPerpsSDK();
+      const dexParam = payload.dex || undefined; // '' is hyper main → undefined
+      try {
+        const dexState = await sdk.info.getClearingHouseState(
+          address,
+          dexParam
+        );
+        if (!dexState) return;
+        dispatch.perps.patchDexClearinghouseState({
+          dex: payload.dex,
+          state: dexState,
+        });
+        await dispatch.perps.rebuildAggregatedClearinghouseState({ address });
+      } catch (error) {
+        console.error('fetchSingleDexClearinghouseState failed', error);
+      }
+    },
 
-      // const clearinghouseState = await sdk.info.getClearingHouseState();
+    async fetchAllDexsClearinghouseState(_: void | undefined, rootState) {
+      const address = rootState.perps.currentPerpsAccount?.address;
+      if (!address) return;
+      try {
+        const allStates = await fetchAllDexsRaw(address);
+        // Bulk-replace the per-dex map in one dispatch (mirrors the WS path
+        // and avoids N subscriber notifications). Skips per-key time guards,
+        // which is fine: HTTP responses for all dexes come from the same
+        // server tick window, so we treat them as one frame.
+        const nextMap: Record<string, ClearinghouseState> = {};
+        for (const [dex, s] of allStates) {
+          if (s) nextMap[dex] = s;
+        }
+        dispatch.perps.patchState({ dexClearinghouseStates: nextMap });
+        await dispatch.perps.rebuildAggregatedClearinghouseState({ address });
+      } catch (error) {
+        console.error('fetchAllDexsClearinghouseState failed', error);
+      }
+    },
 
-      // dispatch.perps.updatePositionsWithClearinghouse(clearinghouseState);
-
-      // dispatch.perps.patchClearinghouseState(clearinghouseState);
+    async rebuildAggregatedClearinghouseState(
+      payload: { address: string },
+      rootState
+    ) {
+      const dexMap = rootState.perps.dexClearinghouseStates || {};
+      // formatAllDexsClearinghouseState seeds marginSummary from entries[0],
+      // so bail if hyper isn't cached yet (HTTP single-dex can race ahead of
+      // the first WS frame).
+      if (!dexMap['']) return;
+      const entries: [string, ClearinghouseState][] = Object.entries(dexMap);
+      // make hyper state the first entry so `formatAllDexsClearinghouseState` uses it as the base for marginSummary; order of the rest doesn't matter
+      entries.sort((a, b) => (a[0] === '' ? -1 : b[0] === '' ? 1 : 0));
+      const aggregated = formatAllDexsClearinghouseState(entries);
+      if (!aggregated) return;
+      if (
+        rootState.perps.userAbstraction === UserAbstractionResp.unifiedAccount
+      ) {
+        aggregated.withdrawable = rootState.perps.spotState.availableToTrade.toString();
+      }
+      dispatch.perps.patchClearinghouseState(aggregated);
+      dispatch.perps.setClearinghouseStateMapBySingle({
+        address: payload.address,
+        clearinghouseState: aggregated,
+      });
     },
 
     /* @deprecated use websocket subscription push */
@@ -1042,6 +1290,54 @@ export const perps = createModel<RootModel>()({
       // const openOrders = await sdk.info.getFrontendOpenOrders();
       // dispatch.perps.updateOpenOrders(openOrders);
       // dispatch.perps.patchState({ openOrders });
+    },
+
+    // Refresh single dex's openOrders right after a place/cancel; WS reconciles drift.
+    async fetchPositionOpenOrdersHttp(payload: { dex: string }) {
+      await dispatch.perps.fetchPositionOpenOrdersHttpForDexes({
+        dexes: [payload.dex],
+      });
+    },
+
+    // Multi-dex variant (Cancel-All): one batched flush.
+    async fetchPositionOpenOrdersHttpForDexes(payload: { dexes: string[] }) {
+      const initial = store.getState().perps;
+      const address = initial.currentPerpsAccount?.address;
+      if (!address) return;
+      const unique = Array.from(new Set(payload.dexes));
+      if (unique.length === 0) return;
+      const sdk = getPerpsSDK();
+      const results = await Promise.all(
+        unique.map(async (dex) => {
+          try {
+            const orders = await sdk.info.getFrontendOpenOrders(
+              address,
+              dex || undefined
+            );
+            return { dex, orders };
+          } catch (e) {
+            console.error(
+              '[fetchPositionOpenOrdersHttpForDexes] failed',
+              dex,
+              e
+            );
+            return null;
+          }
+        })
+      );
+      const latest = store.getState().perps;
+      if (latest.currentPerpsAccount?.address !== address) return;
+      const successful = results.filter(
+        (r): r is { dex: string; orders: OpenOrder[] } => r !== null
+      );
+      if (successful.length === 0) return;
+      const successDexes = new Set(successful.map((r) => r.dex));
+      const map = latest.marketDataMap;
+      const kept = latest.openOrders.filter(
+        (o) => !successDexes.has(map[o.coin]?.dexId ?? '')
+      );
+      const fetched = successful.flatMap((r) => r.orders);
+      dispatch.perps.patchState({ openOrders: [...kept, ...fetched] });
     },
 
     async fetchUserFillHistory() {
@@ -1211,6 +1507,15 @@ export const perps = createModel<RootModel>()({
         dispatch.perps.updateMarketData(ctxs);
       });
       subscriptions.push(unsubscribeAllDexsAssetCtxs);
+
+      // Combined spot+perp fast price feed (supersedes the throttled
+      // allDexsAssetCtxs/sac feeds). Decoded by the SDK; merged as deltas here.
+      const {
+        unsubscribe: unsubscribeFastAssetCtxs,
+      } = sdk.ws.subscribeToFastAssetCtxs((data) => {
+        dispatch.perps.mergeFastAssetCtxs(data);
+      });
+      subscriptions.push(unsubscribeFastAssetCtxs);
       const {
         unsubscribe: unsubscribeClearinghouseState,
       } = sdk.ws.subscribeToAllDexsClearinghouseState(address, (data) => {
@@ -1219,18 +1524,40 @@ export const perps = createModel<RootModel>()({
         if (!isSameAddress(user, address)) {
           return;
         }
+        // Drop the frame if max-time isn't newer than what we have; otherwise
+        // bulk-replace in one dispatch (per-key patches would notify N times).
+        const latestState = store.getState().perps;
+        const nextMap: Record<string, ClearinghouseState> = {};
+        let frameTime = 0;
+        for (const [dexName, dexState] of clearinghouseStates) {
+          if (dexState) {
+            nextMap[dexName] = dexState;
+            if ((dexState.time ?? 0) > frameTime) {
+              frameTime = dexState.time ?? 0;
+            }
+          }
+        }
+        const existingDexMap = latestState.dexClearinghouseStates || {};
+        let existingFrameTime = 0;
+        for (const key of Object.keys(existingDexMap)) {
+          const t = existingDexMap[key]?.time ?? 0;
+          if (t > existingFrameTime) existingFrameTime = t;
+        }
+        if (frameTime <= existingFrameTime) {
+          return;
+        }
         const clearinghouseState = formatAllDexsClearinghouseState(
           clearinghouseStates
         );
         if (!clearinghouseState) {
           return;
         }
-        const latestState = store.getState().perps;
         if (
           latestState.userAbstraction === UserAbstractionResp.unifiedAccount
         ) {
           clearinghouseState.withdrawable = latestState.spotState.availableToTrade.toString();
         }
+        dispatch.perps.patchState({ dexClearinghouseStates: nextMap });
         dispatch.perps.patchClearinghouseState(clearinghouseState);
         dispatch.perps.setClearinghouseStateMapBySingle({
           address,
@@ -1291,7 +1618,7 @@ export const perps = createModel<RootModel>()({
           if (!isSnapshot) {
             handleUpdateHistoricalOrders(
               orderHistory,
-              rootState.perps.soundEnabled
+              store.getState().perps.soundEnabled
             );
           }
 
@@ -1340,7 +1667,7 @@ export const perps = createModel<RootModel>()({
           if (!isSnapshot) {
             handleUpdateTwapSliceFills(
               twapSliceFills,
-              rootState.perps.soundEnabled
+              store.getState().perps.soundEnabled
             );
           }
 
@@ -1513,6 +1840,35 @@ export const perps = createModel<RootModel>()({
         );
       } catch (error) {
         console.error('Failed to save margin mode preference:', error);
+      }
+    },
+
+    async initTpslModePreferences(_, rootState) {
+      try {
+        const preferences = await rootState.app.wallet.getPerpsTpslModePreferences();
+        dispatch.perps.setTpslModePreferences(
+          preferences || DEFAULT_POSITION_TPSL_MODE_PREFERENCES
+        );
+      } catch (error) {
+        console.error('Failed to load TP/SL mode preferences:', error);
+        dispatch.perps.setTpslModePreferences(
+          DEFAULT_POSITION_TPSL_MODE_PREFERENCES
+        );
+      }
+    },
+
+    async updateTpslModePreference(
+      payload: { side: 'tp' | 'sl'; mode: PerpsTpslModePreference },
+      rootState
+    ) {
+      try {
+        dispatch.perps.patchTpslModePreference(payload);
+        await rootState.app.wallet.setPerpsTpslModePreference(
+          payload.side,
+          payload.mode
+        );
+      } catch (error) {
+        console.error('Failed to save TP/SL mode preference:', error);
       }
     },
 

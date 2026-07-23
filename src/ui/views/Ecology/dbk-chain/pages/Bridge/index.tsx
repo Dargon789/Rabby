@@ -6,7 +6,7 @@ import { NameAndAddress } from '@/ui/component';
 import { formatAmount, formatUsdValue } from '@/ui/utils';
 import { getTokenSymbol } from '@/ui/utils/token';
 import { Loading3QuartersOutlined } from '@ant-design/icons';
-import { Input } from 'antd';
+import { Input, InputRef } from 'antd';
 import BigNumber from 'bignumber.js';
 import clsx from 'clsx';
 import styled from 'styled-components';
@@ -23,6 +23,7 @@ import { useTranslation } from 'react-i18next';
 import { sortBy } from 'lodash';
 import { useLocation } from 'react-router-dom';
 import { query2obj } from '@/ui/utils/url';
+import { AutoSizeAmountInput } from '@/ui/component/AutoSizeAmountInput';
 
 const Warper = styled.div`
   input::-webkit-outer-spin-button,
@@ -43,6 +44,7 @@ const Warper = styled.div`
 `;
 
 export const DbkChainBridge = () => {
+  const inputRef = React.useRef<InputRef>(null);
   const [isShowActivityPopup, setIsShowActivityPopup] = React.useState(false);
   const [
     isShowWithdrawConfirmPopup,
@@ -198,7 +200,7 @@ export const DbkChainBridge = () => {
                 </div>
               </div>
             </div>
-            <div className="text-r-neutral-foot flex-shrink-0">
+            <div className="text-r-neutral-foot shrink-0">
               <RcIconArrow />
             </div>
             <div className="flex-1 min-w-0">
@@ -228,20 +230,34 @@ export const DbkChainBridge = () => {
             )}
           >
             <div className="flex items-center justify-between mb-[4px] gap-[6px]">
-              <Input
-                type="number"
-                value={payAmount}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (!/^\d*(\.\d*)?$/.test(v)) {
-                    return;
-                  }
-                  setPayAmount(v);
-                }}
+              <AutoSizeAmountInput
+                inputRef={inputRef}
+                inputValue={payAmount}
+                maxFontSize={28}
+                minFontSize={18}
+                fontSizeStep={2}
+                fontWeight={700}
                 className="min-w-0 flex-1"
-                autoFocus
-                placeholder="0"
-              ></Input>
+              >
+                {(fontSize) => (
+                  <Input
+                    ref={inputRef}
+                    type="number"
+                    value={payAmount}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (!/^\d*(\.\d*)?$/.test(v)) {
+                        return;
+                      }
+                      setPayAmount(v);
+                    }}
+                    className="min-w-0 w-full"
+                    style={{ fontSize }}
+                    autoFocus
+                    placeholder="0"
+                  />
+                )}
+              </AutoSizeAmountInput>
               {payToken ? (
                 <div className="flex items-center gap-[8px]">
                   <img
@@ -286,7 +302,7 @@ export const DbkChainBridge = () => {
           <div className="rounded-[8px] border-[0.5px] border-rabby-neutral-line p-[12px]">
             <div className="flex flex-col gap-[12px]">
               <div className="flex items-center gap-[12px]">
-                <div className="text-[13px] text-r-neutral-body leading-[16px] flex-shrink-0">
+                <div className="text-[13px] text-r-neutral-body leading-[16px] shrink-0">
                   {t('page.ecology.dbk.bridge.info.toAddress')}
                 </div>
                 <div className="ml-auto min-w-0">
@@ -299,7 +315,7 @@ export const DbkChainBridge = () => {
                 </div>
               </div>
               <div className="flex items-center gap-[12px]">
-                <div className="text-[13px] text-r-neutral-body leading-[16px] flex-shrink-0">
+                <div className="text-[13px] text-r-neutral-body leading-[16px] shrink-0">
                   {t('page.ecology.dbk.bridge.info.receiveOn', {
                     chainName: targetChain?.name,
                   })}
@@ -312,7 +328,7 @@ export const DbkChainBridge = () => {
                 </div>
               </div>
               <div className="flex items-center gap-[12px]">
-                <div className="text-[13px] text-r-neutral-body leading-[16px] flex-shrink-0">
+                <div className="text-[13px] text-r-neutral-body leading-[16px] shrink-0">
                   {t('page.ecology.dbk.bridge.info.completeTime')}
                 </div>
                 <div className="ml-auto  min-w-0">
@@ -322,7 +338,7 @@ export const DbkChainBridge = () => {
                 </div>
               </div>
               <div className="flex items-center gap-[12px]">
-                <div className="text-[13px] text-r-neutral-body leading-[16px flex-shrink-0]">
+                <div className="text-[13px] text-r-neutral-body leading-[16px] shrink-0">
                   {t('page.ecology.dbk.bridge.info.gasFee')}
                 </div>
                 <div className="ml-auto min-w-0">

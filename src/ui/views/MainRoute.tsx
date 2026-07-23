@@ -1,7 +1,6 @@
 import React, { useEffect } from 'react';
 import { Switch, Route } from 'react-router-dom';
 import { PrivateRoute } from 'ui/component';
-
 import Welcome from './Welcome';
 import NoAddress from './NoAddress';
 import CreatePassword from './CreatePassword';
@@ -28,6 +27,8 @@ import { HistoryPage } from './History';
 import PerpsSingleCoin from './Perps/screen/SingleCoin';
 import { HistoryPage as PerpsHistoryPage } from './Perps/screen/HistoryPage';
 import ExploreMore from './Perps/screen/ExploreMore';
+import Staking from './Staking';
+import StakingDetail from './Staking/Detail';
 import AdvancedSettings from './AdvanceSettings';
 import RequestPermission from './RequestPermission';
 import SendToken from './SendToken';
@@ -106,6 +107,7 @@ import { ImportSeedOrKey } from './NewUserImport/ImportSeedOrKey';
 import { BiometricUnlockSetup } from './BiometricUnlockSetup';
 import { ManageApprovals } from './ManageApprovals';
 import { ManageBatchRevokeApprovals } from './ManageBatchApprovals';
+import { shouldReportUserBehaviorData } from '@/utils/user-data-tracking';
 
 declare global {
   interface Window {
@@ -116,13 +118,22 @@ declare global {
 const LogPageView = () => {
   const path = window.location.hash.replace(/#/, '');
 
-  ga4.firePageViewEvent({
-    pageLocation: path,
-  });
-  if (window._paq) {
-    window._paq.push(['setCustomUrl', path]);
-    window._paq.push(['trackPageView']);
-  }
+  useEffect(() => {
+    ga4.firePageViewEvent({
+      pageLocation: path,
+    });
+
+    const trackMatomoPageView = async () => {
+      if (!window._paq || !(await shouldReportUserBehaviorData())) {
+        return;
+      }
+
+      window._paq.push(['setCustomUrl', path]);
+      window._paq.push(['trackPageView']);
+    };
+
+    trackMatomoPageView();
+  }, [path]);
 
   return null;
 };
@@ -193,6 +204,13 @@ const Main = () => {
         const isBiometricsEnabled = preference.biometricUnlockEnabled;
         ga4.fireEvent(
           `Unlock_Biometrics_${isBiometricsEnabled ? 'On' : 'Off'}`,
+          {
+            event_category: 'Settings Snapshot',
+          }
+        );
+
+        ga4.fireEvent(
+          `PerpsFloating_${preference.perpsWidgetEnabled ? 'On' : 'Off'}`,
           {
             event_category: 'Settings Snapshot',
           }
@@ -530,6 +548,12 @@ const Main = () => {
         </PrivateRoute>
         <PrivateRoute exact path="/perps/history/:coin">
           <PerpsHistoryPage />
+        </PrivateRoute>
+        <PrivateRoute exact path="/staking">
+          <Staking />
+        </PrivateRoute>
+        <PrivateRoute exact path="/staking/detail">
+          <StakingDetail />
         </PrivateRoute>
       </Switch>
 

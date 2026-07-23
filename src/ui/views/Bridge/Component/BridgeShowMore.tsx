@@ -22,6 +22,7 @@ import { ReactComponent as RcIconInfo } from 'ui/assets/info-cc.svg';
 import { BridgeSlippage } from './BridgeSlippage';
 import { tokenPriceImpact } from '../hooks';
 import imgBestQuoteSharpBg from '@/ui/assets/swap/best-quote-sharp-bg.svg';
+import { ReactComponent as RcIconFree } from '@/ui/assets/swap/free.svg';
 import styled from 'styled-components';
 import { findChainByServerID } from '@/utils/chain';
 import BigNumber from 'bignumber.js';
@@ -52,6 +53,7 @@ import { useGasAccountDepositFlowActive } from '../../GasAccount/hooks/runtime';
 import { useMemoizedFn } from 'ahooks';
 import { GasSelectorResponse } from '../../Approval/components/TxComponents/GasSelectorHeader';
 import SignMainnetGasSelectorHeader from '../../Approval/components/TxComponents/GasSelector/SignMainnetGasSelectorHeader';
+import type { ApprovalGasMethod } from '../../Approval/components/TxComponents/GasSelector/approvalGasDisplay';
 import { normalizeTxParams } from '../../Approval/components/SignTx';
 import { checkGasAndNonce, explainGas } from '@/utils/transaction';
 import { KEYRING_TYPE } from '@/constant';
@@ -118,6 +120,7 @@ export const BridgeShowMore = ({
   autoSuggestSlippage,
   insufficient = false,
   signatureInstance,
+  isRabbyFeeFree = false,
 }: {
   open: boolean;
   setOpen: Dispatch<SetStateAction<boolean>>;
@@ -155,6 +158,7 @@ export const BridgeShowMore = ({
   autoSuggestSlippage?: string;
   supportDirectSign?: boolean;
   signatureInstance: SignatureManager;
+  isRabbyFeeFree?: boolean;
 }) => {
   const { t } = useTranslation();
   const sourceAlwaysShow = type === 'bridge';
@@ -327,9 +331,45 @@ export const BridgeShowMore = ({
     );
   }, [data, quoteLoading, toToken, fromToken]);
 
+  const rabbyFeeContentRender = () => (
+    <ListItem
+      name={t('page.swap.rabbyFee.title')}
+      className={isRabbyFeeFree ? 'h-18' : 'mt-12 h-18'}
+    >
+      <div
+        className={clsx(
+          'text-12 font-medium',
+          isRabbyFeeFree
+            ? 'flex shrink-0 items-center gap-4'
+            : isWrapToken
+            ? 'text-r-neutral-foot'
+            : 'text-r-blue-default cursor-pointer'
+        )}
+        onClick={isRabbyFeeFree ? undefined : openFeePopup}
+      >
+        {isRabbyFeeFree ? (
+          <>
+            <span className="font-normal text-r-neutral-foot line-through">
+              {RABBY_FEE}
+            </span>
+            <RcIconFree
+              aria-hidden
+              className="h-16 w-[52px] shrink-0"
+              viewBox="0 0 52 16"
+            />
+          </>
+        ) : isWrapToken && type === 'swap' ? (
+          t('page.swap.no-fees-for-wrap')
+        ) : (
+          RABBY_FEE
+        )}
+      </div>
+    </ListItem>
+  );
+
   return (
     <div className="mx-16">
-      <div className="space-y-16">
+      <div className={isRabbyFeeFree ? 'space-y-12' : 'space-y-16'}>
         {sourceAlwaysShow && sourceContentRender()}
 
         {lostValueContentRender()}
@@ -344,6 +384,8 @@ export const BridgeShowMore = ({
             signatureInstance={signatureInstance}
           />
         ) : null}
+
+        {isRabbyFeeFree && rabbyFeeContentRender()}
 
         {showSlippageError && (
           <BridgeSlippage
@@ -361,28 +403,6 @@ export const BridgeShowMore = ({
           />
         )}
         <div />
-      </div>
-
-      <div className="flex items-center justify-center gap-8 mb-8">
-        <div
-          className={clsx(
-            'flex items-center opacity-50',
-            'cursor-pointer',
-            'text-r-neutral-foot text-12'
-          )}
-          onClick={() => setOpen((e) => !e)}
-        >
-          <span>{t('page.bridge.showMore.title')}</span>
-          <IconArrowDownCC
-            viewBox="0 0 14 14"
-            width={14}
-            height={14}
-            className={clsx(
-              'transition-transform',
-              open && 'rotate-180 translate-y-1'
-            )}
-          />
-        </div>
       </div>
 
       <div className={clsx('overflow-hidden', !open && 'h-0')}>
@@ -403,21 +423,7 @@ export const BridgeShowMore = ({
           />
         )}
 
-        <ListItem name={t('page.swap.rabbyFee.title')} className="mt-12 h-18">
-          <div
-            className={clsx(
-              'text-12 font-medium',
-              isWrapToken
-                ? 'text-r-neutral-foot'
-                : 'text-r-blue-default cursor-pointer'
-            )}
-            onClick={openFeePopup}
-          >
-            {isWrapToken && type === 'swap'
-              ? t('page.swap.no-fees-for-wrap')
-              : RABBY_FEE}
-          </div>
-        </ListItem>
+        {!isRabbyFeeFree && rabbyFeeContentRender()}
 
         {showMEVGuardedSwitch && type === 'swap' ? (
           <ListItem
@@ -444,6 +450,28 @@ export const BridgeShowMore = ({
             </Tooltip>
           </ListItem>
         ) : null}
+      </div>
+
+      <div className="flex items-center justify-center gap-8 mt-8">
+        <div
+          className={clsx(
+            'flex items-center opacity-50',
+            'cursor-pointer',
+            'text-r-neutral-foot text-12'
+          )}
+          onClick={() => setOpen((e) => !e)}
+        >
+          <span>{t('page.bridge.showMore.title')}</span>
+          <IconArrowDownCC
+            viewBox="0 0 14 14"
+            width={14}
+            height={14}
+            className={clsx(
+              'transition-transform',
+              open && 'rotate-180 translate-y-1'
+            )}
+          />
+        </div>
       </div>
     </div>
   );
@@ -521,6 +549,7 @@ export const DirectSignGasInfo = ({
     gasless,
     gasAccount,
     gasMethod,
+    fingerprint,
     noCustomRPC,
     support1559,
     nativeTokenBalance,
@@ -544,7 +573,8 @@ export const DirectSignGasInfo = ({
       gasless: state.ctx?.gasless,
       gasAccount: state.ctx?.gasAccount,
       gasMethod: state.ctx?.gasMethod,
-      noCustomRPC: !!state.ctx?.noCustomRPC,
+      fingerprint: state.ctx?.fingerprint,
+      noCustomRPC: state.ctx?.noCustomRPC ?? true,
       support1559: !!state.ctx?.is1559,
       nativeTokenBalance: state.ctx?.nativeTokenBalance || '0',
       gasToken: state.ctx?.gasToken,
@@ -556,6 +586,14 @@ export const DirectSignGasInfo = ({
     }),
     shallowEqual
   );
+  const [manualGasMethod, setManualGasMethod] = useState<
+    ApprovalGasMethod | undefined
+  >(undefined);
+
+  useEffect(() => {
+    setManualGasMethod(undefined);
+  }, [chainServeId, currentAccount?.address, currentAccount?.type]);
+
   const currentTx = txs[0];
   const isGasAccountTopUpFlow =
     gaConfig?.category === 'GasAccount' && gaConfig?.action === 'deposit';
@@ -609,10 +647,11 @@ export const DirectSignGasInfo = ({
   );
   const currentTempoTokenId =
     txFeeToken || tempoPreferredFeeTokenId || gasToken.tokenId || '';
+  const effectiveGasMethod = manualGasMethod ?? gasMethod;
   const showTempoGasTokenSelector =
     !!chain &&
     isTempoChain(chain.serverId) &&
-    gasMethod !== 'gasAccount' &&
+    effectiveGasMethod !== 'gasAccount' &&
     isTempoBatchSupportedAccountType(currentAccount?.type);
   const isHardware =
     currentAccount?.type === KEYRING_CLASS.HARDWARE.LEDGER ||
@@ -649,11 +688,13 @@ export const DirectSignGasInfo = ({
     !!gasAccount?.balance_is_enough &&
     !gasAccount.chain_not_support &&
     !!gasAccount.is_gas_account;
-  const payGasByGasAccount = gasMethod === 'gasAccount';
+  const payGasByGasAccount = effectiveGasMethod === 'gasAccount';
 
   const showGasLess = isReady && (isGasNotEnough || !!gasLessConfig);
 
   const showGasLessToSign = showGasLess && !payGasByGasAccount && canUseGasLess;
+  const showNativePendingHardwareGasAccountTip =
+    showGasLess && !payGasByGasAccount && !canUseGasLess && isGasNotEnough;
 
   // gas 提交使用 gasless
   const useGasLess =
@@ -667,7 +708,7 @@ export const DirectSignGasInfo = ({
     !gasAccount.chain_not_support;
 
   const gasAccountCanPay =
-    gasMethod === 'gasAccount' &&
+    effectiveGasMethod === 'gasAccount' &&
     // isSupportedAddr &&
     noCustomRPC &&
     !!gasAccount?.balance_is_enough &&
@@ -687,7 +728,19 @@ export const DirectSignGasInfo = ({
   };
 
   const handleChangeGasMethod = useCallback(
-    async (method: 'native' | 'gasAccount') => {
+    async (method: ApprovalGasMethod) => {
+      setManualGasMethod(method);
+      try {
+        signatureInstance.setGasMethod(method, { manual: true });
+      } catch (error) {
+        console.error('Gas method change error:', error);
+      }
+    },
+    [signatureInstance]
+  );
+
+  const handleAutoChangeGasMethod = useCallback(
+    async (method: ApprovalGasMethod) => {
       try {
         signatureInstance.setGasMethod(method);
       } catch (error) {
@@ -712,6 +765,9 @@ export const DirectSignGasInfo = ({
       token: TokenItem,
       options?: Parameters<typeof signatureInstance.setTempoFeeToken>[1]
     ) => {
+      setTempoPreferredFeeTokenId(
+        options?.tempoPreferredFeeTokenId || token.id
+      );
       signatureInstance.setTempoFeeToken(token, options);
       if (selectedGas) {
         await handleGasChange(selectedGas as any);
@@ -755,7 +811,8 @@ export const DirectSignGasInfo = ({
       if (selectedGas) {
         await handleGasChange(selectedGas as any);
       }
-      signatureInstance.setGasMethod('gasAccount');
+      setManualGasMethod('gasAccount');
+      signatureInstance.setGasMethod('gasAccount', { manual: true });
     }
   );
 
@@ -877,6 +934,7 @@ export const DirectSignGasInfo = ({
               gasLimit: item.gasLimit,
               account: currentAccount,
               preparedL1Fee: item.L1feeCache,
+              gasTokenDecimals: gasToken.decimals || 18,
             }),
           };
         })
@@ -916,7 +974,7 @@ export const DirectSignGasInfo = ({
               : new BigNumber(0);
             balance = new BigNumber(balance)
               .minus(txValueRaw)
-              .minus(new BigNumber(item.gasCost.maxGasCostAmount || 0))
+              .minus(new BigNumber(item.gasCost.maxGasCostRawAmount || 0))
               .toFixed();
 
             return result;
@@ -950,6 +1008,9 @@ export const DirectSignGasInfo = ({
   );
 
   useEffect(() => {
+    if (manualGasMethod) {
+      return;
+    }
     if (
       shouldAutoSwitchToGasAccountFromGasless({
         showGasLess,
@@ -966,6 +1027,7 @@ export const DirectSignGasInfo = ({
     canUseGasLess,
     handleChangeGasAccount,
     isGasNotEnough,
+    manualGasMethod,
     payGasByGasAccount,
     showGasLess,
   ]);
@@ -1019,6 +1081,8 @@ export const DirectSignGasInfo = ({
         <GasLessNotEnough
           directSubmit
           nativeTokenInsufficient={isGasNotEnough}
+          gasAccountCost={gasAccount as any}
+          gasAccountAddress={accountId || currentAccount?.address || ''}
           canGotoUseGasAccount={canGotoUseGasAccount}
           onChangeGasAccount={handleChangeGasAccount}
           canDepositUseGasAccount={canDepositUseGasAccount}
@@ -1030,6 +1094,27 @@ export const DirectSignGasInfo = ({
           }
           onRedirectToDeposit={onRedirectToDeposit}
           preserveApprovalContext
+        />
+      ) : null}
+
+      {showNativePendingHardwareGasAccountTip ? (
+        <GasAccountTips
+          directSubmit
+          gasAccountCost={gasAccount as any}
+          gasAccountAddress={accountId || currentAccount?.address || ''}
+          isWalletConnect={false}
+          noCustomRPC={noCustomRPC}
+          nativeTokenInsufficient={isGasNotEnough}
+          onChangeGasAccount={handleChangeGasAccount}
+          onOpenGasAccountDeposit={handleOpenGasAccountDeposit}
+          disableGasAccountDeposit={
+            isGasAccountTopUpFlow ||
+            gasAccountDepositVisible ||
+            depositFlowActive
+          }
+          onRedirectToDeposit={onRedirectToDeposit}
+          preserveApprovalContext
+          pendingHardwareOnly
         />
       ) : null}
 
@@ -1062,8 +1147,10 @@ export const DirectSignGasInfo = ({
           <SignMainnetGasSelectorHeader
             tx={currentTx!}
             gasAccountCost={gasAccount as any}
-            gasMethod={gasMethod}
+            gasMethod={effectiveGasMethod}
             onChangeGasMethod={handleChangeGasMethod}
+            onAutoChangeGasMethod={handleAutoChangeGasMethod}
+            disableAutoGasLevelSwitch={!!manualGasMethod}
             isWalletConnect={
               currentAccount?.type === KEYRING_TYPE.WalletConnectKeyring
             }
@@ -1098,6 +1185,7 @@ export const DirectSignGasInfo = ({
             noCustomRPC={noCustomRPC}
             showTempoGasTokenSelector={showTempoGasTokenSelector}
             tempoGasTokenList={tempoGasTokenList}
+            tempoPreferredFeeTokenId={tempoPreferredFeeTokenId}
             onSelectTempoGasToken={handleSelectTempoGasToken}
             tempoGasTokenLoading={tempoGasTokenLoading}
             getContainer={getContainer}
