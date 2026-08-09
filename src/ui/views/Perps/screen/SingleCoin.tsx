@@ -47,7 +47,7 @@ import { useThemeMode } from '@/ui/hooks/usePreference';
 import { ReactComponent as RcIconArrow } from '@/ui/assets/perps/polygon-cc.svg';
 import { ReactComponent as RcIconCollected } from '@/ui/assets/perps/IconCollected20.svg';
 import { ReactComponent as RcIconNotCollected } from '@/ui/assets/perps/IconUnCollected20.svg';
-import { ReactComponent as RcIconFullscreen } from '@/ui/assets/fullscreen-cc.svg';
+import { RcIconJumpBoldCC } from '@/ui/assets/dashboard';
 import { obj2query } from '@/ui/utils/url';
 import { AddPositionPopup } from '../popup/AddPositionPopup';
 import usePerpsState from '../hooks/usePerpsState';
@@ -412,7 +412,7 @@ export const PerpsSingleCoin = () => {
             entryPrice: Number(currentPosition.position.entryPx || 0),
             liquidationPrice: Number(
               currentPosition.position.liquidationPx || 0
-            ).toFixed(currentAssetCtx?.pxDecimals || 2),
+            ).toFixed(currentAssetCtx?.pxDecimals ?? 2),
             autoClose: false, // This would come from SDK
             direction:
               Number(currentPosition.position.szi || 0) > 0 ? 'Long' : 'Short',
@@ -519,7 +519,7 @@ export const PerpsSingleCoin = () => {
             wallet.openInDesktop(`/desktop/perps?${obj2query({ coin })}`);
           }}
         >
-          <RcIconFullscreen />
+          <RcIconJumpBoldCC />
         </div>
         <div
           className="cursor-pointer flex items-center"
@@ -789,7 +789,7 @@ export const PerpsSingleCoin = () => {
                     margin={Number(positionData?.marginUsed || 0)}
                     leverage={positionData?.leverage || 1}
                     liqPrice={Number(positionData?.liquidationPrice || 0)}
-                    pxDecimals={currentAssetCtx?.pxDecimals || 2}
+                    pxDecimals={currentAssetCtx?.pxDecimals ?? 2}
                     szDecimals={currentAssetCtx?.szDecimals || 0}
                     actionType="tp"
                     entryPrice={Number(positionData?.entryPrice || 0)}
@@ -879,7 +879,7 @@ export const PerpsSingleCoin = () => {
                     margin={Number(positionData?.marginUsed || 0)}
                     leverage={positionData?.leverage || 1}
                     liqPrice={Number(positionData?.liquidationPrice || 0)}
-                    pxDecimals={currentAssetCtx?.pxDecimals || 2}
+                    pxDecimals={currentAssetCtx?.pxDecimals ?? 2}
                     szDecimals={currentAssetCtx?.szDecimals || 0}
                     actionType="sl"
                     type="hasPosition"
@@ -1192,7 +1192,7 @@ export const PerpsSingleCoin = () => {
           currentAssetCtx?.maxUsdValueSize || PERPS_MAX_NTL_VALUE
         )}
         coin={coin}
-        pxDecimals={currentAssetCtx?.pxDecimals || 2}
+        pxDecimals={currentAssetCtx?.pxDecimals ?? 2}
         szDecimals={currentAssetCtx?.szDecimals || 0}
         leverageRange={[1, currentAssetCtx?.maxLeverage || 5]}
         markPrice={markPrice}
@@ -1376,7 +1376,7 @@ export const PerpsSingleCoin = () => {
 
           <RiskLevelPopup
             direction={positionData.direction as 'Long' | 'Short'}
-            pxDecimals={currentAssetCtx?.pxDecimals || 2}
+            pxDecimals={currentAssetCtx?.pxDecimals ?? 2}
             visible={riskPopupVisible}
             liquidationPrice={Number(
               currentPosition?.position.liquidationPx || 0

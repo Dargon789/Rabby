@@ -166,6 +166,7 @@ export const PerpsOpenPositionPopup: React.FC<OpenPositionPopupProps> = ({
     slippage,
     depthInsufficient,
     isReady: slippageReady,
+    shouldShow: shouldShowSlippage,
   } = useMarketSlippage({
     coin,
     isBuy: direction === 'Long',
@@ -671,7 +672,7 @@ export const PerpsOpenPositionPopup: React.FC<OpenPositionPopupProps> = ({
           className={clsx(
             'fixed bottom-0 left-0 right-0 ',
             'border-t-[0.5px] border-solid border-rabby-neutral-line px-20 py-16',
-            'bg-r-neutral-card-2'
+            'bg-r-neutral-bg-2'
           )}
         >
           <Button
@@ -832,15 +833,18 @@ export const PerpsOpenPositionPopup: React.FC<OpenPositionPopupProps> = ({
             </div>
           </div>
         </div>
-        {orderType === 'market' && slippageReady && Number(tradeSize) > 0 && (
-          <div className="bg-r-neutral-card1 rounded-[8px] py-12 px-16 mb-12">
-            <MarketSlippage
-              slippage={slippage}
-              depthInsufficient={depthInsufficient}
-              onSwitchToLimit={handleSwitchToLimit}
-            />
-          </div>
-        )}
+        {orderType === 'market' &&
+          slippageReady &&
+          Number(tradeSize) > 0 &&
+          shouldShowSlippage && (
+            <div className="bg-r-neutral-card1 rounded-[8px] py-12 px-16 mb-12">
+              <MarketSlippage
+                slippage={slippage}
+                depthInsufficient={depthInsufficient}
+                onSwitchToLimit={handleSwitchToLimit}
+              />
+            </div>
+          )}
 
         {/* Action Buttons */}
         <div className="fixed bottom-0 left-0 right-0">

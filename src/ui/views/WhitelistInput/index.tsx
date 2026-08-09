@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 import { useHistory } from 'react-router-dom';
 import { Button, Input, Switch, message } from 'antd';
@@ -18,9 +18,12 @@ import { connectStore, useRabbyDispatch, useRabbySelector } from '@/ui/store';
 import { AddressRiskAlert } from '@/ui/component/AddressRiskAlert';
 import { CexListSelectModal, IExchange } from '@/ui/component/CexSelect';
 import { AccountSelectorModal } from '@/ui/component/AccountSelector/AccountSelectorModal';
+import {
+  findSupportedExchange,
+  resolveSupportedDepositExchange,
+} from '@/ui/utils/cex';
 
 // icons
-import { ReactComponent as RcIconFullscreen } from '@/ui/assets/fullscreen-cc.svg';
 import { ReactComponent as RcIconWarningCC } from '@/ui/assets/warning-cc.svg';
 import { ReactComponent as RcIconDownCC } from '@/ui/assets/dashboard/arrow-down-cc.svg';
 import IconSuccess from 'ui/assets/success.svg';
@@ -90,8 +93,12 @@ const WhitelistInput = () => {
   const [showAddressSelector, setShowAddressSelector] = useState(false);
   const [isFocusAddress, setIsFocusAddress] = useState(false);
   const [isFocusAlias, setIsFocusAlias] = useState(false);
+  const detectAddressRequestIdRef = useRef(0);
+  const exchangesRef = useRef(exchanges);
+  exchangesRef.current = exchanges;
 
   const resetState = useCallback(() => {
+    detectAddressRequestIdRef.current += 1;
     setInputAddress('');
     setInputAlias('');
     setIsCex(false);
@@ -117,37 +124,54 @@ const WhitelistInput = () => {
       if (!isValidAddress(address)) {
         return;
       }
-      const cexId = await wallet.getCexId(address);
-      const localCexInfo = exchanges.find(
-        (e) => e.id.toLowerCase() === cexId?.toLowerCase()
-      );
-      if (cexId && localCexInfo) {
-        setIsCex(true);
-        setSelectedExchange({
-          ...localCexInfo,
+      const requestId = ++detectAddressRequestIdRef.current;
+      const isLatestRequest = () =>
+        requestId === detectAddressRequestIdRef.current;
+
+      setIsCex(false);
+      setSelectedExchange(null);
+
+      try {
+        const cexId = await wallet.getCexId(address);
+        if (!isLatestRequest()) {
+          return;
+        }
+
+        wallet.getAlianName(address).then((name) => {
+          setInputAlias(name || '');
         });
-      } else {
-        wallet.openapi.addrDesc(address).then((result) => {
-          if (result.desc.cex?.id && result.desc.cex?.is_deposit) {
-            setIsCex(true);
-            setSelectedExchange({
-              id: result.desc.cex.id,
-              name: result.desc.cex.name,
-              logo: result.desc.cex?.logo_url || '',
-            });
-          }
-        });
+
+        const localCexInfo = findSupportedExchange(exchangesRef.current, cexId);
+        if (localCexInfo) {
+          setIsCex(true);
+          setSelectedExchange(localCexInfo);
+          return;
+        }
+
+        const result = await wallet.openapi.addrDesc(address);
+        if (!isLatestRequest()) {
+          return;
+        }
+
+        const supportedExchange = resolveSupportedDepositExchange(
+          result.desc.cex,
+          exchangesRef.current
+        );
+        if (supportedExchange) {
+          setIsCex(true);
+          setSelectedExchange(supportedExchange);
+        }
+      } catch {
+        // Treat lookup failures as a regular address.
       }
-      wallet.getAlianName(address).then((name) => {
-        setInputAlias(name || '');
-      });
     },
-    [exchanges, wallet]
+    [wallet]
   );
 
   const handleInputChangeAddress = useCallback(
     (v) => {
       if (!isValidAddress(v)) {
+        detectAddressRequestIdRef.current += 1;
         setInputAlias('');
         setIsValidAddr(!v);
         setIsCex(false);
@@ -169,11 +193,15 @@ const WhitelistInput = () => {
     if (!isValidAddress(address)) {
       return;
     }
+    const supportedExchange = findSupportedExchange(
+      exchanges,
+      selectedExchange?.id
+    );
     dispatch.whitelist.getWhitelist();
     await wallet.updateAlianName(
       address,
       inputAlias || '',
-      isCex && selectedExchange?.id ? selectedExchange?.id : ''
+      isCex && supportedExchange ? supportedExchange.id : ''
     );
     setShowAddressRiskAlert(false);
     await wallet.clearPageStateCache();
@@ -185,6 +213,27 @@ const WhitelistInput = () => {
   };
 
   const disabledSubmit = !isValidAddr || !inputAddress || !inputAlias;
+  const supportedSelectedExchange = findSupportedExchange(
+    exchanges,
+    selectedExchange?.id
+  );
+
+  useEffect(() => {
+    if (!selectedExchange) {
+      return;
+    }
+
+    if (!supportedSelectedExchange) {
+      detectAddressRequestIdRef.current += 1;
+      setIsCex(false);
+      setSelectedExchange(null);
+      return;
+    }
+
+    if (supportedSelectedExchange !== selectedExchange) {
+      setSelectedExchange(supportedSelectedExchange);
+    }
+  }, [selectedExchange, supportedSelectedExchange]);
 
   const handleSubmit = async () => {
     if (!isValidAddress(inputAddress)) {
@@ -276,18 +325,6 @@ const WhitelistInput = () => {
           contentClassName="thin-header"
           forceShowBack
           canBack
-          // rightSlot={
-          //   isDesktop || isTab ? null : (
-          //     <div
-          //       className="text-r-neutral-title1 cursor-pointer absolute right-0 "
-          //       onClick={() => {
-          //         openInternalPageInTab(`send-poly${history.location.search}`);
-          //       }}
-          //     >
-          //       <RcIconFullscreen />
-          //     </div>
-          //   )
-          // }
         >
           {t('page.whitelist.title')}
         </PageHeader>
@@ -376,15 +413,16 @@ const WhitelistInput = () => {
                 checked={isCex}
                 onChange={(v) => {
                   if (isValidAddress(inputAddress)) {
+                    detectAddressRequestIdRef.current += 1;
                     setIsCex(!!v);
-                    if (v && !selectedExchange) {
+                    if (v && !supportedSelectedExchange) {
                       setShowCexListModal(true);
                     }
                   }
                 }}
               />
             </div>
-            {isCex && selectedExchange && (
+            {isCex && supportedSelectedExchange && (
               <div
                 className={`
                   h-[52px]  bg-r-neutral-card1 rounded-[12px] w-full pl-[16px] pr-[18px] 
@@ -395,12 +433,12 @@ const WhitelistInput = () => {
               >
                 <div className="flex items-center gap-[8px]">
                   <img
-                    src={selectedExchange.logo}
+                    src={supportedSelectedExchange.logo}
                     alt=""
                     className="w-[24px] h-[24px] rounded-full"
                   />
                   <div className="text-[15px] font-medium text-r-neutral-title1">
-                    {selectedExchange.name}
+                    {supportedSelectedExchange.name}
                   </div>
                 </div>
                 <div className="text-r-neutral-foot">
@@ -432,7 +470,7 @@ const WhitelistInput = () => {
         editAlias={inputAlias}
         forWhitelist
         title={t('page.whitelist.riskTitle')}
-        editCex={isCex ? selectedExchange : null}
+        editCex={isCex ? supportedSelectedExchange : null}
         height="calc(100% - 60px)"
         onConfirm={() => {
           confirmToWhitelist(inputAddress);
@@ -445,11 +483,12 @@ const WhitelistInput = () => {
         visible={showCexListModal}
         onCancel={() => {
           setShowCexListModal(false);
-          if (isCex && !selectedExchange) {
+          if (isCex && !supportedSelectedExchange) {
             setIsCex(false);
           }
         }}
         onSelect={(cex) => {
+          detectAddressRequestIdRef.current += 1;
           setSelectedExchange(cex);
           setShowCexListModal(false);
         }}

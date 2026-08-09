@@ -3,8 +3,13 @@ import migrateData from '@/migrations';
 import { getOriginFromUrl, transformFunctionsToZero } from '@/utils';
 import { appIsDev, isManifestV3 } from '@/utils/env';
 import { matomoRequestEvent } from '@/utils/matomo-request';
-import { Message, sendReadyMessageToTabs } from '@/utils/message';
+import {
+  Message,
+  sendReadyMessageToTabs,
+  setMessageErrorReporter,
+} from '@/utils/message';
 import { getSentryConfig } from '@/utils/sentry-config';
+import { getHardwareSigningContext } from '@/utils/sentry';
 import Safe from '@rabby-wallet/gnosis-sdk';
 import * as Sentry from '@sentry/browser';
 import fetchAdapter from 'background/utils/fetchAdapter';
@@ -60,7 +65,6 @@ import {
   OfflineChainsService,
   perpsService,
   transactionsService,
-  innerDappFrameService,
   feedbackService,
 } from './service';
 import { customTestnetService } from './service/customTestnet';
@@ -75,10 +79,12 @@ import { PERPS_LIVE_PORT_NAME } from '@/utils/message/perpsLive';
 /** Controller methods the perps widget content-script may call via runtime.sendMessage */
 const PERPS_WIDGET_RPC_ALLOWLIST = new Set<string>([
   'getPerpsWidgetEnabled',
+  'setPerpsWidgetEnabled',
   'getPerpsWidgetBlockedHosts',
   'getPerpsWidgetBallPosition',
   'setPerpsWidgetBallPosition',
   'openInDesktop',
+  'openPerpsWidgetProfile',
 ]);
 import rpcCache from './utils/rpcCache';
 import { storage } from './webapi';
@@ -99,6 +105,39 @@ const { PortMessage } = Message;
 let appStoreLoaded = false;
 
 Sentry.init(getSentryConfig());
+
+// Errors thrown by pm.listen callbacks are caught in Message.onRequest and
+// forwarded to the calling page as the response, so they never reach this
+// context's global handlers. Business failures (user rejections, RPC errors)
+// carry an rpc error code and must stay report-free; only programming errors
+// are captured here.
+//
+// The allowlist is deliberately restricted to native engine error subtypes
+// (TypeError/ReferenceError/RangeError) rather than any uncoded Error. The
+// background throws hundreds of plain `new Error(...)` intentionally — mostly
+// i18n business validations like "no current account" / "invalid chain id" —
+// which have no rpc code either, so broadening to all uncoded Error instances
+// would flood Sentry with those expected states. The engine practically never
+// raises these subtypes for business logic, so they are a clean bug signal.
+setMessageErrorReporter((error) => {
+  // rpcFlow normally captures signing failures first. Capturing the same Error
+  // here is deduplicated by Sentry and also covers direct wallet-controller calls.
+  if (getHardwareSigningContext(error)) {
+    Sentry.captureException(error);
+    return true;
+  }
+
+  if (
+    (error instanceof TypeError ||
+      error instanceof ReferenceError ||
+      error instanceof RangeError) &&
+    (error as { code?: unknown }).code === undefined
+  ) {
+    Sentry.captureException(error);
+    return true;
+  }
+  return false;
+});
 
 async function restoreAppState() {
   await onInstall();
@@ -137,7 +176,6 @@ async function restoreAppState() {
   await perpsService.init();
   await transactionsService.init();
   await lendingService.init();
-  await innerDappFrameService.init();
   await feedbackService.init();
 
   // WS is lazy — subscribes only after the first content-script port attaches
@@ -387,6 +425,15 @@ browser.runtime.onConnect.addListener((port) => {
     port.name === 'tab' ||
     port.name === 'desktop'
   ) {
+    const ownUrl = browser.runtime.getURL('/'); // chrome-extension://<id>/
+    const senderUrl = port.sender?.url ?? '';
+    // content-script: sender.tab 存在 且 url 不是扩展自身页面
+    const isContentScript = !!port.sender?.tab && !senderUrl.startsWith(ownUrl);
+
+    if (port.sender?.id !== browser.runtime.id || isContentScript) {
+      port.disconnect();
+      return;
+    }
     const pm = new PortMessage(port);
     pm.listen((data) => {
       if (data?.type) {
@@ -421,10 +468,13 @@ browser.runtime.onConnect.addListener((port) => {
           case 'controller':
           default:
             if (data.method) {
-              const res = walletController[data.method].apply(
-                null,
-                data.params
-              );
+              const controllerMethod = walletController[data.method];
+              if (typeof controllerMethod !== 'function') {
+                throw new Error(
+                  `Unknown wallet controller method: ${String(data.method)}`
+                );
+              }
+              const res = controllerMethod.call(null, ...data.params);
               if (!IS_FIREFOX) {
                 return res;
               }
@@ -527,11 +577,6 @@ browser.runtime.onConnect.addListener((port) => {
       data,
       session,
       origin,
-      isFromDesktopDapp:
-        port.sender.id === browser.runtime.id &&
-        port.sender?.tab?.url?.startsWith(
-          `${browser.runtime.getURL('')}desktop.html#/desktop/`
-        ),
     };
     if (!session?.origin) {
       const tabInfo = await browser.tabs.get(sessionId);
@@ -540,7 +585,6 @@ browser.runtime.onConnect.addListener((port) => {
         origin,
         name: tabInfo.title || '',
         icon: tabInfo.favIconUrl || '',
-        isFromDesktopDapp: req.isFromDesktopDapp,
       });
     }
     // for background push to respective page

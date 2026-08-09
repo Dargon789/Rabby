@@ -597,10 +597,6 @@ export const EVENTS = {
   },
 
   RELOAD_APPROVAL: 'RELOAD_APPROVAL',
-  INNER_DAPP_CHANGE: {
-    ACCOUNT_CHANGED: 'INNER_DAPP_ACCOUNT_CHANGED',
-    DAPP_CHANGED: 'INNER_DAPP_DAPP_CHANGED',
-  },
 };
 
 export const EVENTS_IN_BG = {
@@ -1576,7 +1572,7 @@ export const DEX = {
   [DEX_ENUM.OPENOCEAN]: {
     id: DEX_ENUM.OPENOCEAN,
     logo: LogoOpenOcean,
-    name: 'OpenOcean',
+    name: 'De¹',
     chains: DEX_SUPPORT_CHAINS[DEX_ENUM.OPENOCEAN],
   },
   [DEX_ENUM.KYBERSWAP]: {
@@ -1714,3 +1710,4 @@ export const SELF_HOST_SAFE_NETWORKS = [
   '10',
   '8453',
 ];
+export const CUSTOM_RPC_ENABLED = true;

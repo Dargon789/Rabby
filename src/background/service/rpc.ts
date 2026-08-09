@@ -3,7 +3,7 @@ import { createPersistStore } from 'background/utils';
 import { findChainByEnum } from '@/utils/chain';
 import { http } from '../utils/http';
 import openapiService, { DefaultRPCRes } from './openapi';
-import { INTERNAL_REQUEST_ORIGIN } from '@/constant';
+import { CUSTOM_RPC_ENABLED, INTERNAL_REQUEST_ORIGIN } from '@/constant';
 
 export interface RPCItem {
   url: string;
@@ -86,6 +86,8 @@ class RPCService {
     customRPC: {},
     defaultRPC: {},
   };
+  preferredRPC: Record<string, string> = {};
+  rpcProbeTasks: Partial<Record<string, Promise<void>>> = {};
   rpcStatus: Record<
     string,
     {
@@ -146,6 +148,43 @@ class RPCService {
     return this.store.defaultRPC?.[chainServerId];
   };
 
+  probeBestRPC = (chainServerId: string) => {
+    if (this.rpcProbeTasks[chainServerId]) {
+      return this.rpcProbeTasks[chainServerId];
+    }
+    const hostList = this.store.defaultRPC?.[chainServerId]?.rpcUrl || [];
+    if (hostList.length < 2) return Promise.resolve();
+
+    const probe = Promise.allSettled(
+      hostList.map(async (url) => ({
+        url,
+        blockNumber: BigInt(
+          await this.defaultRPCRequest(url, 'eth_blockNumber', [])
+        ),
+      }))
+    )
+      .then((results) => {
+        const bestRPC = results.reduce<
+          { url: string; blockNumber: bigint } | undefined
+        >((best, result) => {
+          if (result.status === 'rejected') return best;
+          return !best || result.value.blockNumber > best.blockNumber
+            ? result.value
+            : best;
+        }, undefined);
+
+        if (bestRPC) {
+          this.preferredRPC[chainServerId] = bestRPC.url;
+        }
+      })
+      .finally(() => {
+        delete this.rpcProbeTasks[chainServerId];
+      });
+
+    this.rpcProbeTasks[chainServerId] = probe;
+    return probe;
+  };
+
   supportedRpcMethodByBE = (method?: string) => {
     return BE_SUPPORTED_METHODS.some((e) => e === method);
   };
@@ -154,7 +193,7 @@ class RPCService {
     host: string,
     method: string,
     params: any[],
-    timeout = 5000
+    timeout = 10000
   ) => {
     const { data } = await http.post(
       host,
@@ -197,7 +236,14 @@ class RPCService {
     params: any;
     origin?: string;
   }) => {
-    const hostList = this?.store?.defaultRPC?.[chainServerId]?.rpcUrl || [];
+    const rpcUrls = this.store.defaultRPC?.[chainServerId]?.rpcUrl || [];
+    const preferredRPC = this.preferredRPC[chainServerId];
+    const hostList =
+      method !== 'eth_sendRawTransaction' &&
+      preferredRPC &&
+      rpcUrls.includes(preferredRPC)
+        ? [preferredRPC, ...rpcUrls.filter((url) => url !== preferredRPC)]
+        : rpcUrls;
     const isBESupported = this.supportedRpcMethodByBE(method);
 
     if (!hostList.length || isBESupported) {
@@ -221,18 +267,23 @@ class RPCService {
   };
 
   hasCustomRPC = (chain: CHAINS_ENUM) => {
-    return this.store.customRPC[chain] && this.store.customRPC[chain].enable;
+    return (
+      CUSTOM_RPC_ENABLED &&
+      this.store.customRPC[chain] &&
+      this.store.customRPC[chain].enable
+    );
   };
 
-  getRPCByChain = (chain: CHAINS_ENUM) => {
-    return this.store.customRPC[chain];
+  getRPCByChain = (chain: CHAINS_ENUM): RPCItem | undefined => {
+    return CUSTOM_RPC_ENABLED ? this.store.customRPC[chain] : undefined;
   };
 
-  getAllRPC = () => {
-    return this.store.customRPC;
+  getAllRPC = (): Record<string, RPCItem> => {
+    return CUSTOM_RPC_ENABLED ? this.store.customRPC : {};
   };
 
   setRPC = (chain: CHAINS_ENUM, url: string) => {
+    if (!CUSTOM_RPC_ENABLED) return;
     const rpcItem = this.store.customRPC[chain]
       ? {
           ...this.store.customRPC[chain],
@@ -252,6 +303,7 @@ class RPCService {
   };
 
   setRPCEnable = (chain: CHAINS_ENUM, enable: boolean) => {
+    if (!CUSTOM_RPC_ENABLED) return;
     this.store.customRPC = {
       ...this.store.customRPC,
       [chain]: {
@@ -262,6 +314,7 @@ class RPCService {
   };
 
   removeCustomRPC = (chain: CHAINS_ENUM) => {
+    if (!CUSTOM_RPC_ENABLED) return;
     const map = this.store.customRPC;
     delete map[chain];
     this.store.customRPC = map;
@@ -275,6 +328,9 @@ class RPCService {
     method: string,
     params: any[]
   ) => {
+    if (!CUSTOM_RPC_ENABLED) {
+      throw new Error('Custom RPC is disabled');
+    }
     const host = this.store.customRPC[chain]?.url;
     if (!host) {
       throw new Error(`No customRPC set for ${chain}`);
@@ -286,7 +342,7 @@ class RPCService {
     host: string,
     method: string,
     params: any[],
-    timeout = 5000
+    timeout = 10000
   ) => {
     const { data } = await http.post(
       host,
@@ -306,6 +362,7 @@ class RPCService {
   };
 
   ping = async (chain: CHAINS_ENUM) => {
+    if (!CUSTOM_RPC_ENABLED) return false;
     if (this.rpcStatus[chain]?.expireAt > Date.now()) {
       return this.rpcStatus[chain].available;
     }

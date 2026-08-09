@@ -1,4 +1,5 @@
 import { matomoRequestEvent } from '@/utils/matomo-request';
+import * as Sentry from '@sentry/browser';
 import { AuthorizationListItem, Common, Hardfork } from '@ethereumjs/common';
 import { FeeMarketEIP1559TxData, TransactionFactory } from '@ethereumjs/tx';
 import { ethers } from 'ethers';
@@ -87,6 +88,10 @@ import {
 } from '@/utils/tempo';
 import { fixKeyringAccountOnSigned } from '../walletUtils/fix';
 import { handleGasAccountLoginSuccess } from '@/background/utils/gasAccountLogin';
+import {
+  attachHardwareSigningContext,
+  getHardwareSigningContext,
+} from '@/utils/sentry';
 
 const reportSignText = (params: {
   method: string;
@@ -491,6 +496,9 @@ class ProviderController extends BaseController {
     const chain = findChain({
       serverId: chainServerId,
     })!;
+    if (!chain.isTestnet && method === 'eth_sendRawTransaction') {
+      void RPCService.probeBestRPC(chainServerId);
+    }
     if (!chain.isTestnet) {
       if (RPCService.hasCustomRPC(chain.enum as CHAINS_ENUM)) {
         const promise = RPCService.requestCustomRPC(
@@ -560,8 +568,7 @@ class ProviderController extends BaseController {
       'accountsChanged',
       account,
       origin,
-      undefined,
-      req.isFromDesktopDapp
+      undefined
     );
     const connectSite = permissionService.getConnectedSite(origin);
     if (connectSite) {
@@ -869,6 +876,10 @@ class ProviderController extends BaseController {
 
     const chainItem = findChainByEnum(chain);
 
+    if (chainItem && !chainItem.isTestnet) {
+      void RPCService.probeBestRPC(chainItem.serverId);
+    }
+
     const statsData: StatsData = {
       signed: false,
       signedSuccess: false,
@@ -977,10 +988,19 @@ class ProviderController extends BaseController {
       });
     } catch (e) {
       console.error(e);
-      const errObj =
-        typeof e === 'object'
-          ? { message: e.message }
-          : ({ message: e } as any);
+      const hardwareContext = getHardwareSigningContext(e);
+      if (hardwareContext && e instanceof Error) {
+        Sentry.captureException(e);
+      }
+      const errObj: any = {
+        message: e && typeof e === 'object' ? e.message : e,
+      };
+      if (hardwareContext) {
+        attachHardwareSigningContext(errObj, hardwareContext);
+        if (e instanceof Error) {
+          errObj.reportedFromBackground = true;
+        }
+      }
       errObj.method = EVENTS.COMMON_HARDWARE.REJECTED;
 
       throw errObj;
@@ -1197,8 +1217,10 @@ class ProviderController extends BaseController {
               let errMsg = typeof e === 'object' ? e.message : e;
               if (RPCService.hasCustomRPC(chain)) {
                 const rpc = RPCService.getRPCByChain(chain);
-                const origin = getOriginFromUrl(rpc.url);
-                errMsg = `[From ${origin}] ${errMsg}`;
+                if (rpc) {
+                  const origin = getOriginFromUrl(rpc.url);
+                  errMsg = `[From ${origin}] ${errMsg}`;
+                }
               }
               onTransactionSubmitFailed({
                 ...e,
@@ -1271,7 +1293,7 @@ class ProviderController extends BaseController {
 
             const defaultRPC = RPCService.getDefaultRPC(chainServerId);
             if (defaultRPC?.txPushToRPC && !isGasLess && !isGasAccount) {
-              let fePushedFailed = false;
+              let fePushedError: any = null;
 
               const rawTx = isTempoTx
                 ? tempoSerializedRawTx
@@ -1308,7 +1330,8 @@ class ProviderController extends BaseController {
                   console.log('ignore BE error', error);
                 });
               } catch (fePushError) {
-                fePushedFailed = true;
+                fePushedError =
+                  fePushError ?? new Error('Frontend RPC push failed');
 
                 const urls = RPCService.getDefaultRPCByChainServerId(
                   chainServerId
@@ -1324,10 +1347,18 @@ class ProviderController extends BaseController {
                 };
               }
 
-              if (fePushedFailed) {
+              if (fePushedError) {
                 adoptBE7702Params();
-                const res = await openapiService.submitTxV2(params);
-                hash = res.tx_id;
+                try {
+                  const res = await openapiService.submitTxV2(params);
+                  hash = res.tx_id;
+                } catch (bePushError) {
+                  // both pushes failed: surface the RPC error, it's closer to the node
+                  console.log('BE push failed after FE push failed', {
+                    bePushError,
+                  });
+                  throw fePushedError;
+                }
               }
             } else {
               adoptBE7702Params();
@@ -1382,7 +1413,7 @@ class ProviderController extends BaseController {
         let errMsg = e.details || e.message || JSON.stringify(e);
         if (chainData && chainData.isTestnet) {
           const rpcUrl = RPCService.hasCustomRPC(chain)
-            ? RPCService.getRPCByChain(chain).url
+            ? RPCService.getRPCByChain(chain)?.url
             : (chainData as TestnetChain).rpcUrl;
           errMsg = rpcUrl
             ? `[From ${getOriginFromUrl(rpcUrl)}] ${errMsg}`

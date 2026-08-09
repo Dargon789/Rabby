@@ -24,7 +24,11 @@ import { GnosisQueueModal } from './components/GnosisQueueModal';
 import { ApprovalsTabPane } from './components/ApprovalsTabPane';
 import { AddressDetailModal } from './components/AddressDetailModal';
 import { AddressBackupModal } from './components/AddressBackupModal';
-import { RcIconBackTopCC } from '@/ui/assets/desktop/profile';
+import {
+  RcIconBackTopCC,
+  RcIconQueueCC,
+  RcIconSpinCC,
+} from '@/ui/assets/desktop/profile';
 import TopShortcut, {
   PORTFOLIO_LIST_ID,
   TOP_SHORTCUT_SLOT_ID,
@@ -39,6 +43,7 @@ import { useTokenAndDefiData } from './components/TokensTabPane/hook';
 import { DesktopPageWrap } from '@/ui/component/DesktopPageWrap';
 import { reportWebPageView } from '@/ui/utils/ga-event';
 import { expiredNft } from '@/db/utils/expired';
+import { useHomeBalanceViewOuterPrefetch } from '../Dashboard/components/BalanceView/useHomeBalanceView';
 
 const DESKTOP_NAV_HEIGHT = 0;
 
@@ -64,12 +69,22 @@ const StickyBorderTop = () => (
   </div>
 );
 
-export const DesktopProfile: React.FC<{
+type DesktopProfileProps = {
   isActive?: boolean;
   style?: React.CSSProperties;
-}> = ({ isActive = true, style }) => {
+};
+
+const DesktopProfileContent: React.FC<DesktopProfileProps> = ({
+  isActive = true,
+  style,
+}) => {
   const { t } = useTranslation();
   const currentAccount = useCurrentAccount();
+
+  const isGnosis = useMemo(
+    () => currentAccount?.type === KEYRING_TYPE.GnosisKeyring,
+    [currentAccount?.type]
+  );
 
   const history = useHistory();
   const location = useLocation();
@@ -110,9 +125,11 @@ export const DesktopProfile: React.FC<{
     curveChartData,
     isBalanceLoading,
     isCurveLoading,
+    isRefreshing,
     appChainIds,
     refreshBalance,
     refreshCurve,
+    refreshBalanceAndCurveIfExpired,
   } = useDesktopBalanceView({
     address: currentAccount?.address,
   });
@@ -165,6 +182,16 @@ export const DesktopProfile: React.FC<{
     refreshCurve();
   });
 
+  const handleFocusedUpdate = useMemoizedFn(async () => {
+    if (activeTab === 'nft' && currentAccount?.address) {
+      expiredNft(currentAccount.address);
+    }
+
+    setRefreshKey((prev) => prev + 1);
+    refreshPositions();
+    refreshBalanceAndCurveIfExpired();
+  });
+
   useListenTxReload(async () => {
     refreshBalance();
     refreshCurve();
@@ -188,7 +215,7 @@ export const DesktopProfile: React.FC<{
 
   useEventBusListener(EVENTS.DESKTOP.FOCUSED, () => {
     // window.location.reload();
-    handleUpdate();
+    handleFocusedUpdate();
   });
 
   useMount(() => {
@@ -234,6 +261,7 @@ export const DesktopProfile: React.FC<{
                     evmBalance={evmBalance}
                     curveChartData={curveChartData}
                     isLoading={isBalanceLoading || isCurveLoading}
+                    isRefreshing={isRefreshing}
                     onRefresh={handleUpdate}
                     appChainIds={appChainIds}
                   />
@@ -250,6 +278,25 @@ export const DesktopProfile: React.FC<{
                       right: (
                         <>
                           <div className="flex items-center gap-[16px] pr-[20px]">
+                            {isGnosis ? (
+                              <div
+                                className={clsx(
+                                  'min-w-[88px] h-[32px] px-[10px] rounded-[8px]',
+                                  'flex items-center justify-center gap-[4px] cursor-pointer',
+                                  'text-rb-brand-default text-[14px] leading-[16px] font-medium',
+                                  'border-[0.5px] border-solid border-rb-brand-default',
+                                  'hover:bg-r-blue-light-1'
+                                )}
+                                onClick={() => {
+                                  history.replace(
+                                    `${history.location.pathname}?action=gnosis-queue`
+                                  );
+                                }}
+                              >
+                                <RcIconQueueCC />
+                                {t('page.desktopProfile.button.queue')}
+                              </div>
+                            ) : null}
                             <DesktopPending />
                             <DesktopChainSelector
                               value={chain}
@@ -433,5 +480,35 @@ export const DesktopProfile: React.FC<{
         destroyOnClose
       />
     </>
+  );
+};
+
+const DesktopProfilePrefetched: React.FC<
+  DesktopProfileProps & { currentAddress: string }
+> = ({ currentAddress, ...props }) => {
+  const { dashboardBalanceCacheInited } = useHomeBalanceViewOuterPrefetch(
+    currentAddress
+  );
+
+  if (!dashboardBalanceCacheInited) {
+    return null;
+  }
+
+  return <DesktopProfileContent {...props} />;
+};
+
+export const DesktopProfile: React.FC<DesktopProfileProps> = (props) => {
+  const currentAccount = useCurrentAccount();
+
+  if (!currentAccount?.address) {
+    return null;
+  }
+
+  return (
+    <DesktopProfilePrefetched
+      key={currentAccount.address}
+      currentAddress={currentAccount.address}
+      {...props}
+    />
   );
 };

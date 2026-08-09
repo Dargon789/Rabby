@@ -57,7 +57,10 @@ import {
   ExternalSwapBridgeDappTips,
   SwapBridgeDappPopup,
 } from '@/ui/component/ExternalSwapBridgeDappPopup';
-import { DirectSignToConfirmBtn } from '@/ui/component/ToConfirmButton';
+import {
+  DirectSignToConfirmBtn,
+  RiskTipsWrapper,
+} from '@/ui/component/ToConfirmButton';
 import { supportedDirectSign } from '@/ui/hooks/useMiniApprovalDirectSign';
 import { PendingTxItem } from './PendingTxItem';
 import { useTwoStepSwap } from '../hooks/twoStepSwap';
@@ -124,6 +127,7 @@ export const Main = () => {
 
     payTokenIsGasToken,
     isWrapToken,
+    isFreeTokenPair,
     inSufficient,
 
     slippageState,
@@ -157,7 +161,7 @@ export const Main = () => {
     setLowCreditVisible,
     showMoreVisible,
     inSufficientCanGetQuote,
-    setReloadTxRefreshPaused,
+    setQuoteRefreshLocked,
 
     autoSuggestSlippage,
     setAutoSuggestSlippage,
@@ -177,6 +181,11 @@ export const Main = () => {
   const refresh = useSetRefreshId();
 
   const refreshId = useRefreshId();
+
+  const resumeQuoteRefresh = useCallback(() => {
+    setQuoteRefreshLocked(false);
+    refresh((id) => id + 1);
+  }, [refresh, setQuoteRefreshLocked]);
 
   const originPreferMEVGuarded = useRabbySelector(
     (s) => !!s.swap.preferMEVGuarded
@@ -801,14 +810,14 @@ export const Main = () => {
 
   const handleSwap = useMemoizedFn(async () => {
     submitTxRef.current = true;
-    setReloadTxRefreshPaused(true);
+    setQuoteRefreshLocked(true);
     if (!isTab) {
       dispatch.swap.setRecentSwapToToken(receiveToken);
     }
     if (!isSupportedChain) {
       setSwapDappOpen(true);
       submitTxRef.current = false;
-      setReloadTxRefreshPaused(false);
+      setQuoteRefreshLocked(false);
       return;
     }
 
@@ -893,7 +902,7 @@ export const Main = () => {
       } finally {
         setMiniSignLoading(false);
         submitTxRef.current = false;
-        setReloadTxRefreshPaused(false);
+        setQuoteRefreshLocked(false);
       }
       return;
     } else {
@@ -901,7 +910,7 @@ export const Main = () => {
         await gotoSwap();
       } finally {
         submitTxRef.current = false;
-        setReloadTxRefreshPaused(false);
+        setQuoteRefreshLocked(false);
       }
     }
   });
@@ -1394,6 +1403,7 @@ export const Main = () => {
               setIsCustomSlippage={setIsCustomSlippage}
               type="swap"
               isWrapToken={isWrapToken}
+              isRabbyFeeFree={isFreeTokenPair}
               isBestQuote={
                 !!activeProvider &&
                 !!bestQuoteDex &&
@@ -1455,62 +1465,71 @@ export const Main = () => {
                 loading={miniSignLoading}
                 title={latestQuoteBtnText || btnText}
                 onConfirm={handleSwap}
+                onConfirmStart={() => setQuoteRefreshLocked(true)}
+                onCancel={resumeQuoteRefresh}
                 showRiskTips={showRiskTips && !swapBtnDisabled}
                 accountType={currentAccount?.type}
                 signatureInstance={instance}
                 riskReset={swapBtnDisabled}
               />
             ) : (
-              <Button
-                type="primary"
-                block
-                size="large"
-                className="h-[48px] text-white text-[16px] font-medium"
-                loading={isSubmitLoading}
-                onClick={() => {
-                  if (!isSupportedChain && externalDapps.length > 0) {
-                    setSwapDappOpen(true);
-                    return;
-                  }
-                  if (!activeProvider) {
-                    console.log('refresh 4');
-                    refresh((e) => e + 1);
-                    return;
-                  }
-                  if (activeProvider?.shouldTwoStepApprove) {
-                    return Modal.confirm({
-                      width: 360,
-                      closable: true,
-                      centered: true,
-                      className: twoStepApproveCn,
-                      title: null,
-                      content: (
-                        <>
-                          <div className="text-[16px] font-medium text-r-neutral-title-1 mb-18 text-center">
-                            {t('page.swap.two-step-approve')}
-                          </div>
-                          <div className="text-13 leading-[17px]  text-r-neutral-body">
-                            {t('page.swap.two-step-approve-details')}
-                          </div>
-                        </>
-                      ),
-                      okText: t('page.swap.process-with-two-step-approve'),
-                      onOk() {
-                        // gotoSwap();
-                        handleSwap();
-                      },
-                    });
-                  }
-                  // gotoSwap();
-                  // runBuildSwapTxs();
-                  handleSwap();
-                }}
-                disabled={
-                  canUseDirectSubmitTx ? swapBtnDisabled : swapBtnDisabled
-                }
+              <RiskTipsWrapper
+                showRiskTips={showRiskTips && !swapBtnDisabled}
+                riskReset={swapBtnDisabled}
               >
-                {btnText}
-              </Button>
+                {({ riskDisabled }) => (
+                  <Button
+                    type="primary"
+                    block
+                    size="large"
+                    className="h-[48px] text-white text-[16px] font-medium"
+                    loading={isSubmitLoading}
+                    onClick={() => {
+                      if (!isSupportedChain && externalDapps.length > 0) {
+                        setSwapDappOpen(true);
+                        return;
+                      }
+                      if (!activeProvider) {
+                        console.log('refresh 4');
+                        refresh((e) => e + 1);
+                        return;
+                      }
+                      if (activeProvider?.shouldTwoStepApprove) {
+                        setQuoteRefreshLocked(true);
+                        return Modal.confirm({
+                          width: 360,
+                          closable: true,
+                          centered: true,
+                          className: twoStepApproveCn,
+                          title: null,
+                          content: (
+                            <>
+                              <div className="text-[16px] font-medium text-r-neutral-title-1 mb-18 text-center">
+                                {t('page.swap.two-step-approve')}
+                              </div>
+                              <div className="text-13 leading-[17px]  text-r-neutral-body">
+                                {t('page.swap.two-step-approve-details')}
+                              </div>
+                            </>
+                          ),
+                          okText: t('page.swap.process-with-two-step-approve'),
+                          onCancel: resumeQuoteRefresh,
+                          onOk() {
+                            // gotoSwap();
+                            handleSwap();
+                          },
+                        });
+                      }
+                      // gotoSwap();
+                      // runBuildSwapTxs();
+                      handleSwap();
+                    }}
+                    disabled={swapBtnDisabled || riskDisabled}
+                  >
+                    {btnText}
+                  </Button>
+                )}
+              </RiskTipsWrapper>
             )}
           </TooltipWithMagnetArrow>
         </div>

@@ -1,4 +1,4 @@
-import React, { useLayoutEffect } from 'react';
+import React, { useLayoutEffect, useState } from 'react';
 import styled from 'styled-components';
 import { ChartArea } from './components/ChartArea';
 import { OrderBookTrades } from './components/OrderBookTrades';
@@ -17,6 +17,8 @@ import {
 import { SpotSwapModal } from './modal/SpotSwapModal';
 import { EnableUnifiedAccountModal } from './modal/EnableUnifiedAccountModal';
 import { TransferToPerpsModal } from './modal/TransferToPerpsModal';
+import { PerpsSettingsDrawer } from './components/PerpsSettingsDrawer';
+import { OrderConfirmProvider } from './modal/OrderConfirmProvider';
 import { usePerpsPopupNav } from './hooks/usePerpsPopupNav';
 import { usePerpsActions } from '@/ui/views/Perps/hooks/usePerpsActions';
 import { useMount } from 'ahooks';
@@ -55,16 +57,18 @@ export const DesktopPerps: React.FC<{ isActive?: boolean }> = ({
 }) => {
   usePerpsProInit(isActive);
 
-  // The Perps pro page (its own desktop tab) uses 350 as its regular weight.
-  // Tagging the document body lets the single default rule cascade everywhere —
-  // including portaled modals / tooltips / toasts — so individual elements can
-  // just inherit instead of hardcoding the regular weight.
+  // Tagging the document body lets the page-scoped token overrides in
+  // index.less (350 regular weight, 80%-alpha line colors) cascade everywhere —
+  // including portaled modals / tooltips / toasts. Keyed to isActive, not
+  // mount: the page stays mounted (hidden) after leaving /desktop/perps, and
+  // the tag must not leak onto the other desktop views.
   useLayoutEffect(() => {
+    if (!isActive) return;
     document.body.classList.add('perps-pro-page');
     return () => {
       document.body.classList.remove('perps-pro-page');
     };
-  }, []);
+  }, [isActive]);
 
   const {
     action,
@@ -79,6 +83,7 @@ export const DesktopPerps: React.FC<{ isActive?: boolean }> = ({
     openPerpsPopup,
   } = usePerpsPopupNav();
   const { handleEnableUnifiedAccount } = usePerpsActions();
+  const [settingsVisible, setSettingsVisible] = useState(false);
 
   const location = useLocation();
   useMount(() => {
@@ -86,7 +91,7 @@ export const DesktopPerps: React.FC<{ isActive?: boolean }> = ({
   });
 
   return (
-    <>
+    <OrderConfirmProvider>
       <Wrap>
         {/* Fixed top bar — mirrors the fixed StatusBar at the bottom (sticky;
             content scrolls underneath). bg-page masks content behind the card.
@@ -162,7 +167,7 @@ export const DesktopPerps: React.FC<{ isActive?: boolean }> = ({
           </div>
         </div>
 
-        <StatusBar />
+        <StatusBar onOpenSettings={() => setSettingsVisible(true)} />
       </Wrap>
       {/* <AddAddressModal
         visible={action === 'add-address'}
@@ -213,6 +218,11 @@ export const DesktopPerps: React.FC<{ isActive?: boolean }> = ({
         zIndex={getActionZIndex('transfer-to-perps')}
         onClose={closePerpsPopup}
       />
-    </>
+
+      <PerpsSettingsDrawer
+        visible={settingsVisible}
+        onClose={() => setSettingsVisible(false)}
+      />
+    </OrderConfirmProvider>
   );
 };

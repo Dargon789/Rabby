@@ -1,10 +1,30 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import browser from 'webextension-polyfill';
 import type { Candle, CandleSnapshot } from '@rabby-wallet/hyperliquid-sdk';
 import { getPerpsSDK } from '../sdkManager';
 
 const BRIDGE_CHANNEL = 'rabby-tradingview-bridge-v1';
-const DEFAULT_TRADINGVIEW_URL = 'https://tradingview.rabby.io/';
+const DEFAULT_TRADINGVIEW_URL = process.env.DEBUG
+  ? 'https://tradingview-test.vercel.app/'
+  : 'https://tradingview.rabby.io/';
+
+const ALLOWED_EXTERNAL_HOSTS = new Set([
+  'www.tradingview.com',
+  'tradingview.com',
+  'cn.tradingview.com',
+]);
+
+const toSafeExternalUrl = (input: unknown): string | null => {
+  if (typeof input !== 'string' || !input) return null;
+  try {
+    const parsed = new URL(input);
+    if (parsed.protocol !== 'https:') return null;
+    if (!ALLOWED_EXTERNAL_HOSTS.has(parsed.hostname)) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+};
 
 type TradingViewResolution =
   | '1'
@@ -66,6 +86,8 @@ type BridgeMessage =
     };
 
 type BarSubscription = {
+  symbol: string;
+  resolution: string;
   unsubscribe: () => void;
   currentWeekBar: TVBar | null;
   lastDailyVolume: { time: number; value: number } | null;
@@ -91,10 +113,42 @@ export interface TradingViewHoverData {
 }
 
 export interface TradingViewLineTagInfo {
-  tpPrice: number;
-  slPrice: number;
-  liquidationPrice: number;
-  entryPrice: number;
+  tpPrice?: number;
+  slPrice?: number;
+  liquidationPrice?: number;
+  entryPrice?: number;
+  currentOrders?: Array<{
+    id?: string | number;
+    oid?: string | number;
+    side?: string;
+    orderType?: string;
+    triggerType?: string;
+    triggerCondition?: string;
+    tpslType?: string;
+    price?: number;
+    limitPx?: number | string;
+    triggerPx?: number | string;
+    size?: string | number;
+    sz?: string | number;
+    origSz?: string | number;
+    isTrigger?: boolean;
+    isTwap?: boolean;
+    isPositionTpsl?: boolean;
+    reduceOnly?: boolean;
+    expectedPnl?: string | number;
+    expectedPnlText?: string;
+  }>;
+  position?: {
+    entryPrice?: number;
+    avgPrice?: number;
+    pnl?: string | number;
+    unrealizedPnl?: string | number;
+    size?: string | number;
+    sz?: string | number;
+    szi?: string | number;
+    liquidationPrice?: number;
+    liquidationPx?: number;
+  };
 }
 
 interface TradingViewIframeChartProps {
@@ -383,11 +437,14 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
   const subscriptionsRef = useRef<Map<string, BarSubscription>>(new Map());
   const weeklyHistoryRef = useRef<Map<string, WeeklyHistoryState>>(new Map());
   const iframeIntervalChangeRef = useRef(false);
+  // Bumped to remount the iframe when the chart never came up at all
+  const [chartReloadKey, setChartReloadKey] = useState(0);
 
   const iframeUrl = useMemo(() => {
     const base = getTradingViewBaseUrl();
     const url = new URL(base);
     url.searchParams.set('source', 'rabby');
+    url.searchParams.set('version', process.env.release || '0');
     return url.toString();
   }, []);
 
@@ -403,6 +460,29 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
     if (!iframeRef.current?.contentWindow) return;
     iframeRef.current.contentWindow.postMessage(message, iframeOrigin);
   };
+
+  useEffect(() => {
+    const handleDocumentPointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      const iframe = iframeRef.current;
+      if (iframe && target instanceof Node && iframe.contains(target)) return;
+
+      postToIframe({
+        channel: BRIDGE_CHANNEL,
+        kind: 'command',
+        command: 'closeDisplayMenu',
+      });
+    };
+
+    document.addEventListener('pointerdown', handleDocumentPointerDown, true);
+    return () => {
+      document.removeEventListener(
+        'pointerdown',
+        handleDocumentPointerDown,
+        true
+      );
+    };
+  }, [iframeOrigin]);
 
   const stateRef = useRef({
     coin,
@@ -447,10 +527,65 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
   ]);
 
   useEffect(() => {
+    const sdk = getPerpsSDK();
+    let chartNeedsRecovery = false;
+    // The iframe answered at least one bridge message, i.e. its document and
+    // script actually loaded.
+    let bridgeAlive = false;
+    // getBars was answered successfully at least once, i.e. TradingView owns a
+    // rendered series.
+    let barsLoaded = false;
+
     const cleanupSubscriptions = () => {
       subscriptionsRef.current.forEach((sub) => sub.unsubscribe());
       subscriptionsRef.current.clear();
     };
+
+    const recoverChart = () => {
+      // Offline at mount leaves nothing to refresh. Either the host document
+      // never loaded (it is served no-cache with no service worker, so there is
+      // no bridge to post to), or it loaded but its first getBars failed —
+      // TradingView only calls subscribeBars after a successful history
+      // response, so that chart has an errored series and no subscription.
+      // Remounting the iframe is the only way back for both; the host re-reads
+      // symbol/interval/theme through its getState handshake.
+      if (!bridgeAlive || !barsLoaded) {
+        bridgeAlive = false;
+        barsLoaded = false;
+        cleanupSubscriptions();
+        weeklyHistoryRef.current.clear();
+        setChartReloadKey((key) => key + 1);
+        return;
+      }
+
+      // The chart is alive and only missed the candles from the outage: drop
+      // its cached bars so it re-requests history through getBars.
+      postToIframe({
+        channel: BRIDGE_CHANNEL,
+        kind: 'command',
+        command: 'resetData',
+      });
+    };
+
+    const handleWebSocketClose = () => {
+      // An SDK-level reconnect restores realtime subscriptions, but candle
+      // messages do not backfill the intervals missed while disconnected.
+      chartNeedsRecovery = true;
+    };
+
+    // Recovery is one-shot per outage: 'online' and the SDK reconnect both fire
+    // on the same network restore, and whichever lands first consumes the flag.
+    // 'online' is kept because the SDK backs off for up to 30s before it
+    // reconnects, and the chart does not need the socket to refetch history.
+    const handleNetworkRestored = () => {
+      if (!chartNeedsRecovery) return;
+      chartNeedsRecovery = false;
+      recoverChart();
+    };
+
+    sdk.ws.on('close', handleWebSocketClose);
+    sdk.ws.on('open', handleNetworkRestored);
+    window.addEventListener('online', handleNetworkRestored);
 
     const handleGetBars = async (params: {
       symbol: string;
@@ -460,7 +595,6 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
         to?: number;
       };
     }) => {
-      const sdk = getPerpsSDK();
       const targetInterval = resolutionToInterval(params.resolution);
       const isWeekly = targetInterval === '1w';
       const fetchInterval: PerpsInterval = isWeekly ? '1d' : targetInterval;
@@ -491,10 +625,34 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
         } else {
           weeklyHistoryRef.current.delete(historyKey);
         }
+
+        // resetData() reloads TradingView history without replacing the SDK
+        // subscription object. Keep the mutable weekly aggregation state in
+        // sync so the next daily candle cannot overwrite refreshed history
+        // with the pre-disconnect week snapshot.
+        const nextState = cloneWeeklyHistoryState(historyState);
+        const currentWeekStart = getMondayUtc(Date.now());
+        subscriptionsRef.current.forEach((subscription) => {
+          if (
+            !nextState ||
+            nextState.currentWeekBar.time !== currentWeekStart ||
+            !subscription.isWeekly ||
+            getWeeklyHistoryKey(
+              subscription.symbol,
+              subscription.resolution
+            ) !== historyKey
+          ) {
+            return;
+          }
+
+          subscription.currentWeekBar = nextState.currentWeekBar;
+          subscription.lastDailyVolume = nextState.lastDailyVolume;
+        });
       }
       if (bars.length) {
         stateRef.current.onLatestBar?.(toHoverData(bars[bars.length - 1]));
       }
+      barsLoaded = true;
       return {
         bars,
         noData: bars.length === 0,
@@ -506,7 +664,6 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
       resolution: string;
       subscriberUID: string;
     }) => {
-      const sdk = getPerpsSDK();
       const targetInterval = resolutionToInterval(params.resolution);
       const isWeekly = targetInterval === '1w';
       const subscribeInterval: PerpsInterval = isWeekly ? '1d' : targetInterval;
@@ -521,6 +678,8 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
       }
 
       const state: BarSubscription = {
+        symbol: params.symbol,
+        resolution: params.resolution,
         unsubscribe: () => undefined,
         currentWeekBar: null,
         lastDailyVolume: null,
@@ -620,6 +779,8 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
       if (event.source !== iframeRef.current?.contentWindow) return;
       if (iframeOrigin !== '*' && event.origin !== iframeOrigin) return;
 
+      bridgeAlive = true;
+
       if (message.kind === 'event') {
         if (message.event === 'hover') {
           stateRef.current.onHoverData?.(
@@ -635,9 +796,10 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
           }
         } else if (message.event === 'openExternalUrl') {
           const url = message.payload?.url;
-          if (isTradingViewExternalUrl(url)) {
-            browser.tabs.create({ active: true, url }).catch(() => {
-              window.open(url, '_blank', 'noopener,noreferrer');
+          const safeUrl = toSafeExternalUrl(url);
+          if (safeUrl && isTradingViewExternalUrl(safeUrl)) {
+            browser.tabs.create({ active: true, url: safeUrl }).catch(() => {
+              window.open(safeUrl, '_blank', 'noopener,noreferrer');
             });
           }
         }
@@ -725,6 +887,9 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
     window.addEventListener('message', handleMessage);
     return () => {
       window.removeEventListener('message', handleMessage);
+      window.removeEventListener('online', handleNetworkRestored);
+      sdk.ws.off('close', handleWebSocketClose);
+      sdk.ws.off('open', handleNetworkRestored);
       cleanupSubscriptions();
     };
   }, [iframeOrigin]);
@@ -815,6 +980,7 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
 
   return (
     <iframe
+      key={chartReloadKey}
       ref={iframeRef}
       src={iframeUrl}
       className={className}
