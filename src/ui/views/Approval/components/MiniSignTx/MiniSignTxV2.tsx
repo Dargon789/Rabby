@@ -37,7 +37,8 @@ import {
 } from '@/ui/component/MiniSignV2/state';
 import { MiniSecurityHeader } from '@/ui/component/MiniSignV2/components';
 import { TokenDetailPopup } from '@/ui/views/Dashboard/components/TokenDetailPopup';
-import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
+import { useRabbySelector } from '@/ui/store';
+import { useSignStore } from '@/ui/state/sign';
 import useSyncStaleValue from '@/ui/hooks/useDebounceValue';
 import { PopupContainer } from '@/ui/hooks/usePopupContainer';
 import { DrawerProps, ModalProps } from 'antd';
@@ -67,16 +68,15 @@ const MiniSignTxV2 = ({ isDesktop }: { isDesktop?: boolean }) => {
   const { t } = useTranslation();
   const wallet = useWallet();
   const { isDarkTheme } = useThemeMode();
-  const { tokenDetail, cachedTokenList } = useRabbySelector((s) => ({
-    tokenDetail: s.sign.tokenDetail,
-    cachedTokenList: s.account.tokens.list,
-  }));
+  const cachedTokenList = useRabbySelector((s) => s.account.tokens.list);
+  const tokenDetail = useSignStore((state) => state.tokenDetail);
+  const closeTokenDetailPopup = useSignStore(
+    (state) => state.closeTokenDetailPopup
+  );
   const cachedTokenItems = React.useMemo(
     () => (cachedTokenList || []).map(abstractTokenToTokenItem),
     [cachedTokenList]
   );
-  const dispatch = useRabbyDispatch();
-
   const instance = useSignatureInstance();
   const state = useSignatureStoreOf(instance);
   const [
@@ -125,6 +125,7 @@ const MiniSignTxV2 = ({ isDesktop }: { isDesktop?: boolean }) => {
     isDesktop,
   ]);
   const visible = useSyncStaleValue(_visible, 100);
+  const errorPopupVisible = !!error && !!ctx?.signInfo?.status;
   const loading =
     status === 'prefetching' || status === 'signing' || !ctx?.txsCalc.length;
 
@@ -708,7 +709,7 @@ const MiniSignTxV2 = ({ isDesktop }: { isDesktop?: boolean }) => {
         ) : null}
         <Popup
           height={'fit-content'}
-          visible={!!error && !!ctx.signInfo?.status}
+          visible={errorPopupVisible}
           bodyStyle={{ padding: 0 }}
           getContainer={desktopMiniSignerGetContainer}
         >
@@ -953,7 +954,7 @@ const MiniSignTxV2 = ({ isDesktop }: { isDesktop?: boolean }) => {
         <TokenDetailPopup
           token={tokenDetail.selectToken}
           visible={tokenDetail.popupVisible}
-          onClose={() => dispatch.sign.closeTokenDetailPopup()}
+          onClose={closeTokenDetailPopup}
           canClickToken={false}
           hideOperationButtons
           variant="add"
@@ -989,7 +990,7 @@ const MiniSignTxV2 = ({ isDesktop }: { isDesktop?: boolean }) => {
       ) : null}
       <Popup
         height={'fit-content'}
-        visible={!!error && !!ctx.signInfo?.status}
+        visible={errorPopupVisible}
         bodyStyle={{ padding: 0 }}
         getContainer={config?.getContainer}
         push={false}
@@ -1013,7 +1014,7 @@ const MiniSignTxV2 = ({ isDesktop }: { isDesktop?: boolean }) => {
         placement="bottom"
         height="fit-content"
         className="is-support-darkmode"
-        visible={visible}
+        visible={visible && !errorPopupVisible}
         onClose={handleCancel}
         maskClosable={!loading}
         closable={false}
@@ -1214,7 +1215,7 @@ const MiniSignTxV2 = ({ isDesktop }: { isDesktop?: boolean }) => {
       <TokenDetailPopup
         token={tokenDetail.selectToken}
         visible={tokenDetail.popupVisible}
-        onClose={() => dispatch.sign.closeTokenDetailPopup()}
+        onClose={closeTokenDetailPopup}
         canClickToken={false}
         hideOperationButtons
         variant="add"

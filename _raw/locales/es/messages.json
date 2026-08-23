@@ -663,7 +663,10 @@
       "title": "Recibir {{token}} en {{chain}}",
       "watchModeAlert1": "Esta es una dirección en Modo de Observación.",
       "watchModeAlert2": "¿Estás seguro de que quieres usarla para recibir activos?",
-      "receiveOn": "Recibir {{token}} en"
+      "receiveOn": "Recibir {{token}} en",
+      "receiveTitle": "Recibir {{token}}",
+      "addCustomNetwork": "Añadir red personalizada",
+      "supportedChain": "Redes compatibles"
     },
     "sendToken": {
       "addressNotInContract": "No en la lista de direcciones. <1></1><2>Agregar a contactos</2>",
@@ -1507,7 +1510,8 @@
         "searchTokenPlaceholder": "Buscar token",
         "openInTab": "Abrir en la pestaña de Rabby",
         "openProMode": "Abrir modo Pro",
-        "openInTabV2": "Abrir en pestaña"
+        "openInTabV2": "Abrir en pestaña",
+        "addAssets": "Añadir activos"
       },
       "hd": {
         "howToConnectLedger": "Cómo conectar Ledger",
@@ -1572,7 +1576,11 @@
         "downloadIntro": "¿No tienes la aplicación aún? Descárgala ahora.",
         "desc": "Consulta tus puntos en Rabby Mobile."
       },
-      "noData": "No se encontró moneda"
+      "noData": "No se encontró moneda",
+      "ZeroAssets": {
+        "desc": "Añade fondos a tu billetera para usar Web3",
+        "addAssets": "Añadir activos"
+      }
     },
     "nft": {
       "floorPrice": "/ Precio mínimo:",
@@ -2556,7 +2564,8 @@
           "mintNFT": "Acuñar DBK Genesis NFT",
           "bridgeBtn": "Bridge",
           "bridge": "Puente hacia DBK Chain",
-          "bridgePoweredBy": "Impulsado por OP Superchain"
+          "bridgePoweredBy": "Impulsado por OP Superchain",
+          "withdraw": "Retirar de DBK Chain"
         },
         "bridge": {
           "tabs": {
@@ -3608,6 +3617,7 @@
       "currentPrice": "Precio Actual",
       "settings": "Configuración",
       "marginMode": "Modo de Margen",
+      "marginModeSwitchFailed": "No se pudo cambiar el modo de margen. Inténtalo de nuevo.",
       "isolatedMargin": "Margen Aislada",
       "liquidationDistanceUp": "Una subida del <bold>{{percent}}</bold> activará la liquidación",
       "liquidationDistanceDown": "Una bajada del <bold>{{percent}}</bold> activará la liquidación",
@@ -3871,7 +3881,87 @@
       "statusBar": {
         "online": "En línea",
         "sound": "Activar sonido",
-        "offline": "Desconectado"
+        "offline": "Desconectado",
+        "settings": "Configuración"
+      },
+      "orderConfirm": {
+        "buyLong": "Comprar / Posición larga",
+        "sellShort": "Vender / Venta en corto",
+        "closeLong": "Cerrar largo",
+        "closeShort": "Cerrar corto",
+        "dontShowAgain": "No volver a mostrar la confirmación de {{orderType}}. Puedes cambiar esto en cualquier momento en Configuración.",
+        "orderTypeName": {
+          "market": "Orden de mercado",
+          "limit": "Orden límite",
+          "conditional": "Orden condicional",
+          "twap": "Orden TWAP",
+          "closeMarket": "Cierre a mercado",
+          "closeLimit": "Cierre límite",
+          "tpsl": "TP/SL"
+        },
+        "price": "Precio",
+        "marketPrice": "Precio de mercado",
+        "markPrice": "Precio de marca",
+        "triggerPrice": "Precio de activación",
+        "amount": "Cantidad",
+        "estLiqPrice": "Precio liq. est.",
+        "estLiqDistance": "Distancia liq. est.",
+        "reduceOnly": "Solo reducir",
+        "yes": "Sí",
+        "no": "No",
+        "true": "Verdadero",
+        "false": "Falso",
+        "estPnl": "PnL est.",
+        "tpSl": "TP/SL",
+        "takeProfitMarket": "Toma de ganancias a mercado",
+        "stopLossMarket": "Límite de pérdidas a mercado",
+        "trigger": "Precio de activación",
+        "totalAmountApproximately": "Cantidad total aproximada",
+        "totalSize": "Tamaño total",
+        "totalTime": "Tiempo total",
+        "lastPrice": "Último precio",
+        "tpslTitle": "Confirmar TP/SL de la posición",
+        "symbol": "Símbolo",
+        "entryPrice": "Precio de entrada",
+        "takeProfit": "Toma de ganancias",
+        "stopLoss": "Límite de pérdidas",
+        "totalEstimatedPnl": "PNL total estimado",
+        "orderPreview": "Vista previa de la orden",
+        "scaleSymbol": "Símbolo",
+        "scaleOrderType": "Tipo de orden",
+        "scaleAmount": "Cantidad",
+        "scalePrice": "Precio",
+        "scaleLimit": "Límite",
+        "cost": "Costo"
+      },
+      "settings": {
+        "title": "Configuración",
+        "accountType": "Tipo de cuenta",
+        "orderConfirmations": "Confirmaciones de órdenes",
+        "soundReminder": "Recordatorio de sonido",
+        "popularTradings": "Operaciones populares",
+        "accountTypeTitle": "Tipo de cuenta",
+        "orderConfirmationsTitle": "Confirmaciones de órdenes",
+        "orderConfirmationRow": {
+          "limit": "Orden límite",
+          "market": "Orden de mercado",
+          "conditional": "Orden condicional",
+          "twap": "Orden TWAP",
+          "closeMarket": "Cierre a mercado",
+          "closeLimit": "Cierre límite",
+          "tpsl": "Orden TP/SL"
+        },
+        "accountTypeOption": {
+          "unifiedAccountLabel": "Cuenta unificada (Recomendado)",
+          "unifiedAccountShortLabel": "Cuenta unificada",
+          "unifiedAccountDesc": "La configuración de cuenta predeterminada, en la que cada activo de colateral tiene un saldo independiente. Los Perps solo pueden usar el activo de liquidación como colateral, y el margen solo se comparte entre activos de margen cruzado que tengan el mismo activo de colateral.",
+          "manualLabel": "Manual",
+          "manualDesc": "Solo se recomienda para traders automatizados. Todos los DEXs tienen saldos independientes y el margen cruzado se aplica por separado dentro de cada DEX.",
+          "portfolioMarginLabel": "Margen de portafolio",
+          "portfolioMarginDesc": "Para usuarios avanzados que buscan mayor flexibilidad y eficiencia de capital. Todas las operaciones se unifican entre spot y Perps. Los activos de colateral elegibles, como HYPE y BTC, pueden usarse directamente como colateral para posiciones de Perps sin convertirlos al activo de liquidación. Los activos de colateral generan o pagan intereses según estén inactivos o se hayan tomado prestados para abrir posiciones."
+        },
+        "accountTypeSwitchSuccess": "Tipo de cuenta cambiado a: {{type}}",
+        "accountTypeSwitchFailed": "No se pudo actualizar el tipo de cuenta"
       },
       "tradingPanel": {
         "slippagePage": {
@@ -3963,6 +4053,7 @@
         "Buy": "Comprar",
         "Sell": "Vender",
         "bboDisabledTooltip": "BBO no es compatible cuando {{bboDisabledReason}} está habilitado.",
+        "bboPriceUnavailable": "No hay ningún precio disponible en el libro de órdenes en este momento. Por favor, inténtalo de nuevo.",
         "slTriggerLessThanOrderPrice": "El precio de activación de tu SL debe ser menor que el precio de tu orden.",
         "buyTrigger": "Disparador de compra",
         "tpTriggerLessThanOrderPrice": "Tu precio de activación de TP debe ser menor que tu precio de orden.",
@@ -4791,7 +4882,9 @@
       "revoke": "Revocar",
       "approvals": "aprobaciones",
       "unselectAll": "Deseleccionar todo",
-      "selectAll": "Seleccionar todo"
+      "selectAll": "Seleccionar todo",
+      "approvalsCount": "{{count}} aprobaciones",
+      "approvalsCount_one": "{{count}} aprobación"
     }
   },
   "component": {
