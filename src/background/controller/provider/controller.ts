@@ -87,6 +87,12 @@ import {
 } from '@/utils/tempo';
 import { fixKeyringAccountOnSigned } from '../walletUtils/fix';
 import { handleGasAccountLoginSuccess } from '@/background/utils/gasAccountLogin';
+import {
+  attachSigningContext,
+  bindSigningCarrier,
+  getSigningContext,
+  takeSigningCarrier,
+} from '@/utils/sentry';
 
 const reportSignText = (params: {
   method: string;
@@ -491,6 +497,9 @@ class ProviderController extends BaseController {
     const chain = findChain({
       serverId: chainServerId,
     })!;
+    if (!chain.isTestnet && method === 'eth_sendRawTransaction') {
+      void RPCService.probeBestRPC(chainServerId);
+    }
     if (!chain.isTestnet) {
       if (RPCService.hasCustomRPC(chain.enum as CHAINS_ENUM)) {
         const promise = RPCService.requestCustomRPC(
@@ -868,6 +877,10 @@ class ProviderController extends BaseController {
 
     const chainItem = findChainByEnum(chain);
 
+    if (chainItem && !chainItem.isTestnet) {
+      void RPCService.probeBestRPC(chainItem.serverId);
+    }
+
     const statsData: StatsData = {
       signed: false,
       signedSuccess: false,
@@ -976,10 +989,22 @@ class ProviderController extends BaseController {
       });
     } catch (e) {
       console.error(e);
-      const errObj =
-        typeof e === 'object'
-          ? { message: e.message }
-          : ({ message: e } as any);
+      const signingCarrier = takeSigningCarrier(e);
+      const signingContext =
+        getSigningContext(e) ?? getSigningContext(signingCarrier);
+      const carrier =
+        signingCarrier ??
+        (signingContext && e instanceof Error ? e : undefined);
+      const errObj: any = {
+        message: e && typeof e === 'object' ? e.message : e,
+      };
+      if (signingContext && !carrier) {
+        attachSigningContext(errObj, signingContext);
+      }
+      if (carrier) {
+        bindSigningCarrier(errObj, carrier);
+        errObj.reportedFromBackground = true;
+      }
       errObj.method = EVENTS.COMMON_HARDWARE.REJECTED;
 
       throw errObj;
@@ -1272,7 +1297,7 @@ class ProviderController extends BaseController {
 
             const defaultRPC = RPCService.getDefaultRPC(chainServerId);
             if (defaultRPC?.txPushToRPC && !isGasLess && !isGasAccount) {
-              let fePushedFailed = false;
+              let fePushedError: any = null;
 
               const rawTx = isTempoTx
                 ? tempoSerializedRawTx
@@ -1309,7 +1334,8 @@ class ProviderController extends BaseController {
                   console.log('ignore BE error', error);
                 });
               } catch (fePushError) {
-                fePushedFailed = true;
+                fePushedError =
+                  fePushError ?? new Error('Frontend RPC push failed');
 
                 const urls = RPCService.getDefaultRPCByChainServerId(
                   chainServerId
@@ -1325,10 +1351,18 @@ class ProviderController extends BaseController {
                 };
               }
 
-              if (fePushedFailed) {
+              if (fePushedError) {
                 adoptBE7702Params();
-                const res = await openapiService.submitTxV2(params);
-                hash = res.tx_id;
+                try {
+                  const res = await openapiService.submitTxV2(params);
+                  hash = res.tx_id;
+                } catch (bePushError) {
+                  // both pushes failed: surface the RPC error, it's closer to the node
+                  console.log('BE push failed after FE push failed', {
+                    bePushError,
+                  });
+                  throw fePushedError;
+                }
               }
             } else {
               adoptBE7702Params();

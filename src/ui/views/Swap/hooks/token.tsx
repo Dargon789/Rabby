@@ -1,4 +1,4 @@
-import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
+import { useSwapStore } from '@/ui/state/swap';
 import { getUiType, isSameAddress, useWallet } from '@/ui/utils';
 import { CHAINS_ENUM } from '@debank/common';
 import { TokenItem } from '@rabby-wallet/rabby-api/dist/types';
@@ -47,7 +47,6 @@ import { getDefaultSwapToTokenItem } from '@/constant/dex-swap';
 const isTab = getUiType().isTab;
 
 export const enableInsufficientQuote = true;
-const FREE_TOKEN_PAIR_AUTO_SLIPPAGE = '0.1';
 
 const getDexQuoteReceiveAmount = (
   quote: TDexQuoteData,
@@ -147,34 +146,36 @@ export interface FeeProps {
 }
 
 export const useTokenPair = (userAddress: string) => {
-  const dispatch = useRabbyDispatch();
   const refreshId = useRefreshId();
   const setRefreshId = useSetRefreshId();
   const wallet = useWallet();
   const depositFlowActive = useGasAccountDepositFlowActive();
 
+  const initialSelectedChain = useSwapStore(
+    (state) => state.$$initialSelectedChain
+  );
+  const storeSelectedChain = useSwapStore((state) => state.selectedChain);
+  const storeSelectedFromToken = useSwapStore(
+    (state) => state.selectedFromToken
+  );
+  const storeSelectedToToken = useSwapStore((state) => state.selectedToToken);
   const {
-    initialSelectedChain,
     oChain,
     defaultSelectedFromToken,
     defaultSelectedToToken,
-  } = useRabbySelector((state) => {
-    const selectedChain = state.swap.selectedChain || CHAINS_ENUM.ETH;
+  } = useMemo(() => {
+    const selectedChain = storeSelectedChain || CHAINS_ENUM.ETH;
     const selectedFromToken = isTokenOnChain(
-      state.swap.selectedFromToken,
+      storeSelectedFromToken,
       selectedChain
     )
-      ? state.swap.selectedFromToken
+      ? storeSelectedFromToken
       : undefined;
-    const selectedToToken = isTokenOnChain(
-      state.swap.selectedToToken,
-      selectedChain
-    )
-      ? state.swap.selectedToToken
+    const selectedToToken = isTokenOnChain(storeSelectedToToken, selectedChain)
+      ? storeSelectedToToken
       : undefined;
 
     return {
-      initialSelectedChain: state.swap.$$initialSelectedChain,
       oChain: selectedChain,
       defaultSelectedFromToken: selectedFromToken,
       defaultSelectedToToken:
@@ -182,7 +183,10 @@ export const useTokenPair = (userAddress: string) => {
           ? selectedToToken
           : undefined,
     };
-  });
+  }, [storeSelectedChain, storeSelectedFromToken, storeSelectedToToken]);
+  const setSelectedChain = useSwapStore((s) => s.setSelectedChain);
+  const setSelectedFromToken = useSwapStore((s) => s.setSelectedFromToken);
+  const setSelectedToToken = useSwapStore((s) => s.setSelectedToToken);
 
   const [chain, setChain] = useState(oChain);
 
@@ -190,20 +194,20 @@ export const useTokenPair = (userAddress: string) => {
     (c: CHAINS_ENUM) => {
       setChain(c);
       if (!isTab) {
-        dispatch.swap.setSelectedChain(c);
+        setSelectedChain(c);
       }
     },
-    [dispatch?.swap?.setSelectedChain]
+    [setSelectedChain]
   );
   const [refreshTokenId, updateRefreshTokenId] = useState(0);
-  const reloadTxRefreshPausedRef = useRef(false);
+  const quoteRefreshLockedRef = useRef(false);
   const refreshTokensInfo = useCallback(
     () => updateRefreshTokenId((e) => e + 1),
     [updateRefreshTokenId]
   );
   useEffect(() => {
     const refreshToken = (params: { addressList: string[] }) => {
-      if (depositFlowActive || reloadTxRefreshPausedRef.current) {
+      if (depositFlowActive || quoteRefreshLockedRef.current) {
         return;
       }
       if (
@@ -260,7 +264,7 @@ export const useTokenPair = (userAddress: string) => {
   const setActiveProvider: React.Dispatch<
     React.SetStateAction<QuoteProvider | undefined>
   > = useCallback((p) => {
-    if (reloadTxRefreshPausedRef.current) {
+    if (quoteRefreshLockedRef.current) {
       return;
     }
 
@@ -271,10 +275,7 @@ export const useTokenPair = (userAddress: string) => {
 
     if (p && !depositFlowActiveRef.current) {
       expiredTimer.current = setTimeout(() => {
-        if (
-          !depositFlowActiveRef.current &&
-          !reloadTxRefreshPausedRef.current
-        ) {
+        if (!depositFlowActiveRef.current && !quoteRefreshLockedRef.current) {
           setRefreshId((e) => e + 1);
         }
       }, 1000 * 20);
@@ -340,13 +341,13 @@ export const useTokenPair = (userAddress: string) => {
 
   useEffect(() => {
     if (!isTab) {
-      dispatch.swap.setSelectedFromToken(payToken);
+      setSelectedFromToken(payToken);
     }
   }, [payToken]);
 
   useEffect(() => {
     if (!isTab) {
-      dispatch.swap.setSelectedToToken(receiveToken);
+      setSelectedToToken(receiveToken);
     }
   }, [receiveToken]);
 
@@ -618,9 +619,7 @@ export const useTokenPair = (userAddress: string) => {
     [payToken, receiveToken]
   );
 
-  const autoSlippageValue = isFreeTokenPair
-    ? FREE_TOKEN_PAIR_AUTO_SLIPPAGE
-    : getSwapAutoSlippageValue(isStableCoin);
+  const autoSlippageValue = getSwapAutoSlippageValue(isStableCoin);
 
   const [isWrapToken, wrapTokenSymbol] = useMemo(() => {
     if (payToken?.id && receiveToken?.id) {
@@ -736,7 +735,7 @@ export const useTokenPair = (userAddress: string) => {
     { loading: quoteLoading, error: quotesError },
     getQuotes,
   ] = useAsyncFn(async () => {
-    if (depositFlowActiveRef.current || reloadTxRefreshPausedRef.current) {
+    if (depositFlowActiveRef.current || quoteRefreshLockedRef.current) {
       setPending(false);
       return;
     }
@@ -751,12 +750,7 @@ export const useTokenPair = (userAddress: string) => {
         e.map((q) => ({ ...q, loading: true, isBest: false }))
       );
       let slippage = slippageObj.slippage;
-      if (slippageObj.autoSlippage && isFreeTokenPair) {
-        slippage = autoSlippageValue;
-        if (currentFetchId === fetchIdRef.current) {
-          setAutoSuggestSlippage(slippage);
-        }
-      } else if (slippageObj.autoSlippage) {
+      if (slippageObj.autoSlippage) {
         try {
           const suggestSlippage = await wallet.openapi.suggestSlippage({
             chain_id: findChainByEnum(chain)!.serverId,
@@ -815,13 +809,11 @@ export const useTokenPair = (userAddress: string) => {
     feeRate,
     slippageObj.slippage,
     slippageObj.autoSlippage,
-    isFreeTokenPair,
-    autoSlippageValue,
     isDraggingSlider,
   ]);
 
   useEffect(() => {
-    if (canRunQuoteRequest && !reloadTxRefreshPausedRef.current) {
+    if (canRunQuoteRequest && !quoteRefreshLockedRef.current) {
       setPending(true);
     } else {
       setPending(false);
@@ -841,11 +833,11 @@ export const useTokenPair = (userAddress: string) => {
     [getQuotes]
   );
 
-  const setReloadTxRefreshPaused = useCallback(
-    (paused: boolean) => {
-      reloadTxRefreshPausedRef.current = paused;
+  const setQuoteRefreshLocked = useCallback(
+    (locked: boolean) => {
+      quoteRefreshLockedRef.current = locked;
 
-      if (!paused) {
+      if (!locked) {
         return;
       }
 
@@ -913,11 +905,7 @@ export const useTokenPair = (userAddress: string) => {
   }, [selectableQuoteListForDisplay.length]);
 
   useEffect(() => {
-    if (
-      reloadTxRefreshPausedRef.current ||
-      !canRunQuoteRequest ||
-      !receiveToken
-    ) {
+    if (quoteRefreshLockedRef.current || !canRunQuoteRequest || !receiveToken) {
       return;
     }
 
@@ -1217,7 +1205,7 @@ export const useTokenPair = (userAddress: string) => {
   }, [clearExpiredTimer]);
 
   return {
-    setReloadTxRefreshPaused,
+    setQuoteRefreshLocked,
     bestQuoteDex,
     gasLevel,
 

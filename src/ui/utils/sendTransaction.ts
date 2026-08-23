@@ -35,7 +35,7 @@ import {
   ActionRequireData,
 } from '@rabby-wallet/rabby-action';
 import stats from '@/stats';
-import { getCexInfo } from '../models/exchange';
+import { getCexInfo } from '../state/exchange';
 import { Account } from '@/background/service/preference';
 import {
   buildTempoTransaction,
@@ -547,7 +547,7 @@ export const sendTransaction = async ({
           }),
     },
     apiProvider: isTestnet(chain.serverId)
-      ? wallet.testnetOpenapi
+      ? ((wallet.fakeTestnetOpenapi as unknown) as any)
       : wallet.openapi,
   });
 
@@ -929,7 +929,7 @@ export const sendTransactionByMiniSignV2 = async ({
             }),
       },
       apiProvider: isTestnet(chain.serverId)
-        ? wallet.testnetOpenapi
+        ? ((wallet.fakeTestnetOpenapi as unknown) as any)
         : wallet.openapi,
     });
 

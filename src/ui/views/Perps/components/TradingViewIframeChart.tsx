@@ -1,7 +1,13 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import browser from 'webextension-polyfill';
 import type { Candle, CandleSnapshot } from '@rabby-wallet/hyperliquid-sdk';
 import { getPerpsSDK } from '../sdkManager';
+import {
+  closeAllCandleSubscriptions,
+  closeCandleSubscription,
+  isCandleForChannel,
+  openCandleSubscription,
+} from '../candleSubscriptions';
 
 const BRIDGE_CHANNEL = 'rabby-tradingview-bridge-v1';
 const DEFAULT_TRADINGVIEW_URL = process.env.DEBUG
@@ -88,6 +94,7 @@ type BridgeMessage =
 type BarSubscription = {
   symbol: string;
   resolution: string;
+  subscribeInterval: PerpsInterval;
   unsubscribe: () => void;
   currentWeekBar: TVBar | null;
   lastDailyVolume: { time: number; value: number } | null;
@@ -436,7 +443,8 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const subscriptionsRef = useRef<Map<string, BarSubscription>>(new Map());
   const weeklyHistoryRef = useRef<Map<string, WeeklyHistoryState>>(new Map());
-  const iframeIntervalChangeRef = useRef(false);
+  // Bumped to remount the iframe when the chart never came up at all
+  const [chartReloadKey, setChartReloadKey] = useState(0);
 
   const iframeUrl = useMemo(() => {
     const base = getTradingViewBaseUrl();
@@ -526,24 +534,37 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
 
   useEffect(() => {
     const sdk = getPerpsSDK();
-    let shouldResetChartOnOpen = false;
+    let chartNeedsRecovery = false;
+    // The iframe answered at least one bridge message, i.e. its document and
+    // script actually loaded.
+    let bridgeAlive = false;
+    // getBars was answered successfully at least once, i.e. TradingView owns a
+    // rendered series.
+    let barsLoaded = false;
 
     const cleanupSubscriptions = () => {
-      subscriptionsRef.current.forEach((sub) => sub.unsubscribe());
-      subscriptionsRef.current.clear();
+      closeAllCandleSubscriptions(subscriptionsRef.current);
     };
 
-    const handleWebSocketClose = () => {
-      // An SDK-level reconnect restores realtime subscriptions, but candle
-      // messages do not backfill the intervals missed while disconnected.
-      shouldResetChartOnOpen = true;
-    };
+    const recoverChart = () => {
+      // Offline at mount leaves nothing to refresh. Either the host document
+      // never loaded (it is served no-cache with no service worker, so there is
+      // no bridge to post to), or it loaded but its first getBars failed —
+      // TradingView only calls subscribeBars after a successful history
+      // response, so that chart has an errored series and no subscription.
+      // Remounting the iframe is the only way back for both; the host re-reads
+      // symbol/interval/theme through its getState handshake.
+      if (!bridgeAlive || !barsLoaded) {
+        bridgeAlive = false;
+        barsLoaded = false;
+        cleanupSubscriptions();
+        weeklyHistoryRef.current.clear();
+        setChartReloadKey((key) => key + 1);
+        return;
+      }
 
-    const handleWebSocketOpen = () => {
-      if (!shouldResetChartOnOpen) return;
-      shouldResetChartOnOpen = false;
-      if (subscriptionsRef.current.size === 0) return;
-
+      // The chart is alive and only missed the candles from the outage: drop
+      // its cached bars so it re-requests history through getBars.
       postToIframe({
         channel: BRIDGE_CHANNEL,
         kind: 'command',
@@ -551,8 +572,25 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
       });
     };
 
+    const handleWebSocketClose = () => {
+      // An SDK-level reconnect restores realtime subscriptions, but candle
+      // messages do not backfill the intervals missed while disconnected.
+      chartNeedsRecovery = true;
+    };
+
+    // Recovery is one-shot per outage: 'online' and the SDK reconnect both fire
+    // on the same network restore, and whichever lands first consumes the flag.
+    // 'online' is kept because the SDK backs off for up to 30s before it
+    // reconnects, and the chart does not need the socket to refetch history.
+    const handleNetworkRestored = () => {
+      if (!chartNeedsRecovery) return;
+      chartNeedsRecovery = false;
+      recoverChart();
+    };
+
     sdk.ws.on('close', handleWebSocketClose);
-    sdk.ws.on('open', handleWebSocketOpen);
+    sdk.ws.on('open', handleNetworkRestored);
+    window.addEventListener('online', handleNetworkRestored);
 
     const handleGetBars = async (params: {
       symbol: string;
@@ -619,6 +657,7 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
       if (bars.length) {
         stateRef.current.onLatestBar?.(toHoverData(bars[bars.length - 1]));
       }
+      barsLoaded = true;
       return {
         bars,
         noData: bars.length === 0,
@@ -637,105 +676,114 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
         params.symbol,
         params.resolution
       );
-      const current = subscriptionsRef.current.get(params.subscriberUID);
-      if (current) {
-        current.unsubscribe();
-        subscriptionsRef.current.delete(params.subscriberUID);
-      }
-
       const state: BarSubscription = {
         symbol: params.symbol,
         resolution: params.resolution,
+        subscribeInterval,
         unsubscribe: () => undefined,
         currentWeekBar: null,
         lastDailyVolume: null,
         isWeekly,
       };
 
-      const subscription = sdk.ws.subscribeToCandles(
-        params.symbol,
-        subscribeInterval,
-        (snapshot) => {
-          const parsed = parseBars([snapshot]);
-          if (!parsed.length) return;
-          const dayBar = parsed[0];
-
-          if (!state.isWeekly) {
-            postToIframe({
-              channel: BRIDGE_CHANNEL,
-              kind: 'event',
-              event: 'realtimeBar',
-              payload: {
-                subscriberUID: params.subscriberUID,
-                bar: dayBar,
-              },
-            });
-            stateRef.current.onLatestBar?.(toHoverData(dayBar));
-            return;
-          }
-
-          const mondayTs = getMondayUtc(dayBar.time);
-          if (!state.currentWeekBar) {
-            const historyState = cloneWeeklyHistoryState(
-              weeklyHistoryRef.current.get(weeklyHistoryKey)
-            );
-            if (!historyState) {
+      const openSubscription = () => {
+        const subscription = sdk.ws.subscribeToCandles(
+          params.symbol,
+          subscribeInterval,
+          (snapshot) => {
+            if (
+              !isCandleForChannel(snapshot, {
+                symbol: params.symbol,
+                subscribeInterval,
+              })
+            ) {
               return;
             }
-            state.currentWeekBar = historyState.currentWeekBar;
-            state.lastDailyVolume = historyState.lastDailyVolume;
-          }
 
-          const currentWeekBar = state.currentWeekBar;
-          if (currentWeekBar && currentWeekBar.time === mondayTs) {
-            currentWeekBar.high = Math.max(currentWeekBar.high, dayBar.high);
-            currentWeekBar.low = Math.min(currentWeekBar.low, dayBar.low);
-            currentWeekBar.close = dayBar.close;
+            const parsed = parseBars([snapshot]);
+            if (!parsed.length) return;
+            const dayBar = parsed[0];
 
-            const prevDayVolume =
-              state.lastDailyVolume?.time === dayBar.time
-                ? state.lastDailyVolume.value
-                : 0;
-            currentWeekBar.volume =
-              currentWeekBar.volume - prevDayVolume + dayBar.volume;
-          } else {
-            state.currentWeekBar = {
-              ...dayBar,
-              time: mondayTs,
+            if (!state.isWeekly) {
+              postToIframe({
+                channel: BRIDGE_CHANNEL,
+                kind: 'event',
+                event: 'realtimeBar',
+                payload: {
+                  subscriberUID: params.subscriberUID,
+                  bar: dayBar,
+                },
+              });
+              stateRef.current.onLatestBar?.(toHoverData(dayBar));
+              return;
+            }
+
+            const mondayTs = getMondayUtc(dayBar.time);
+            if (!state.currentWeekBar) {
+              const historyState = cloneWeeklyHistoryState(
+                weeklyHistoryRef.current.get(weeklyHistoryKey)
+              );
+              if (!historyState) {
+                return;
+              }
+              state.currentWeekBar = historyState.currentWeekBar;
+              state.lastDailyVolume = historyState.lastDailyVolume;
+            }
+
+            const currentWeekBar = state.currentWeekBar;
+            if (currentWeekBar && currentWeekBar.time === mondayTs) {
+              currentWeekBar.high = Math.max(currentWeekBar.high, dayBar.high);
+              currentWeekBar.low = Math.min(currentWeekBar.low, dayBar.low);
+              currentWeekBar.close = dayBar.close;
+
+              const prevDayVolume =
+                state.lastDailyVolume?.time === dayBar.time
+                  ? state.lastDailyVolume.value
+                  : 0;
+              currentWeekBar.volume =
+                currentWeekBar.volume - prevDayVolume + dayBar.volume;
+            } else {
+              state.currentWeekBar = {
+                ...dayBar,
+                time: mondayTs,
+              };
+            }
+
+            state.lastDailyVolume = {
+              time: dayBar.time,
+              value: dayBar.volume,
             };
-          }
 
-          state.lastDailyVolume = {
-            time: dayBar.time,
-            value: dayBar.volume,
-          };
-
-          if (state.currentWeekBar) {
-            postToIframe({
-              channel: BRIDGE_CHANNEL,
-              kind: 'event',
-              event: 'realtimeBar',
-              payload: {
-                subscriberUID: params.subscriberUID,
-                bar: state.currentWeekBar,
-              },
-            });
-            stateRef.current.onLatestBar?.(toHoverData(state.currentWeekBar));
+            if (state.currentWeekBar) {
+              postToIframe({
+                channel: BRIDGE_CHANNEL,
+                kind: 'event',
+                event: 'realtimeBar',
+                payload: {
+                  subscriberUID: params.subscriberUID,
+                  bar: state.currentWeekBar,
+                },
+              });
+              stateRef.current.onLatestBar?.(toHoverData(state.currentWeekBar));
+            }
           }
-        }
+        );
+
+        state.unsubscribe = subscription.unsubscribe;
+        return state;
+      };
+
+      openCandleSubscription(
+        subscriptionsRef.current,
+        params.subscriberUID,
+        { symbol: params.symbol, subscribeInterval },
+        openSubscription
       );
-
-      state.unsubscribe = subscription.unsubscribe;
-      subscriptionsRef.current.set(params.subscriberUID, state);
       return { ok: true };
     };
 
     const handleUnsubscribeBars = (params: { subscriberUID: string }) => {
-      const current = subscriptionsRef.current.get(params.subscriberUID);
-      if (current) {
-        current.unsubscribe();
-        subscriptionsRef.current.delete(params.subscriberUID);
-      }
+      closeCandleSubscription(subscriptionsRef.current, params.subscriberUID);
       return { ok: true };
     };
 
@@ -745,6 +793,8 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
       if (event.source !== iframeRef.current?.contentWindow) return;
       if (iframeOrigin !== '*' && event.origin !== iframeOrigin) return;
 
+      bridgeAlive = true;
+
       if (message.kind === 'event') {
         if (message.event === 'hover') {
           stateRef.current.onHoverData?.(
@@ -753,7 +803,6 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
         } else if (message.event === 'intervalChanged') {
           const resolution = message.payload?.resolution;
           if (resolution) {
-            iframeIntervalChangeRef.current = true;
             stateRef.current.onIntervalChange?.(
               resolutionToInterval(resolution)
             );
@@ -851,23 +900,23 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
     window.addEventListener('message', handleMessage);
     return () => {
       window.removeEventListener('message', handleMessage);
+      window.removeEventListener('online', handleNetworkRestored);
       sdk.ws.off('close', handleWebSocketClose);
-      sdk.ws.off('open', handleWebSocketOpen);
+      sdk.ws.off('open', handleNetworkRestored);
       cleanupSubscriptions();
     };
   }, [iframeOrigin]);
 
   useEffect(() => {
-    // Skip if the interval change originated from the TradingView iframe itself
-    if (iframeIntervalChangeRef.current) {
-      iframeIntervalChangeRef.current = false;
-      return;
-    }
-
-    // Cancel all active SDK WebSocket subscriptions before switching symbol
-    subscriptionsRef.current.forEach((sub) => sub.unsubscribe());
-    subscriptionsRef.current.clear();
-
+    // Sent unconditionally, and without touching the SDK subscriptions.
+    //
+    // Nothing here may depend on a record of what the iframe is showing: a
+    // command can fail to land (TradingView drops setSymbol/setResolution
+    // issued while a load is in flight), and any such record would then be
+    // wrong forever, suppressing the command that would recover the chart.
+    // The iframe drops a command matching what it already shows, so a repeat
+    // costs nothing; TradingView retires the superseded series itself through
+    // unsubscribeBars, and openCandleSubscription clears whatever survives.
     postToIframe({
       channel: BRIDGE_CHANNEL,
       kind: 'command',
@@ -943,6 +992,7 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
 
   return (
     <iframe
+      key={chartReloadKey}
       ref={iframeRef}
       src={iframeUrl}
       className={className}

@@ -3,16 +3,15 @@ import type { BrowserOptions } from '@sentry/browser';
 import { getSentryEnv } from '@/utils/env';
 import { shouldReportUserBehaviorData } from '@/utils/user-data-tracking';
 import {
-  RABBY_SENTRY_IGNORE_ERRORS,
+  applySigningContext,
+  collectSentryEventText,
+  getSigningContext,
   sanitizeSentryBreadcrumbUrl,
   shouldIgnoreSentryError,
 } from '@/utils/sentry';
 
-const SENTRY_DSN =
-  'https://f4a992c621c55f48350156a32da4778d@o4507018303438848.ingest.us.sentry.io/4507018389749760';
-
 export const getSentryConfig = (): BrowserOptions => ({
-  dsn: SENTRY_DSN,
+  dsn: process.env.RABBY_SENTRY_DSN,
   release: process.env.release,
   environment: getSentryEnv(),
   skipBrowserExtensionCheck: true,
@@ -46,10 +45,25 @@ export const getSentryConfig = (): BrowserOptions => ({
     if (!(await shouldReportUserBehaviorData())) {
       return null;
     }
-
     const originalException = hint?.originalException;
 
-    if (shouldIgnoreSentryError(originalException)) {
+    // Owns the whole ignore list, including what the SDK's own `ignoreErrors`
+    // used to drop, so it needs the Sentry-generated event text as well.
+    if (
+      shouldIgnoreSentryError(originalException, collectSentryEventText(event))
+    ) {
+      return null;
+    }
+
+    // Errors thrown in background listen callbacks are already captured by
+    // the background's message-error reporter and come back over the port
+    // with this flag; drop them here so the same error doesn't surface a
+    // second, unparseable copy from the receiving page.
+    if (
+      originalException !== null &&
+      typeof originalException === 'object' &&
+      (originalException as Record<string, any>).reportedFromBackground === true
+    ) {
       return null;
     }
 
@@ -73,13 +87,19 @@ export const getSentryConfig = (): BrowserOptions => ({
       }
 
       // 把原始对象的所有字段附加到 extra 里，方便查看
-      event.extra = {
-        ...event.extra,
-        __serialized__: obj,
-      };
+      if (!getSigningContext(originalException)) {
+        event.extra = {
+          ...event.extra,
+          __serialized__: obj,
+        };
+      }
     }
+
+    applySigningContext(event, originalException);
 
     return event;
   },
-  ignoreErrors: RABBY_SENTRY_IGNORE_ERRORS,
+  // No `ignoreErrors` on purpose: the SDK applies it before beforeSend runs,
+  // which would drop hardware signing failures with a generic transport
+  // message. shouldIgnoreSentryError above owns the whole ignore list.
 });
