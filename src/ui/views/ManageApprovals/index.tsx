@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import styled from 'styled-components';
 
 import { openIndexPage } from '@/background/webapi/tab';
-import { ReactComponent as RcIconFullscreen } from '@/ui/assets/fullscreen-cc.svg';
+import { RcIconJumpBoldCC } from '@/ui/assets/dashboard';
 import {
   useCurrentAccount,
   useSceneAccountInfo,
@@ -80,9 +80,19 @@ const ManageApprovalsContent: React.FC = () => {
   const { t } = useTranslation();
   const { filterType, setFilterType } = useApprovalsPage();
   const { totalCount: eip7702TotalCount } = useEIP7702Approvals();
+  const containerRef = React.useRef<HTMLDivElement>(null);
+
+  const scrollTabsToTop = React.useCallback(() => {
+    const tabsContentHolder = containerRef.current?.querySelector<HTMLElement>(
+      '.ant-tabs-content-holder'
+    );
+    if (tabsContentHolder) {
+      tabsContentHolder.scrollTop = 0;
+    }
+  }, []);
 
   return (
-    <Container className="bg-r-neutral-bg-2">
+    <Container ref={containerRef} className="bg-r-neutral-bg-2">
       <PageHeader
         className="mx-[20px] mb-[3px]"
         isShowAccount
@@ -94,7 +104,7 @@ const ManageApprovalsContent: React.FC = () => {
                 openInTab('desktop.html#/desktop/manage-approvals');
               }}
             >
-              <RcIconFullscreen />
+              <RcIconJumpBoldCC />
             </div>
           </div>
         }
@@ -105,6 +115,7 @@ const ManageApprovalsContent: React.FC = () => {
       <Tabs
         activeKey={filterType}
         onChange={(activeKey) => {
+          scrollTabsToTop();
           setFilterType(
             activeKey as typeof FILTER_TYPES[keyof typeof FILTER_TYPES]
           );

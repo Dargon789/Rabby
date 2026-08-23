@@ -8,7 +8,10 @@ import {
   SizeDisplayUnit,
   OrderSideInfo,
 } from '../types';
-import { calLiquidationPrice } from '../../Perps/utils';
+import {
+  resolveCrossMarginAvailableAfterMaintenance,
+  resolveProjectedLiquidationPrice,
+} from '../../Perps/utils';
 import { useMemoizedFn } from 'ahooks';
 import BigNumber from 'bignumber.js';
 import { DEFAULT_TPSL_CONFIG } from '@/ui/models/perps';
@@ -17,7 +20,13 @@ import { usePerpsAccount } from '../../Perps/hooks/usePerpsAccount';
 import { calcAmountFromPercentage } from '../components/TradingPanel/utils';
 import { useTranslation } from 'react-i18next';
 
-export const usePerpsTradingState = () => {
+/**
+ * @param readOnly Skip the hook's write-back effects. Set it when the caller
+ * only reads derived numbers — the confirmation dialog's live cells each
+ * instantiate this hook, and without it every one of them would re-run the
+ * reduce-only reset below and dispatch on mount.
+ */
+export const usePerpsTradingState = ({ readOnly = false } = {}) => {
   const { t } = useTranslation();
   const dispatch = useRabbyDispatch();
 
@@ -34,6 +43,9 @@ export const usePerpsTradingState = () => {
     tradingTpslConfig: tpslConfig,
     tradingReduceOnly: reduceOnly,
     sizeDisplayUnit,
+    dexClearinghouseStates,
+    spotState,
+    userAbstraction,
   } = useRabbySelector((state) => state.perps);
 
   // Setters using Redux dispatch
@@ -89,13 +101,6 @@ export const usePerpsTradingState = () => {
     return marketDataMap?.[selectedCoin] || null;
   }, [marketDataMap, selectedCoin]);
 
-  const crossMargin = React.useMemo(() => {
-    return (
-      Number(clearinghouseState?.crossMarginSummary.accountValue || 0) -
-      Number(clearinghouseState?.crossMaintenanceMarginUsed || 0)
-    );
-  }, [clearinghouseState?.crossMarginSummary.accountValue]);
-
   // Get current position for selected coin
   const currentPosition: Position | null = React.useMemo(() => {
     const position = clearinghouseState?.assetPositions?.find(
@@ -137,6 +142,28 @@ export const usePerpsTradingState = () => {
   const leverageType = wsActiveAssetData?.leverage.type || 'isolated';
 
   const { availableBalance: withdrawableBalance } = usePerpsAccount();
+
+  // Scoped to the selected market's DEX and collateral token. Summing every
+  // DEX's `crossMarginSummary` instead collapses a unified account down to the
+  // perp DEXs' own equity — its collateral sits in the spot account — and
+  // pushes the estimate right up against the mark.
+  const crossMarginAvailable = React.useMemo(
+    () =>
+      resolveCrossMarginAvailableAfterMaintenance({
+        dexState: dexClearinghouseStates?.[currentMarketData?.dexId ?? ''],
+        quoteAsset: currentMarketData?.quoteAsset,
+        tokenToAvailableAfterMaintenance:
+          spotState?.tokenToAvailableAfterMaintenance,
+        userAbstraction,
+      }),
+    [
+      dexClearinghouseStates,
+      currentMarketData?.dexId,
+      currentMarketData?.quoteAsset,
+      spotState?.tokenToAvailableAfterMaintenance,
+      userAbstraction,
+    ]
+  );
 
   // Available balance - direction-agnostic min of buy/sell available.
   const availableBalance = React.useMemo(() => {
@@ -225,6 +252,22 @@ export const usePerpsTradingState = () => {
     [currentPosition]
   );
 
+  const projectedPosition = React.useMemo(
+    () =>
+      currentPosition
+        ? {
+            entryPx: String(currentPosition.entryPrice),
+            marginUsed: String(currentPosition.marginUsed),
+            szi: String(
+              currentPosition.side === 'Long'
+                ? currentPosition.size
+                : -currentPosition.size
+            ),
+          }
+        : null,
+    [currentPosition]
+  );
+
   const quoteAsset = currentMarketData?.quoteAsset || 'USDC';
   // Calculate liquidation price and cost for a direction
   // orderPrice: optional override (e.g. limitPrice), defaults to markPrice
@@ -237,7 +280,7 @@ export const usePerpsTradingState = () => {
       const pxBN = new BigNumber(orderPrice ?? markPrice);
       const sizeBN = new BigNumber(dirTradeSize || 0);
       if (!pxBN.gt(0) || !leverage || sizeBN.isZero()) {
-        return { liqPrice: '', cost: `0 ${quoteAsset}` };
+        return { liqPrice: '', liqPriceNum: null, cost: `0 ${quoteAsset}` };
       }
 
       const netNew = calcNetNewSize(direction, sizeBN.toNumber());
@@ -250,32 +293,30 @@ export const usePerpsTradingState = () => {
         cost = `${splitNumberByStep(netNewMargin.toFixed(2))} ${quoteAsset}`;
       }
 
-      // Liq price
-      if (netNewBN.isZero()) {
-        return { liqPrice: '-', cost };
-      }
-      const netNewUsdBN = netNewBN.times(pxBN);
-      const netNewMarginBN = netNewUsdBN.dividedBy(leverage);
-      const liqPrice = calLiquidationPrice(
-        pxBN.toNumber(),
-        leverageType === 'cross' ? crossMargin : netNewMarginBN.toNumber(),
-        direction,
-        netNewBN.toNumber(),
-        netNewUsdBN.toNumber(),
-        maxLeverage
-      );
-      if (!new BigNumber(liqPrice).gt(0)) {
-        return { liqPrice: '-', cost };
+      const projected = resolveProjectedLiquidationPrice({
+        baseSize: sizeBN.toFixed(),
+        crossMarginAvailableAfterMaintenance: crossMarginAvailable,
+        currentPosition: projectedPosition,
+        entryPrice: pxBN.toFixed(),
+        leverage,
+        marginMode: leverageType,
+        maxLeverage,
+        pxDecimals,
+        side: direction === 'Long' ? 'buy' : 'sell',
+      });
+      if (!projected) {
+        return { liqPrice: '-', liqPriceNum: null, cost };
       }
       return {
         liqPrice: `${splitNumberByStep(
-          liqPrice.toFixed(pxDecimals)
+          projected.liquidationPrice
         )} ${quoteAsset}`,
+        liqPriceNum: projected.liquidationPriceNum,
         cost,
       };
     },
     [
-      crossMargin,
+      crossMarginAvailable,
       markPrice,
       leverageType,
       leverage,
@@ -283,6 +324,7 @@ export const usePerpsTradingState = () => {
       maxLeverage,
       pxDecimals,
       calcNetNewSize,
+      projectedPosition,
       quoteAsset,
     ]
   );
@@ -303,6 +345,7 @@ export const usePerpsTradingState = () => {
   const buyInfo: OrderSideInfo = useMemo(
     () => ({
       liqPrice: buyDirInfo.liqPrice,
+      liqPriceNum: buyDirInfo.liqPriceNum,
       cost: buyDirInfo.cost,
       max: maxBuyDisplay,
     }),
@@ -312,6 +355,7 @@ export const usePerpsTradingState = () => {
   const sellInfo: OrderSideInfo = useMemo(
     () => ({
       liqPrice: sellDirInfo.liqPrice,
+      liqPriceNum: sellDirInfo.liqPriceNum,
       cost: sellDirInfo.cost,
       max: maxSellDisplay,
     }),
@@ -319,10 +363,11 @@ export const usePerpsTradingState = () => {
   );
 
   React.useEffect(() => {
+    if (readOnly) return;
     if (!currentPosition) {
       setReduceOnly(false);
     }
-  }, [currentPosition?.side]);
+  }, [currentPosition?.side, readOnly]);
 
   // Calculate margin usage percentage
   const marginUsage = React.useMemo(() => {
@@ -434,7 +479,6 @@ export const usePerpsTradingState = () => {
   return {
     currentPerpsAccount,
     leverageType,
-    crossMargin,
     selectedCoin,
     positionSize,
     setPositionSize,

@@ -785,11 +785,11 @@ function CommonTokenItem(props: {
               height="32px"
               hideConer
               chainSize={hideUsdValue ? 16 : 14}
-              isShowChainTooltip={!!hideUsdValue}
+              isShowChainTooltip
             />
             <div className="flex flex-col gap-2">
               {showExchangeLogos ? (
-                <div className="flex overflow-visible">
+                <div className="flex overflow-visible items-center">
                   <span
                     className="symbol_click overflow-hidden truncate flex-1"
                     onClick={onClickTokenSymbol}

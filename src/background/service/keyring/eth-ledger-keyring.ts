@@ -43,17 +43,18 @@ import type {
   SignerEth,
 } from '@ledgerhq/device-signer-kit-ethereum';
 import type {
+  BlindSigningReportParams,
   BlindSigningReporter,
-  TypedDataContextLoader,
 } from '@ledgerhq/context-module';
 import {
   firstValueFrom,
   filter,
   map,
   merge,
+  skip,
   Subject,
   take,
-  timeout,
+  tap,
 } from 'rxjs';
 import { is1559Tx } from '@/utils/transaction';
 import {
@@ -62,6 +63,12 @@ import {
 } from '@ethereumjs/tx';
 import { isSameAddress } from '@/background/utils';
 import { LedgerHDPathType } from './helper';
+import type {
+  HardwareSigningMetadata,
+  SigningAttempt,
+  SigningStage,
+} from './signing-diagnostics';
+import { registerSigningDiagnosticsProvider } from './signing-diagnostics';
 
 const type = 'Ledger Hardware';
 
@@ -86,10 +93,8 @@ const HD_PATH_TYPE = {
 };
 
 const ETH_APP_NAME = 'Ethereum';
-const LEDGER_DISCOVERY_TIMEOUT = 15000;
 const LEDGER_BUSY_RECHECK_TIMEOUT = 10000;
-const LEDGER_APP_OPEN_TIMEOUT = 30000;
-const LEDGER_DEVICE_ACTION_TIMEOUT = 60000;
+const LEDGER_CLEAR_SIGNING_NETWORK_TIMEOUT = 5000;
 const LEDGER_ERROR_KEYS = [
   '_tag',
   'name',
@@ -107,9 +112,60 @@ let dmk: DeviceManagementKit | null = null;
 let sessionId: DeviceSessionId | null = null;
 let ethSigner: SignerEth | null = null;
 let makeAppPromise: Promise<void> | null = null;
+let sessionReleaseTimer: ReturnType<typeof setTimeout> | null = null;
+let activeLedgerOperationCount = 0;
 const ledgerSessionClosed$ = new Subject<void>();
 
+type LedgerActionDiagnostics = {
+  steps: string[];
+  slowest_gap_bucket: 'lt_100ms' | '100ms_1s' | 'gte_1s';
+  overlapping_attempt: boolean;
+  session_reused: boolean;
+  clear_signing_context_errors?: number;
+  clear_signing_type?: string;
+};
+
+type LedgerAttemptState = LedgerActionDiagnostics & {
+  lastStepAt: number;
+  slowestGapMs: number;
+  setStage?: (stage: SigningStage) => void;
+};
+
+const ledgerActionDiagnostics = new WeakMap<object, LedgerActionDiagnostics>();
+const ledgerAttemptByError = new WeakMap<object, LedgerAttemptState>();
+const ledgerAttemptBySigningAttempt = new WeakMap<object, LedgerAttemptState>();
+
+const gapBucket = (
+  durationMs: number
+): LedgerActionDiagnostics['slowest_gap_bucket'] =>
+  durationMs < 100 ? 'lt_100ms' : durationMs < 1000 ? '100ms_1s' : 'gte_1s';
+
+const attachLedgerActionDiagnostics = (
+  error: unknown,
+  diagnostics: LedgerActionDiagnostics
+) => {
+  if (error && typeof error === 'object') {
+    ledgerActionDiagnostics.set(error, diagnostics);
+  }
+};
+
+const findLedgerActionDiagnostics = (error: unknown, depth = 0) => {
+  if (!error || depth > 3 || typeof error !== 'object') return undefined;
+  return (
+    ledgerActionDiagnostics.get(error) ??
+    findLedgerActionDiagnostics((error as { cause?: unknown }).cause, depth + 1)
+  );
+};
+
+const cancelScheduledLedgerSessionRelease = () => {
+  if (sessionReleaseTimer !== null) {
+    clearTimeout(sessionReleaseTimer);
+    sessionReleaseTimer = null;
+  }
+};
+
 const cleanUpLedgerSession = async () => {
+  cancelScheduledLedgerSessionRelease();
   const currentSessionId = sessionId;
   ledgerSessionClosed$.next();
   ethSigner = null;
@@ -120,6 +176,30 @@ const cleanUpLedgerSession = async () => {
       // The device may already be gone or closed by the OS app command.
     });
   }
+};
+
+const releaseLedgerSessionWhenIdle = () => {
+  cancelScheduledLedgerSessionRelease();
+  if (!sessionId || activeLedgerOperationCount > 0) {
+    return;
+  }
+
+  // Promise continuations can reuse this session, but an idle Rabby must not
+  // keep polling a Ledger that another browser may be using.
+  sessionReleaseTimer = setTimeout(() => {
+    sessionReleaseTimer = null;
+    void cleanUpLedgerSession();
+  }, 0);
+};
+
+const beginLedgerOperation = () => {
+  cancelScheduledLedgerSessionRelease();
+  activeLedgerOperationCount += 1;
+};
+
+const endLedgerOperation = () => {
+  activeLedgerOperationCount -= 1;
+  releaseLedgerSessionWhenIdle();
 };
 
 if (isManifestV3) {
@@ -133,23 +213,19 @@ if (isManifestV3) {
   });
 }
 
-const ledgerClearSigningDisabledTypedDataLoader: TypedDataContextLoader = {
-  load: async () => ({
-    type: 'error',
-    error: new Error('Ledger clear signing disabled'),
-  }),
-};
-
-const noOpBlindSigningReporter = ({
-  report: async () => undefined,
-} as unknown) as BlindSigningReporter;
-
-const getBasicEthContextModule = () =>
-  new ContextModuleBuilder({})
+const getEthContextModule = (
+  onBlindSigningReport?: (params: BlindSigningReportParams) => void
+) =>
+  new ContextModuleBuilder({
+    networkTimeoutMs: LEDGER_CLEAR_SIGNING_NETWORK_TIMEOUT,
+  })
     .setChain(ContextModuleChainID.Ethereum)
-    .setBlindSigningReporter(noOpBlindSigningReporter)
-    .removeDefaultLoaders()
-    .addTypedDataLoader(ledgerClearSigningDisabledTypedDataLoader)
+    .setBlindSigningReporter(({
+      report: async (params) => {
+        onBlindSigningReport?.(params);
+        return undefined;
+      },
+    } as unknown) as BlindSigningReporter)
     .build();
 
 const stringifyLedgerErrorValue = (value: unknown, key?: string): string => {
@@ -188,11 +264,22 @@ const stringifyLedgerErrorValue = (value: unknown, key?: string): string => {
 const isLedgerConnectionOpeningError = (value: unknown) =>
   /connectionopeningerror/iu.test(stringifyLedgerErrorValue(value));
 
+const isLedgerSignatureResponseCorrupted = (value: unknown) => {
+  const message = stringifyLedgerErrorValue(value);
+  return (
+    /invalidstatusworderror/iu.test(message) &&
+    /\b[vrs] is missing\b/iu.test(message)
+  );
+};
+
 const normalizeLedgerStatusWord = (value: unknown) => {
-  if (typeof value === 'number') return value.toString(16);
-  if (typeof value === 'string')
-    return value.replace(/^0x/iu, '').toLowerCase();
-  return '';
+  const normalized =
+    typeof value === 'number'
+      ? value.toString(16)
+      : typeof value === 'string'
+      ? value.replace(/^0x/iu, '').toLowerCase()
+      : '';
+  return /^[0-9a-f]{1,4}$/u.test(normalized) ? normalized : '';
 };
 
 const getLedgerStatusWord = (err: unknown) => {
@@ -208,8 +295,24 @@ const getLedgerStatusWord = (err: unknown) => {
   return value?._tag === 'RefusedByUserDAError' ? '6985' : '';
 };
 
+const findLedgerStatusWord = (err: unknown, depth = 0): string => {
+  if (!err || depth > 6) return '';
+  return (
+    getLedgerStatusWord(err) ||
+    findLedgerStatusWord((err as { cause?: unknown }).cause, depth + 1)
+  );
+};
+
+const isLedgerUserCancellation = (err: unknown, depth = 0): boolean => {
+  if (!err || depth > 6 || typeof err !== 'object') return false;
+  return (
+    (err as { _tag?: unknown })._tag === 'RefusedByUserDAError' ||
+    isLedgerUserCancellation((err as { cause?: unknown }).cause, depth + 1)
+  );
+};
+
 export const getLedgerErrorMessage = (err: unknown, fallback: string) =>
-  [stringifyLedgerErrorValue(err) || fallback, getLedgerStatusWord(err)]
+  [stringifyLedgerErrorValue(err) || fallback, findLedgerStatusWord(err)]
     .filter(Boolean)
     .reduce((message, statusWord) => {
       const normalizedStatus = `0x${statusWord}`;
@@ -219,7 +322,9 @@ export const getLedgerErrorMessage = (err: unknown, fallback: string) =>
     });
 
 const toLedgerError = (err: unknown, fallback: string) =>
-  new Error(getLedgerErrorMessage(err, fallback));
+  Object.assign(new Error(getLedgerErrorMessage(err, fallback)), {
+    cause: err,
+  });
 
 const delay = (ms: number) =>
   new Promise((resolve) => {
@@ -238,8 +343,19 @@ const getDmk = () => {
 
 const runDeviceAction = async <Output>(
   action: ExecuteDeviceActionReturnType<Output, any, any>,
-  timeoutMs = LEDGER_DEVICE_ACTION_TIMEOUT
+  attempt?: LedgerAttemptState
 ): Promise<Output> => {
+  const startedAt = Date.now();
+  const trace = attempt ?? {
+    steps: [],
+    slowest_gap_bucket: 'lt_100ms' as const,
+    overlapping_attempt: activeLedgerOperationCount > 0,
+    session_reused: sessionId !== null,
+    lastStepAt: startedAt,
+    slowestGapMs: 0,
+  };
+  beginLedgerOperation();
+  let previousStep: unknown;
   const cancelAction = () => {
     try {
       action.cancel();
@@ -260,6 +376,28 @@ const runDeviceAction = async <Output>(
 
     return await firstValueFrom(
       observable.pipe(
+        tap((state) => {
+          const step =
+            'intermediateValue' in state
+              ? state.intermediateValue?.step
+              : undefined;
+          if (step && step !== previousStep) {
+            const now = Date.now();
+            trace.slowestGapMs = Math.max(
+              trace.slowestGapMs,
+              now - trace.lastStepAt
+            );
+            trace.lastStepAt = now;
+            if (trace.steps.length < 16) {
+              trace.steps.push(String(step).slice(0, 64));
+            }
+            console.debug('[Ledger DMK][stage]', {
+              step,
+              timestamp: Date.now(),
+            });
+            previousStep = step;
+          }
+        }),
         filter((state) => {
           if (
             state.status === DeviceActionStatus.Pending &&
@@ -275,7 +413,6 @@ const runDeviceAction = async <Output>(
             state.status === DeviceActionStatus.Stopped
           );
         }),
-        timeout({ first: timeoutMs }),
         take(1),
         map((state) => {
           switch (state.status) {
@@ -295,14 +432,33 @@ const runDeviceAction = async <Output>(
       )
     );
   } catch (e: any) {
-    if (e.name === 'TimeoutError') {
-      cancelAction();
-      throw new Error('Ledger: Operation timed out');
-    }
-    if (e.message === 'Ledger: Device disconnected') {
-      cancelAction();
+    trace.slowestGapMs = Math.max(
+      trace.slowestGapMs,
+      Date.now() - trace.lastStepAt
+    );
+    trace.slowest_gap_bucket = gapBucket(trace.slowestGapMs);
+    const diagnostics = {
+      steps: trace.steps,
+      slowest_gap_bucket: trace.slowest_gap_bucket,
+      overlapping_attempt: trace.overlapping_attempt,
+      session_reused: trace.session_reused,
+    };
+    attachLedgerActionDiagnostics(e, diagnostics);
+    cancelAction();
+    if (isLedgerSignatureResponseCorrupted(e)) {
+      await cleanUpLedgerSession();
+      const replacement = Object.assign(
+        new Error(
+          'Ledger: Device communication was interrupted. Close other apps using Ledger and try again.'
+        ),
+        { cause: e }
+      );
+      attachLedgerActionDiagnostics(replacement, diagnostics);
+      throw replacement;
     }
     throw e;
+  } finally {
+    endLedgerOperation();
   }
 };
 
@@ -347,6 +503,9 @@ class LedgerBridgeKeyring {
   hasHIDPermission: null | boolean;
   usedHDPathTypeList: Record<string, HDPathType> = {};
   private unlockPromise: Promise<string> | null = null;
+  private hardwareSigningMetadata: HardwareSigningMetadata = {};
+  signingDiagnosticsProvider = 'ledger';
+  private activeSigningAttempts = new Set<LedgerAttemptState>();
 
   constructor(opts = {}) {
     this.accountDetails = {};
@@ -430,16 +589,34 @@ class LedgerBridgeKeyring {
     }
   }
 
-  private buildSigner() {
+  private buildSigner(attempt?: LedgerAttemptState) {
     if (!dmk || !sessionId) {
       return;
     }
+    // The Clear Signing network deadline is scoped to this Context Module.
     ethSigner = new SignerEthBuilder({
       dmk,
       sessionId,
     })
-      .withContextModule(getBasicEthContextModule())
+      .withContextModule(
+        getEthContextModule((params) => {
+          if (
+            !attempt ||
+            this.activeSigningAttempts.size !== 1 ||
+            !params.ethContext
+          )
+            return;
+          attempt.clear_signing_context_errors = Math.max(
+            0,
+            Math.min(99, Math.trunc(params.ethContext.partialContextErrors))
+          );
+          attempt.clear_signing_type = String(
+            params.ethContext.clearSigningType
+          ).slice(0, 32);
+        })
+      )
       .build();
+    return ethSigner;
   }
 
   private async hasActiveSession() {
@@ -462,6 +639,8 @@ class LedgerBridgeKeyring {
   }
 
   async makeApp() {
+    cancelScheduledLedgerSessionRelease();
+
     if (await this.hasActiveSession()) {
       return;
     }
@@ -477,21 +656,24 @@ class LedgerBridgeKeyring {
       }
 
       const kit = getDmk();
-      let devices;
-      try {
-        devices = await firstValueFrom(
+      const devices = await firstValueFrom(
+        merge(
           kit.listenToAvailableDevices({ transport: webHidIdentifier }).pipe(
-            filter((availableDevices) => availableDevices.length > 0),
-            take(1),
-            timeout({ first: LEDGER_DISCOVERY_TIMEOUT })
+            // WebHID first emits its cached list, then the result of getDevices().
+            // Only the refreshed list can prove that no authorized device exists.
+            skip(1),
+            take(1)
+          ),
+          ledgerSessionClosed$.pipe(
+            map(() => {
+              throw new Error('Ledger: Device disconnected');
+            })
           )
-        );
-      } catch (e: any) {
-        if (e.name === 'TimeoutError') {
-          throw new Error('Ledger: No connected Ledger device found');
-        }
+        ).pipe(take(1))
+      );
 
-        throw e;
+      if (devices.length === 0) {
+        throw new Error('Ledger: No connected Ledger device found');
       }
 
       if (devices.length > 1) {
@@ -524,6 +706,15 @@ class LedgerBridgeKeyring {
       throw new Error('Ledger: Device disconnected');
     }
 
+    this.hardwareSigningMetadata = {
+      device_model: state.deviceName || String(state.deviceModelId),
+      firmware_version:
+        'firmwareVersion' in state ? state.firmwareVersion?.os : undefined,
+      app_name: 'currentApp' in state ? state.currentApp?.name : undefined,
+      app_version:
+        'currentApp' in state ? state.currentApp?.version : undefined,
+    };
+
     if (state.deviceStatus === DeviceStatus.CONNECTED) {
       return state;
     }
@@ -543,6 +734,82 @@ class LedgerBridgeKeyring {
     return this.assertDeviceReady(state);
   }
 
+  getHardwareSigningMetadata() {
+    return this.hardwareSigningMetadata;
+  }
+
+  beginSigningAttempt(
+    _operation?: string,
+    _signingAddress?: string,
+    signingAttempt?: SigningAttempt
+  ) {
+    const startedAt = Date.now();
+    const attempt: LedgerAttemptState = {
+      steps: [],
+      slowest_gap_bucket: 'lt_100ms',
+      overlapping_attempt: activeLedgerOperationCount > 0,
+      session_reused: sessionId !== null,
+      lastStepAt: startedAt,
+      slowestGapMs: 0,
+      setStage: signingAttempt?.setStage,
+    };
+    this.activeSigningAttempts.add(attempt);
+    if (signingAttempt) {
+      ledgerAttemptBySigningAttempt.set(signingAttempt, attempt);
+    }
+    return attempt;
+  }
+
+  endSigningAttempt(attempt: unknown, error?: unknown) {
+    if (error && typeof error === 'object') {
+      ledgerAttemptByError.set(error, attempt as LedgerAttemptState);
+    }
+    this.activeSigningAttempts.delete(attempt as LedgerAttemptState);
+  }
+
+  getLedgerSigningDiagnostics(error: unknown, attempt?: SigningAttempt) {
+    const statusWord = findLedgerStatusWord(error);
+    const trace =
+      (attempt ? ledgerAttemptBySigningAttempt.get(attempt) : undefined) ??
+      (error && typeof error === 'object'
+        ? ledgerAttemptByError.get(error)
+        : undefined) ??
+      findLedgerActionDiagnostics(error);
+    return {
+      wallet_provider: 'ledger',
+      transport: 'webhid',
+      error_category:
+        statusWord === '6985' && isLedgerUserCancellation(error)
+          ? 'user_cancelled'
+          : statusWord === '5515'
+          ? 'device_locked'
+          : 'unknown',
+      ...(statusWord ? { provider_code: `0x${statusWord}` } : {}),
+      ...(trace
+        ? {
+            provider_stage: trace.steps[trace.steps.length - 1],
+            provider_metadata: {
+              ...this.hardwareSigningMetadata,
+              ...(statusWord ? { status_word: `0x${statusWord}` } : {}),
+              device_action_steps: trace.steps.join('>'),
+              slowest_gap_bucket: trace.slowest_gap_bucket,
+              overlapping_attempt: trace.overlapping_attempt,
+              session_reused: trace.session_reused,
+              ...(trace.clear_signing_context_errors !== undefined
+                ? {
+                    clear_signing_context_errors:
+                      trace.clear_signing_context_errors,
+                  }
+                : {}),
+              ...(trace.clear_signing_type
+                ? { clear_signing_type: trace.clear_signing_type }
+                : {}),
+            },
+          }
+        : { provider_metadata: this.hardwareSigningMetadata }),
+    };
+  }
+
   private assertDeviceReady(state: DeviceSessionState) {
     switch (state.deviceStatus) {
       case DeviceStatus.CONNECTED:
@@ -558,44 +825,53 @@ class LedgerBridgeKeyring {
     }
   }
 
-  private async ensureEthApp(recoverConnectionOpening = true): Promise<void> {
-    await this.makeApp();
-    const state = await this.ensureDeviceReady();
-    console.log('Ledger: Current device state', state);
-
-    if (
-      state.sessionStateType !== DeviceSessionStateType.Connected &&
-      state.currentApp.name === ETH_APP_NAME
-    ) {
-      return;
-    }
-
+  private async ensureEthApp(
+    recoverConnectionOpening = true,
+    attempt?: LedgerAttemptState
+  ): Promise<void> {
+    attempt?.setStage?.('connect');
+    beginLedgerOperation();
     try {
-      await runDeviceAction(
-        getDmk().executeDeviceAction({
-          sessionId: sessionId!,
-          deviceAction: new OpenAppDeviceAction({
-            input: {
-              appName: ETH_APP_NAME,
-            },
-          }),
-        }),
-        LEDGER_APP_OPEN_TIMEOUT
-      );
-    } catch (e) {
-      if (!recoverConnectionOpening || !isLedgerConnectionOpeningError(e)) {
-        if (!recoverConnectionOpening && isLedgerConnectionOpeningError(e)) {
-          if (typeof e === 'object' && e !== null) {
-            (e as {
-              ledgerConnectionRecoveryAttempted?: boolean;
-            }).ledgerConnectionRecoveryAttempted = true;
-          }
-        }
-        throw e;
+      await this.makeApp();
+      const state = await this.ensureDeviceReady();
+      console.log('Ledger: Current device state', state);
+
+      if (
+        state.sessionStateType !== DeviceSessionStateType.Connected &&
+        state.currentApp.name === ETH_APP_NAME
+      ) {
+        return;
       }
 
-      await this.cleanUp();
-      await this.ensureEthApp(false);
+      try {
+        await runDeviceAction(
+          getDmk().executeDeviceAction({
+            sessionId: sessionId!,
+            deviceAction: new OpenAppDeviceAction({
+              input: {
+                appName: ETH_APP_NAME,
+              },
+            }),
+          }),
+          attempt
+        );
+      } catch (e) {
+        if (!recoverConnectionOpening || !isLedgerConnectionOpeningError(e)) {
+          if (!recoverConnectionOpening && isLedgerConnectionOpeningError(e)) {
+            if (typeof e === 'object' && e !== null) {
+              (e as {
+                ledgerConnectionRecoveryAttempted?: boolean;
+              }).ledgerConnectionRecoveryAttempted = true;
+            }
+          }
+          throw e;
+        }
+
+        await this.cleanUp();
+        await this.ensureEthApp(false, attempt);
+      }
+    } finally {
+      endLedgerOperation();
     }
   }
 
@@ -606,13 +882,19 @@ class LedgerBridgeKeyring {
   async unlock(
     hdPath?,
     force?: boolean,
-    retryConnectionOpening = true
+    retryConnectionOpening = true,
+    attempt?: LedgerAttemptState
   ): Promise<string> {
     if (this.unlockPromise) {
       return this.unlockPromise;
     }
 
-    const promise = this.unlockInternal(hdPath, force, retryConnectionOpening);
+    const promise = this.unlockInternal(
+      hdPath,
+      force,
+      retryConnectionOpening,
+      attempt
+    );
     this.unlockPromise = promise;
     try {
       return await promise;
@@ -626,8 +908,10 @@ class LedgerBridgeKeyring {
   private async unlockInternal(
     hdPath?,
     force?: boolean,
-    retryConnectionOpening = true
+    retryConnectionOpening = true,
+    attempt?: LedgerAttemptState
   ): Promise<string> {
+    attempt?.setStage?.('unlock');
     if (force) {
       hdPath = this.hdPath;
     }
@@ -638,7 +922,7 @@ class LedgerBridgeKeyring {
 
     let res: { address: string };
     try {
-      res = await this.getLedgerAddress(path);
+      res = await this.getLedgerAddress(path, attempt);
     } catch (e: any) {
       const message = e?.message || '';
       const isDisconnected =
@@ -653,7 +937,7 @@ class LedgerBridgeKeyring {
         isLedgerConnectionOpeningError(e);
       if (isDisconnected || isConnectionOpening) {
         await this.cleanUp();
-        return this.unlockInternal(hdPath, force, false);
+        return this.unlockInternal(hdPath, force, false, attempt);
       } else {
         throw e;
       }
@@ -725,7 +1009,13 @@ class LedgerBridgeKeyring {
   }
 
   // tx is an instance of the ethereumjs-transaction class.
-  signTransaction(address, tx) {
+  signTransaction(
+    address,
+    tx,
+    _opts?: unknown,
+    diagnosticsAttempt?: SigningAttempt
+  ) {
+    diagnosticsAttempt?.setStage('prepare');
     // make sure the previous transaction is cleaned up
 
     // transactions built with older versions of ethereumjs-tx have a
@@ -744,12 +1034,17 @@ class LedgerBridgeKeyring {
 
       const rawTxHex = tx.serialize().toString('hex');
 
-      return this._signTransaction(address, rawTxHex, (payload) => {
-        tx.v = Buffer.from(payload.v, 'hex');
-        tx.r = Buffer.from(payload.r, 'hex');
-        tx.s = Buffer.from(payload.s, 'hex');
-        return tx;
-      });
+      return this._signTransaction(
+        address,
+        rawTxHex,
+        (payload) => {
+          tx.v = Buffer.from(payload.v, 'hex');
+          tx.r = Buffer.from(payload.r, 'hex');
+          tx.s = Buffer.from(payload.s, 'hex');
+          return tx;
+        },
+        diagnosticsAttempt
+      );
     }
     // For transactions created by newer versions of @ethereumjs/tx
     // Note: https://github.com/ethereumjs/ethereumjs-monorepo/issues/1188
@@ -771,41 +1066,64 @@ class LedgerBridgeKeyring {
       rawTxHex = Buffer.from(messageToSign).toString('hex');
     }
 
-    return this._signTransaction(address, rawTxHex, (payload) => {
-      // Because tx will be immutable, first get a plain javascript object that
-      // represents the transaction. Using txData here as it aligns with the
-      // nomenclature of ethereumjs/tx.
-      const txData = tx.toJSON();
-      // The fromTxData utility expects v,r and s to be hex prefixed
-      txData.v = addHexPrefix(payload.v);
-      txData.r = addHexPrefix(payload.r);
-      txData.s = addHexPrefix(payload.s);
-      // Adopt the 'common' option from the original transaction and set the
-      // returned object to be frozen if the original is frozen.
-      if (is1559Tx(txData)) {
-        return FeeMarketEIP1559Transaction.fromTxData(txData);
-      } else {
-        return TransactionFactory.fromTxData(txData, {
-          common: tx.common,
-          freeze: Object.isFrozen(tx),
-        });
-      }
-    });
+    return this._signTransaction(
+      address,
+      rawTxHex,
+      (payload) => {
+        // Because tx will be immutable, first get a plain javascript object that
+        // represents the transaction. Using txData here as it aligns with the
+        // nomenclature of ethereumjs/tx.
+        const txData = tx.toJSON();
+        // The fromTxData utility expects v,r and s to be hex prefixed
+        txData.v = addHexPrefix(payload.v);
+        txData.r = addHexPrefix(payload.r);
+        txData.s = addHexPrefix(payload.s);
+        // Adopt the 'common' option from the original transaction and set the
+        // returned object to be frozen if the original is frozen.
+        if (is1559Tx(txData)) {
+          return FeeMarketEIP1559Transaction.fromTxData(txData);
+        } else {
+          return TransactionFactory.fromTxData(txData, {
+            common: tx.common,
+            freeze: Object.isFrozen(tx),
+          });
+        }
+      },
+      diagnosticsAttempt
+    );
   }
 
-  async _signTransaction(address, rawTxHex, handleSigning) {
-    const hdPath = await this.unlockAccountByAddress(address);
-    await this.ensureEthApp();
+  async _signTransaction(
+    address,
+    rawTxHex,
+    handleSigning,
+    diagnosticsAttempt?: SigningAttempt
+  ) {
+    const attempt = diagnosticsAttempt
+      ? ledgerAttemptBySigningAttempt.get(diagnosticsAttempt)
+      : undefined;
+    const hdPath = await this.unlockAccountByAddress(
+      address,
+      attempt ?? undefined
+    );
+    await this.ensureEthApp(true, attempt ?? undefined);
+    attempt?.setStage?.('sign');
     try {
+      const signer = this.buildSigner(attempt ?? undefined);
+      if (!signer) {
+        throw new Error('Ledger: Device disconnected');
+      }
       const res = toLegacySignaturePayload(
         await runDeviceAction(
-          ethSigner!.signTransaction(
+          signer.signTransaction(
             this._toLedgerPath(hdPath),
             Buffer.from(rawTxHex, 'hex'),
             { skipOpenApp: true }
-          )
+          ),
+          attempt ?? undefined
         )
       );
+      attempt?.setStage?.('finalize');
       const newOrMutatedTx = handleSigning(res);
       const valid = newOrMutatedTx.verifySignature();
       if (valid) {
@@ -821,24 +1139,53 @@ class LedgerBridgeKeyring {
     }
   }
 
-  signMessage(withAccount, data) {
-    return this.signPersonalMessage(withAccount, data);
+  signMessage(
+    withAccount,
+    data,
+    _opts?: unknown,
+    diagnosticsAttempt?: SigningAttempt
+  ) {
+    return this.signPersonalMessage(
+      withAccount,
+      data,
+      _opts,
+      diagnosticsAttempt
+    );
   }
 
   // For personal_sign, we need to prefix the message:
-  async signPersonalMessage(withAccount, message) {
+  async signPersonalMessage(
+    withAccount,
+    message,
+    _opts?: unknown,
+    diagnosticsAttempt?: SigningAttempt
+  ) {
+    diagnosticsAttempt?.setStage('prepare');
+    const attempt = diagnosticsAttempt
+      ? ledgerAttemptBySigningAttempt.get(diagnosticsAttempt)
+      : undefined;
     try {
-      const hdPath = await this.unlockAccountByAddress(withAccount);
-      await this.ensureEthApp();
+      const hdPath = await this.unlockAccountByAddress(
+        withAccount,
+        attempt ?? undefined
+      );
+      await this.ensureEthApp(true, attempt ?? undefined);
+      attempt?.setStage?.('sign');
+      const signer = this.buildSigner(attempt ?? undefined);
+      if (!signer) {
+        throw new Error('Ledger: Device disconnected');
+      }
       const signature = toSignatureHex(
         await runDeviceAction(
-          ethSigner!.signMessage(
+          signer.signMessage(
             this._toLedgerPath(hdPath),
             Buffer.from(stripHexPrefix(message), 'hex'),
             { skipOpenApp: true }
-          )
+          ),
+          attempt ?? undefined
         )
       );
+      attempt?.setStage?.('finalize');
       const addressSignedWith = recoverPersonalSignature({
         data: message,
         signature,
@@ -856,7 +1203,7 @@ class LedgerBridgeKeyring {
     }
   }
 
-  async unlockAccountByAddress(address) {
+  async unlockAccountByAddress(address, attempt?: LedgerAttemptState) {
     const checksummedAddress = toChecksumAddress(address);
     if (!Object.keys(this.accountDetails).includes(checksummedAddress)) {
       throw new Error(
@@ -864,7 +1211,12 @@ class LedgerBridgeKeyring {
       );
     }
     const { hdPath } = this.accountDetails[checksummedAddress];
-    const unlockedAddress: string = await this.unlock(hdPath);
+    const unlockedAddress: string = await this.unlock(
+      hdPath,
+      false,
+      true,
+      attempt
+    );
 
     // unlock resolves to the address for the given hdPath as reported by the ledger device
     // if that address is not the requested address, then this account belongs to a different device or seed
@@ -876,7 +1228,16 @@ class LedgerBridgeKeyring {
     return hdPath;
   }
 
-  async signTypedData(withAccount, data, options: any = {}) {
+  async signTypedData(
+    withAccount,
+    data,
+    options: any = {},
+    diagnosticsAttempt?: SigningAttempt
+  ) {
+    diagnosticsAttempt?.setStage('prepare');
+    const attempt = diagnosticsAttempt
+      ? ledgerAttemptBySigningAttempt.get(diagnosticsAttempt)
+      : undefined;
     const isV4 = options.version === 'V4';
     if (!isV4) {
       throw new Error(
@@ -887,16 +1248,26 @@ class LedgerBridgeKeyring {
       throw new Error('Ledger: Typed data payload is incomplete');
     }
 
-    const hdPath = await this.unlockAccountByAddress(withAccount);
+    const hdPath = await this.unlockAccountByAddress(
+      withAccount,
+      attempt ?? undefined
+    );
     try {
-      await this.ensureEthApp();
+      await this.ensureEthApp(true, attempt ?? undefined);
+      attempt?.setStage?.('sign');
+      const signer = this.buildSigner(attempt ?? undefined);
+      if (!signer) {
+        throw new Error('Ledger: Device disconnected');
+      }
       const signature = toSignatureHex(
         await runDeviceAction(
-          ethSigner!.signTypedData(this._toLedgerPath(hdPath), data, {
+          signer.signTypedData(this._toLedgerPath(hdPath), data, {
             skipOpenApp: true,
-          })
+          }),
+          attempt ?? undefined
         )
       );
+      attempt?.setStage?.('finalize');
       const addressSignedWith = recoverTypedSignature({
         data,
         signature,
@@ -1160,60 +1531,78 @@ class LedgerBridgeKeyring {
     return this.usedHDPathTypeList[key];
   }
 
-  private async getLedgerAddress(path: string) {
-    await this.ensureEthApp();
+  private async getLedgerAddress(path: string, attempt?: LedgerAttemptState) {
+    attempt?.setStage?.('derive');
+    await this.ensureEthApp(true, attempt);
+    const signer = this.buildSigner(attempt);
+    if (!signer) {
+      throw new Error('Ledger: Device disconnected');
+    }
 
     return runDeviceAction(
-      ethSigner!.getAddress(this._toLedgerPath(path), {
+      signer.getAddress(this._toLedgerPath(path), {
         checkOnDevice: false,
         returnChainCode: true,
         skipOpenApp: true,
-      })
+      }),
+      attempt
     );
   }
 
-  openEthApp = async (): Promise<void> => {
-    await this.ensureEthApp();
-  };
+  openEthApp = (): Promise<void> => this.ensureEthApp();
 
   quitApp = async (): Promise<void> => {
-    await this.makeApp();
-    await this.ensureDeviceReady();
+    beginLedgerOperation();
+    try {
+      await this.makeApp();
+      await this.ensureDeviceReady();
 
-    const result = await getDmk().sendCommand({
-      sessionId: sessionId!,
-      command: new CloseAppCommand(),
-    });
+      const result = await getDmk().sendCommand({
+        sessionId: sessionId!,
+        command: new CloseAppCommand(),
+      });
 
-    if (!isSuccessCommandResult(result)) {
-      throw result.error;
+      if (!isSuccessCommandResult(result)) {
+        throw result.error;
+      }
+
+      await this.cleanUp();
+    } finally {
+      endLedgerOperation();
     }
-
-    await this.cleanUp();
   };
 
   getAppAndVersion = async (): Promise<{
     appName: string;
     version: string;
   }> => {
-    await this.makeApp();
-    await this.ensureDeviceReady();
+    beginLedgerOperation();
+    try {
+      await this.makeApp();
+      await this.ensureDeviceReady();
 
-    const result = await getDmk().sendCommand({
-      sessionId: sessionId!,
-      command: new GetAppAndVersionCommand(),
-    });
+      const result = await getDmk().sendCommand({
+        sessionId: sessionId!,
+        command: new GetAppAndVersionCommand(),
+      });
 
-    if (!isSuccessCommandResult(result)) {
-      throw result.error;
+      if (!isSuccessCommandResult(result)) {
+        throw result.error;
+      }
+
+      const { name: appName, version } = result.data;
+      return {
+        appName,
+        version,
+      };
+    } finally {
+      endLedgerOperation();
     }
-
-    const { name: appName, version } = result.data;
-    return {
-      appName,
-      version,
-    };
   };
 }
+
+registerSigningDiagnosticsProvider('ledger', (keyring, error, attempt) =>
+  (keyring as LedgerBridgeKeyring).getLedgerSigningDiagnostics?.(error, attempt)
+);
 
 export default LedgerBridgeKeyring;

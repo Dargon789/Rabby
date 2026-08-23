@@ -1,4 +1,5 @@
 import { RabbyRootState, RabbyDispatch } from '@/ui/models';
+import { changeLanguage } from '@/i18n';
 import { onBackgroundStoreChanged } from '../utils/broadcastToUI';
 
 export default (store: typeof import('@/ui/store').default) => {
@@ -28,6 +29,14 @@ export default (store: typeof import('@/ui/store').default) => {
         dispatch.preference.setField({
           themeMode: payload.partials.themeMode,
         });
+        break;
+      }
+      case 'locale': {
+        const locale = payload.partials.locale;
+        if (locale) {
+          changeLanguage(locale);
+          dispatch.preference.setField({ locale });
+        }
         break;
       }
       // case 'curvePointsMap': {
@@ -78,46 +87,6 @@ export default (store: typeof import('@/ui/store').default) => {
       case 'unlockPreferredMethod': {
         dispatch.preference.setField({
           unlockPreferredMethod: payload.partials.unlockPreferredMethod,
-        });
-        break;
-      }
-    }
-  });
-
-  onBackgroundStoreChanged('whitelist', (payload) => {
-    switch (payload.changedKey) {
-      case 'whitelists': {
-        dispatch.whitelist.setField({
-          whitelist: payload.partials.whitelists,
-        });
-        break;
-      }
-      case 'enabled': {
-        dispatch.whitelist.setField({
-          enabled: payload.partials.enabled,
-        });
-        break;
-      }
-    }
-  });
-
-  onBackgroundStoreChanged('currency', (payload) => {
-    switch (payload.changedKey) {
-      case 'currency': {
-        dispatch.currency.setField({
-          currency: payload.partials.currency,
-        });
-        break;
-      }
-      case 'currencyList': {
-        dispatch.currency.setField({
-          currencyList: payload.partials.currencyList,
-        });
-        break;
-      }
-      case 'updatedAt': {
-        dispatch.currency.setField({
-          updatedAt: payload.partials.updatedAt,
         });
         break;
       }

@@ -12,19 +12,16 @@ import { DesktopPerpsInput } from '../components/DesktopPerpsInput';
 import { PerpsPositionCard } from '../components/PerpsPositionCard';
 import { usePerpsProPosition } from '../hooks/usePerpsProPosition';
 import { PositionFormatData } from '../components/UserInfoHistory/PositionsInfo';
-import {
-  calculateDistanceToLiquidation,
-  calLiquidationPrice,
-  formatPerpsPct,
-  formatTpOrSlPrice,
-  validatePriceInput,
-} from '../../Perps/utils';
+import { formatTpOrSlPrice, validatePriceInput } from '../../Perps/utils';
 import { PositionSizeInputAndSlider } from '../components/TradingPanel/components/PositionSizeInputAndSlider';
 import { PositionSize } from '../types';
 import stats from '@/stats';
 import { formatPerpsCoin, getStatsReportSide } from '../utils';
 import { PerpsDisplayCoinName } from '../../Perps/components/PerpsDisplayCoinName';
 import { ReactComponent as RcIconReverseArrowDown } from '@/ui/assets/perps/icon-reverse-arrow-down.svg';
+import { useOrderConfirm } from './OrderConfirmProvider';
+import type { OrderConfirmContent } from './OrderConfirmProvider';
+import { ConfirmAmount } from './OrderConfirmLiveValues';
 
 export interface Props {
   visible: boolean;
@@ -301,6 +298,86 @@ const ClosePositionModalContent: React.FC<Omit<Props, 'visible'>> = ({
 
   const baseAsset = formatPerpsCoin(position.coin);
   const quoteAsset = marketData.quoteAsset || 'USDC';
+
+  // `reverse` is deliberately excluded: that mode of this modal already is the
+  // confirmation step, so it keeps submitting directly and has no settings
+  // toggle.
+  const requestConfirm = useOrderConfirm();
+
+  const buildConfirmContent = useMemoizedFn(
+    (): OrderConfirmContent => {
+      const isLong = position.direction === 'Long';
+      const isProfit = closedPnl.isGreaterThanOrEqualTo(0);
+
+      return {
+        title: `${baseAsset}-${quoteAsset}`,
+        titleSuffix: {
+          // Coloured by the trade the close places, not by the position being
+          // closed: closing a long sells (red), closing a short buys (green).
+          text: isLong
+            ? t('page.perpsPro.orderConfirm.closeLong')
+            : t('page.perpsPro.orderConfirm.closeShort'),
+          tone: isLong ? 'down' : 'up',
+        },
+        sections: [
+          {
+            key: 'close',
+            rows: [
+              {
+                key: 'price',
+                label: t('page.perpsPro.orderConfirm.price'),
+                value:
+                  type === 'limit'
+                    ? `${splitNumberByStep(limitPrice)} ${quoteAsset}`
+                    : t('page.perpsPro.orderConfirm.marketPrice'),
+              },
+              {
+                key: 'amount',
+                label: t('page.perpsPro.orderConfirm.amount'),
+                value: (
+                  <ConfirmAmount
+                    amount={positionSize.amount || '0'}
+                    coin={position.coin}
+                    price={type === 'limit' ? limitPrice : marketPrice}
+                    quoteAsset={quoteAsset}
+                  />
+                ),
+              },
+              {
+                key: 'estPnl',
+                label: t('page.perpsPro.orderConfirm.estPnl'),
+                tone: isProfit ? 'up' : 'down',
+                // Only the number is tinted; the unit stays title-1 per design.
+                value: (
+                  <>
+                    <span>
+                      {isProfit ? '+' : '-'}
+                      {splitNumberByStep(closedPnl.abs().toFixed(2))}
+                    </span>
+                    <span className="text-rb-neutral-title-1">{` ${quoteAsset}`}</span>
+                  </>
+                ),
+              },
+            ],
+          },
+        ],
+      };
+    }
+  );
+
+  const handleSubmitClick = useMemoizedFn(() => {
+    const confirmType = type === 'limit' ? 'closeLimit' : 'closeMarket';
+    requestConfirm({
+      type: confirmType,
+      content: buildConfirmContent,
+      dontShowAgainText: t('page.perpsPro.orderConfirm.dontShowAgain', {
+        orderType: t(`page.perpsPro.orderConfirm.orderTypeName.${confirmType}`),
+      }),
+      // Returned so the dialog can show loading while the order is in flight.
+      submit: () => runSubmit(),
+    });
+  });
+
   const reverseDexTag = useMemo(() => {
     const marketName = marketData.name || '';
     if (!marketName.includes(':')) return '';
@@ -350,43 +427,6 @@ const ClosePositionModalContent: React.FC<Omit<Props, 'visible'>> = ({
 
   const reverseDirection =
     position.direction === 'Long' ? ('Short' as const) : ('Long' as const);
-
-  const reverseEstimatedLiquidationPrice = useMemo(() => {
-    const markPrice = Number(marketData.markPx);
-    const margin = Number(position.marginUsed);
-    const positionSize = Number(position.size);
-    const maxLeverage = Number(marketData.maxLeverage);
-
-    if (!markPrice || !margin || !positionSize || !maxLeverage) {
-      return 0;
-    }
-
-    return calLiquidationPrice(
-      markPrice,
-      margin,
-      reverseDirection,
-      positionSize,
-      positionSize * markPrice,
-      maxLeverage
-    );
-  }, [
-    marketData.markPx,
-    marketData.maxLeverage,
-    position.marginUsed,
-    position.size,
-    reverseDirection,
-  ]);
-
-  const reverseLiquidationDistance = useMemo(() => {
-    if (!reverseEstimatedLiquidationPrice || !Number(marketData.markPx)) {
-      return 0;
-    }
-
-    return calculateDistanceToLiquidation(
-      reverseEstimatedLiquidationPrice,
-      marketData.markPx
-    );
-  }, [reverseEstimatedLiquidationPrice, marketData.markPx]);
 
   const renderReverseTag = (
     children: React.ReactNode,
@@ -679,7 +719,7 @@ const ClosePositionModalContent: React.FC<Omit<Props, 'visible'>> = ({
             className="h-[44px] text-15 font-medium"
             disabled={!validation.isValid}
             loading={loading}
-            onClick={runSubmit}
+            onClick={handleSubmitClick}
           >
             {validation.error ? validation.error : btnText}
           </Button>

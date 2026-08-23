@@ -65,18 +65,32 @@ const GasAccountInner = () => {
   const {
     pendingHardwareAccount,
     accountsWithGasAccountBalance,
+    refreshDiscovery,
   } = useGasAccountDiscovery();
   const { account: currentGasAccount } = useGasAccountSign();
+
+  // The switch list renders the balances discovery fetched, so refresh them when
+  // it is about to be shown rather than trusting the snapshot taken on mount —
+  // a deposit made since then would otherwise not be reflected. Not forced, so
+  // discovery's own cache still collapses repeated opens into one request.
+  useEffect(() => {
+    if (!loginVisible) {
+      return;
+    }
+    refreshDiscovery().catch((error) => {
+      console.error(
+        '[gasAccount] refresh discovery on switch open failed',
+        error
+      );
+    });
+  }, [loginVisible, refreshDiscovery]);
   const historyState = useGasAccountHistory();
   const {
     claimGift,
     currentEligibleAddress,
     checkAddressesEligibility,
   } = useGasAccountEligibility();
-  const {
-    value: pendingHardwareGasAccountInfo,
-    loading: pendingHardwareAccountGasAccountInfoLoading,
-  } = useGasAccountInfoV2({
+  const { value: pendingHardwareGasAccountInfo } = useGasAccountInfoV2({
     address: pendingHardwareAccount?.address,
   });
 
@@ -88,6 +102,9 @@ const GasAccountInner = () => {
   const visibleBalance = Number(
     isLogin ? balance : pendingHardwareAccount ? pendingHardwareBalance : 0
   );
+  const hasGasAccountInfo = isLogin
+    ? !!gasAccount?.account?.id
+    : !!pendingHardwareGasAccountInfo?.account?.id;
   const [emptyStateLoading, setEmptyStateLoading] = useState(false);
 
   const dispatch = useRabbyDispatch();
@@ -218,9 +235,7 @@ const GasAccountInner = () => {
   }, [emptyStateLoading, isLogin, pendingHardwareAccount, refresh, t]);
 
   const lowBalanceWarningMessage =
-    visibleBalance < LOW_GAS_ACCOUNT_BALANCE &&
-    !loading &&
-    !pendingHardwareAccountGasAccountInfoLoading
+    visibleBalance < LOW_GAS_ACCOUNT_BALANCE && hasGasAccountInfo
       ? t('page.gasAccount.lowBalance', {
           defaultValue:
             "You don't have enough gas. Deposit gas to ensure future transactions go smoothly.",

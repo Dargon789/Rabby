@@ -6,6 +6,7 @@ import {
   DEX_ENUM,
   DEX_ROUTER_WHITELIST,
   DEX_SPENDER_WHITELIST,
+  isSameTypeTokenPair,
   UNI_NATIVE_TO_ADDRESSES,
   WrapTokenAddressMap,
 } from '@rabby-wallet/rabby-swap';
@@ -14,6 +15,7 @@ import BigNumber from 'bignumber.js';
 import React, { useRef } from 'react';
 import pRetry from 'p-retry';
 import { useRabbySelector } from '@/ui/store';
+import { useSwapStore } from '@/ui/state/swap';
 import stats from '@/stats';
 import { verifySdk } from './verify';
 import { findChainByEnum } from '@/utils/chain';
@@ -425,7 +427,7 @@ export const useQuoteMethods = () => {
                   ? undefined
                   : Number(feeAfterDiscount) || 0,
               chain,
-              fee: true,
+              fee: !isSameTypeTokenPair(payToken, receiveToken),
               chainServerId: chainInfo.serverId,
               nativeTokenAddress: chainInfo.nativeTokenAddress,
               insufficient: inSufficient,
@@ -598,7 +600,7 @@ export const useQuoteMethods = () => {
     ]
   );
 
-  const supportedDEXList = useRabbySelector((s) => s.swap.supportedDEXList);
+  const supportedDEXList = useSwapStore((s) => s.supportedDEXList);
 
   const _getAllQuotes = React.useCallback(
     async (

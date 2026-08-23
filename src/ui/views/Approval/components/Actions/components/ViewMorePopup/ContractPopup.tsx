@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Table, Col, Row } from '../Table';
 import * as Values from '../Values';
 import { Chain } from 'background/service/openapi';
-import { useRabbySelector } from '@/ui/store';
+import { useSecurityEngineStore } from '@/ui/state/securityEngine';
 import { isSameAddress } from '@/ui/utils';
 
 interface ContractData {
@@ -15,6 +15,7 @@ interface ContractData {
   } | null;
   bornAt: number | null;
   rank: number | null;
+  trustValue?: number | null;
   title?: string;
   hasInteraction: boolean;
 }
@@ -29,9 +30,9 @@ export interface ContractPopupProps extends Props {
 
 export const ContractPopup: React.FC<Props> = ({ data }) => {
   const { t } = useTranslation();
-  const { contractBlacklist, contractWhitelist } = useRabbySelector((state) => {
-    return state.securityEngine.userData;
-  });
+  const { contractBlacklist, contractWhitelist } = useSecurityEngineStore(
+    (state) => state.userData
+  );
 
   const { isInBlackList, isInWhiteList } = useMemo(() => {
     return {
@@ -65,10 +66,8 @@ export const ContractPopup: React.FC<Props> = ({ data }) => {
           </Row>
         </Col>
         <Col>
-          <Row>{t('page.signTx.interacted')}</Row>
-          <Row>
-            <Values.Boolean value={data.hasInteraction} />
-          </Row>
+          <Row>{t('page.signTx.addressTypeTitle')}</Row>
+          <Row>{t('page.signTx.contract')}</Row>
         </Col>
         <Col>
           <Row>{t('page.signTx.deployTimeTitle')}</Row>
@@ -76,6 +75,20 @@ export const ContractPopup: React.FC<Props> = ({ data }) => {
             <Values.TimeSpan value={data.bornAt} />
           </Row>
         </Col>
+        {data.trustValue !== undefined && (
+          <Col>
+            <Row tip={t('page.signTx.tokenApprove.contractTrustValueTip')}>
+              {t('page.signTx.trustValue')}
+            </Row>
+            <Row>
+              {data.trustValue == null ? (
+                '-'
+              ) : (
+                <Values.USDValue value={data.trustValue} />
+              )}
+            </Row>
+          </Col>
+        )}
         <Col>
           <Row>{t('page.signTx.popularity')}</Row>
           <Row>
@@ -85,6 +98,12 @@ export const ContractPopup: React.FC<Props> = ({ data }) => {
                   data.chain.name,
                 ])
               : '-'}
+          </Row>
+        </Col>
+        <Col>
+          <Row>{t('page.signTx.interacted')}</Row>
+          <Row>
+            <Values.Boolean value={data.hasInteraction} />
           </Row>
         </Col>
         <Col>
