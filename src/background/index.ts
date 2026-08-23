@@ -9,6 +9,11 @@ import {
   setMessageErrorReporter,
 } from '@/utils/message';
 import { getSentryConfig } from '@/utils/sentry-config';
+import {
+  getSigningContext,
+  isSigningCarrierReported,
+  takeSigningCarrier,
+} from '@/utils/sentry';
 import Safe from '@rabby-wallet/gnosis-sdk';
 import * as Sentry from '@sentry/browser';
 import fetchAdapter from 'background/utils/fetchAdapter';
@@ -68,20 +73,29 @@ import {
 } from './service';
 import { customTestnetService } from './service/customTestnet';
 import { GasAccountServiceStore } from './service/gasAccount';
-import { testnetOpenapiService } from './service/openapi';
+import {
+  initializeOpenapiStore,
+  testnetOpenapiService,
+} from './service/openapi';
 import { syncChainService } from './service/syncChain';
 import { userGuideService } from './service/userGuide';
 import lendingService from './service/lending';
 import perpsLive from './service/perpsLive';
 import { PERPS_LIVE_PORT_NAME } from '@/utils/message/perpsLive';
+import {
+  BACKGROUND_READY_EVENT,
+  BACKGROUND_READY_MESSAGE,
+} from '@/utils/message/constants';
 
 /** Controller methods the perps widget content-script may call via runtime.sendMessage */
 const PERPS_WIDGET_RPC_ALLOWLIST = new Set<string>([
   'getPerpsWidgetEnabled',
+  'setPerpsWidgetEnabled',
   'getPerpsWidgetBlockedHosts',
   'getPerpsWidgetBallPosition',
   'setPerpsWidgetBallPosition',
   'openInDesktop',
+  'openPerpsWidgetProfile',
 ]);
 import rpcCache from './utils/rpcCache';
 import { storage } from './webapi';
@@ -117,6 +131,21 @@ Sentry.init(getSentryConfig());
 // would flood Sentry with those expected states. The engine practically never
 // raises these subtypes for business logic, so they are a clean bug signal.
 setMessageErrorReporter((error) => {
+  const signingCarrier = takeSigningCarrier(error);
+  if (signingCarrier) {
+    if (!isSigningCarrierReported(signingCarrier)) {
+      Sentry.captureException(signingCarrier);
+    }
+    return true;
+  }
+
+  // rpcFlow normally captures signing failures first. Capturing the same Error
+  // here is deduplicated by Sentry and also covers direct wallet-controller calls.
+  if (getSigningContext(error)) {
+    Sentry.captureException(error);
+    return true;
+  }
+
   if (
     (error instanceof TypeError ||
       error instanceof ReferenceError ||
@@ -135,10 +164,11 @@ async function restoreAppState() {
   keyringService.loadStore(keyringState);
   keyringService.store.subscribe((value) => storage.set('keyringState', value));
   keyringService.sanitizeUnencryptedKeyringDataInStore();
+  await initializeOpenapiStore();
   await openapiService.init();
   await testnetOpenapiService.init();
 
-  // Init keyring and openapi first since this two service will not be migrated
+  // Init keyring and openapi before migrations that depend on them.
   await migrateData();
 
   await customTestnetService.init();
@@ -176,6 +206,7 @@ async function restoreAppState() {
   rpcCache.start();
 
   appStoreLoaded = true;
+  eventBus.emit(BACKGROUND_READY_EVENT);
 
   syncChainService.roll();
   transactionWatchService.roll();
@@ -495,26 +526,39 @@ browser.runtime.onConnect.addListener((port) => {
       });
     };
 
-    if (port.name === 'popup') {
-      preferenceService.setPopupOpen(true);
-
-      port.onDisconnect.addListener(() => {
-        preferenceService.setPopupOpen(false);
+    let activated = false;
+    const activateUIConnection = () => {
+      eventBus.removeEventListener(
+        BACKGROUND_READY_EVENT,
+        activateUIConnection
+      );
+      activated = true;
+      eventBus.addEventListener(EVENTS.broadcastToUI, boardcastCallback);
+      if (port.name === 'popup') {
+        preferenceService.setPopupOpen(true);
+      }
+      feedbackService.setScreenshotContextMenuVisible(true).catch(() => {
+        // Reset the native menu for newly opened extension pages.
       });
+      browser.runtime.sendMessage({ type: 'pageOpened' });
+      pm.send('message', { event: BACKGROUND_READY_MESSAGE });
+    };
+    if (appStoreLoaded) {
+      activateUIConnection();
+    } else {
+      eventBus.addEventListener(BACKGROUND_READY_EVENT, activateUIConnection);
     }
 
-    feedbackService.setScreenshotContextMenuVisible(true).catch(() => {
-      // Reset the native menu for newly opened extension pages.
-    });
-
-    browser.runtime.sendMessage({
-      type: 'pageOpened',
-    });
-    eventBus.addEventListener(EVENTS.broadcastToUI, boardcastCallback);
-    port.onDisconnect.addListener((p) => {
-      browser.runtime.sendMessage({
-        type: 'pageClosed',
-      });
+    port.onDisconnect.addListener(() => {
+      eventBus.removeEventListener(
+        BACKGROUND_READY_EVENT,
+        activateUIConnection
+      );
+      if (!activated) return;
+      if (port.name === 'popup') {
+        preferenceService.setPopupOpen(false);
+      }
+      browser.runtime.sendMessage({ type: 'pageClosed' });
       eventBus.removeEventListener(EVENTS.broadcastToUI, boardcastCallback);
     });
 

@@ -83,6 +83,8 @@ import {
   TxHistoryResult,
   NFTDetail,
   BridgeHistory,
+  getOpenapiStore,
+  patchOpenapiStore,
   testnetOpenapiService,
 } from '../service/openapi';
 import {
@@ -127,6 +129,16 @@ import * as Sentry from '@sentry/browser';
 import PQueue from 'p-queue';
 import { ProviderRequest } from './provider/type';
 import { QuoteResult } from '@rabby-wallet/rabby-swap/dist/quote';
+import type {
+  PersistedStoreKey,
+  PersistedStoreMap,
+  PersistedStorePatch,
+  PersistedStoreSnapshot,
+} from '@/types/persistedStore';
+import {
+  getPersistStoreOrigin,
+  getPersistStoreRevision,
+} from 'background/utils/persistStore';
 
 import transactionWatcher from '../service/transactionWatcher';
 import Safe from '@rabby-wallet/gnosis-sdk';
@@ -188,6 +200,13 @@ import {
   shouldUseTempoBatchTransaction,
 } from '@/utils/tempo';
 import { getRecommendGas, getRecommendNonce } from './walletUtils/sign';
+import { bootWallet } from './walletUtils/boot';
+import { gasMarketV2 as loadGasMarketV2 } from '../service/gasMarket';
+import {
+  cancelAllSignTxPreparations,
+  getSignTxPreparationGas,
+  getSignTxPreparation,
+} from '../service/signTxPreparation';
 import { waitSignComponentAmounted } from '@/utils/signEvent';
 import pRetry from 'p-retry';
 import Browser, { Windows } from 'webextension-polyfill';
@@ -455,18 +474,10 @@ export class WalletController extends BaseController {
   fakeTestnetOpenapi = fakeTestnetOpenapi;
 
   /* wallet */
-  boot = async (password) => {
-    await keyringService.boot(password);
-    userGuideService.destroy();
-    const hasOtherProvider = preferenceService.getHasOtherProvider();
-    const isDefaultWallet = preferenceService.getIsDefaultWallet();
-    if (!hasOtherProvider) {
-      setPopupIcon('default');
-    } else {
-      setPopupIcon(isDefaultWallet ? 'rabby' : 'metamask');
-    }
-  };
+  boot = bootWallet;
   isBooted = () => keyringService.isBooted();
+  getSignTxPreparation = getSignTxPreparation;
+  getSignTxPreparationGas = getSignTxPreparationGas;
   verifyPassword = (password: string) =>
     keyringService.verifyPassword(password);
 
@@ -2123,18 +2134,26 @@ export class WalletController extends BaseController {
     });
   };
   isUnlocked = () => keyringService.isUnlocked();
+  getWalletStatus = () => ({
+    isBooted: this.isBooted(),
+    isUnlocked: this.isUnlocked(),
+  });
 
   lockWallet = async () => {
     await keyringService.setLocked();
+    // The keyring is locked from here on, so tell the UI before the remaining
+    // best-effort cleanup. A throw below must not leave open pages rendering
+    // protected content against a stale "unlocked" snapshot.
+    eventBus.emit(EVENTS.broadcastToUI, {
+      method: EVENTS.LOCK_WALLET,
+    });
+    cancelAllSignTxPreparations();
     if (isManifestV3) {
       await Browser.storage.session.clear();
     }
     sessionService.broadcastEvent('accountsChanged', []);
     sessionService.broadcastEvent('lock');
     setPopupIcon('locked');
-    eventBus.emit(EVENTS.broadcastToUI, {
-      method: EVENTS.LOCK_WALLET,
-    });
   };
 
   setAutoLockTime = (time: number) => {
@@ -2702,18 +2721,7 @@ export class WalletController extends BaseController {
   setSelectedToToken = swapService.setSelectedToToken;
 
   getSwap = swapService.getSwap;
-  getSwapGasCache = swapService.getLastTimeGasSelection;
-  updateSwapGasCache = swapService.updateLastTimeGasSelection;
-  getSwapDexId = swapService.getSelectedDex;
-  setSwapDexId = swapService.setSelectedDex;
-  getUnlimitedAllowance = swapService.getUnlimitedAllowance;
-  setUnlimitedAllowance = swapService.setUnlimitedAllowance;
-  setSwapView = swapService.setSwapView;
-  setSwapTrade = swapService.setSwapTrade;
-  getSwapViewList = swapService.getSwapViewList;
-  getSwapTradeList = swapService.getSwapTradeList;
-  getSwapSortIncludeGasFee = swapService.getSwapSortIncludeGasFee;
-  setSwapSortIncludeGasFee = swapService.setSwapSortIncludeGasFee;
+
   getSwapPreferMEVGuarded = swapService.getSwapPreferMEVGuarded;
   setSwapPreferMEVGuarded = swapService.setSwapPreferMEVGuarded;
   setAutoSlippage = swapService.setAutoSlippage;
@@ -2721,6 +2729,77 @@ export class WalletController extends BaseController {
   setSlippage = swapService.setSlippage;
   getRecentSwapToTokens = swapService.getRecentSwapToTokens;
   setRecentSwapToToken = swapService.setRecentSwapToToken;
+
+  getStorageItem = <Key extends PersistedStoreKey>(
+    key: Key
+  ): PersistedStoreMap[Key] => {
+    switch (key) {
+      case 'currency':
+        return currencyService.getStore() as PersistedStoreMap[Key];
+      case 'openapi':
+        return getOpenapiStore() as PersistedStoreMap[Key];
+      case 'rpc':
+        return RPCService.getCustomRPCStore() as PersistedStoreMap[Key];
+      case 'swap':
+        return swapService.getSwap() as PersistedStoreMap[Key];
+      case 'whitelist':
+        return whitelistService.getStore() as PersistedStoreMap[Key];
+      default:
+        throw new Error(`Unknown persisted store: ${String(key)}`);
+    }
+  };
+
+  getStorageSnapshot = <Key extends PersistedStoreKey>(
+    key: Key
+  ): PersistedStoreSnapshot<Key> => ({
+    origin: getPersistStoreOrigin(),
+    revision: getPersistStoreRevision(key),
+    state: this.getStorageItem(key),
+  });
+
+  setStorageItem = <Key extends PersistedStoreKey>(
+    key: Key,
+    partials: PersistedStorePatch<Key>,
+    clearedKeys?: string[]
+  ) => {
+    if (!partials || typeof partials !== 'object') {
+      throw new Error(`Invalid persisted store value: ${String(key)}`);
+    }
+    // Port messages are JSON-serialized, so keys the caller set to `undefined`
+    // never arrive. Put them back before patching, otherwise clearing a field
+    // is a silent no-op. Each store still validates the resulting patch.
+    const patch = { ...partials } as Record<string, unknown>;
+    if (Array.isArray(clearedKeys)) {
+      clearedKeys.forEach((clearedKey) => {
+        if (typeof clearedKey === 'string') {
+          patch[clearedKey] = undefined;
+        }
+      });
+    }
+
+    switch (key) {
+      case 'currency':
+        currencyService.patchStore(patch as PersistedStorePatch<'currency'>);
+        return;
+      case 'openapi':
+        return patchOpenapiStore(patch as PersistedStorePatch<'openapi'>);
+      case 'rpc': {
+        const changedChains = RPCService.patchStore(
+          patch as PersistedStorePatch<'rpc'>
+        );
+        changedChains.forEach(this.syncCustomTestnetRPC);
+        return;
+      }
+      case 'swap':
+        swapService.patchStore(patch as PersistedStorePatch<'swap'>);
+        return;
+      case 'whitelist':
+        whitelistService.patchStore(patch as PersistedStorePatch<'whitelist'>);
+        return;
+      default:
+        throw new Error(`Unknown persisted store: ${String(key)}`);
+    }
+  };
 
   setRedirect2Points = RabbyPointsService.setRedirect2Points;
   setRabbyPointsSignature = RabbyPointsService.setSignature;
@@ -2863,42 +2942,35 @@ export class WalletController extends BaseController {
   setRetryTxRecommendNonce = bgRetryTxMethods.setRetryTxRecommendNonce;
   getTxFailedResult = bgRetryTxMethods.getTxFailedResult;
 
+  private syncCustomTestnetRPC = (chainEnum: CHAINS_ENUM) => {
+    const chain = findChain({ enum: chainEnum });
+    if (!chain?.isTestnet) return;
+
+    const rpc = RPCService.getRPCByChain(chainEnum);
+    if (rpc?.enable && RPCService.hasCustomRPC(chainEnum)) {
+      customTestnetService.setCustomRPC({
+        chainId: chain.id,
+        url: rpc.url,
+      });
+    } else {
+      customTestnetService.removeCustomRPC(chain.id);
+    }
+  };
+
   setCustomRPC = (chainEnum: CHAINS_ENUM, url: string) => {
     RPCService.setRPC(chainEnum, url);
-    const chain = findChain({
-      enum: chainEnum,
-    });
-    if (chain?.isTestnet && RPCService.hasCustomRPC(chainEnum)) {
-      customTestnetService.setCustomRPC({ chainId: chain.id, url: url });
-    }
+    this.syncCustomTestnetRPC(chainEnum);
   };
   removeCustomRPC = (chainEnum: CHAINS_ENUM) => {
     RPCService.removeCustomRPC(chainEnum);
-    const chain = findChain({
-      enum: chainEnum,
-    });
-    if (chain?.isTestnet) {
-      customTestnetService.removeCustomRPC(chain.id);
-    }
+    this.syncCustomTestnetRPC(chainEnum);
   };
   getAllCustomRPC = RPCService.getAllRPC;
   getCustomRpcByChain = RPCService.getRPCByChain;
   pingCustomRPC = RPCService.ping;
   setRPCEnable = (chainEnum: CHAINS_ENUM, enable: boolean) => {
     RPCService.setRPCEnable(chainEnum, enable);
-    const chain = findChain({
-      enum: chainEnum,
-    });
-    if (chain?.isTestnet) {
-      if (enable && RPCService.hasCustomRPC(chainEnum)) {
-        customTestnetService.setCustomRPC({
-          chainId: chain.id,
-          url: RPCService.getRPCByChain(chainEnum)!.url,
-        });
-      } else {
-        customTestnetService.removeCustomRPC(chain.id);
-      }
-    }
+    this.syncCustomTestnetRPC(chainEnum);
   };
   validateRPC = async (url: string, chainId: number) => {
     const chain = findChain({
@@ -4098,11 +4170,17 @@ export class WalletController extends BaseController {
     return keyring.hasBackup == null ? true : keyring.hasBackup;
   };
 
-  backupSeedPhraseConfirmed = async (address: string) => {
-    const keyring = await keyringService.getKeyringForAccount(
-      address,
-      KEYRING_CLASS.MNEMONIC
-    );
+  backupSeedPhraseConfirmed = async (
+    value: string,
+    type: 'address' | 'publickey' = 'address'
+  ) => {
+    const keyring =
+      type === 'publickey'
+        ? await this.#getMnemonicKeyring(type, value)
+        : await keyringService.getKeyringForAccount(
+            value,
+            KEYRING_CLASS.MNEMONIC
+          );
     if (!keyring) {
       throw new Error('Keyring not found');
     }
@@ -4451,8 +4529,11 @@ export class WalletController extends BaseController {
   getMnemonicFromPublicKey = async (password: string, publicKey: string) => {
     await this.verifyPassword(password);
     const targetKeyring = this.#getMnemonicKeyRingFromPublicKey(publicKey);
+    if (!targetKeyring) {
+      throw new Error('Keyring not found');
+    }
 
-    return targetKeyring?.mnemonic;
+    return targetKeyring.mnemonic;
   };
 
   getMnemonicKeyRingIdFromPublicKey = (publicKey: string) => {
@@ -5119,7 +5200,7 @@ export class WalletController extends BaseController {
     preferenceService.setCurrentAccount(_account);
   };
 
-  unlockHardwareAccount = async (keyring, indexes, keyringId) => {
+  unlockHardwareAccount = async (keyring, indexes, keyringId, brand?) => {
     let keyringInstance: any = null;
     try {
       keyringInstance = this.#getKeyringByType(keyring);
@@ -5129,6 +5210,9 @@ export class WalletController extends BaseController {
     if (!keyringInstance && keyringId !== null && keyringId !== undefined) {
       await keyringService.addKeyring(stashKeyrings[keyringId]);
       keyringInstance = stashKeyrings[keyringId];
+    }
+    if (brand && keyringInstance?.setCurrentBrand) {
+      keyringInstance.setCurrentBrand(brand);
     }
     for (let i = 0; i < indexes.length; i++) {
       keyringInstance!.setAccountToUnlock(indexes[i]);
@@ -6652,6 +6736,7 @@ export class WalletController extends BaseController {
   tryUnlock = async () => {
     await keyringService.tryUnlock();
     this.syncPopupIcon();
+    return this.isUnlocked();
   };
 
   syncPopupIcon = () => {
@@ -6710,62 +6795,7 @@ export class WalletController extends BaseController {
 
   uninstalledSyncStatus = uninstalledService.syncStatus;
 
-  gasMarketV2 = async (
-    params:
-      | {
-          chain: Chain;
-          tx: Tx;
-          customGas?: number;
-        }
-      | {
-          chainId: string;
-          customGas?: number;
-        }
-  ) => {
-    let chainId: string;
-    let tx: Tx | undefined;
-
-    if ('tx' in params) {
-      chainId = params.chain.serverId;
-
-      if (params?.chain && params?.chain.enum === CHAINS_ENUM.LINEA) {
-        if (params.tx.nonce === undefined) {
-          params.tx.nonce = await this.getRecommendNonce({
-            from: params.tx.from,
-            chainId: params.chain.id,
-          });
-        }
-
-        if (params.tx.gasPrice === undefined || params.tx.gasPrice === '') {
-          params.tx.gasPrice = '0x0';
-        }
-        if (params.tx.gas === undefined || params.tx.gas === '') {
-          params.tx.gas = '0x0';
-        }
-        if (params.tx.data === undefined || params.tx.data === '') {
-          params.tx.data = '0x';
-        }
-        tx = {
-          chainId: params.tx.chainId,
-          data: params.tx.data,
-          from: params.tx.from,
-          gas: params.tx.gas,
-          nonce: params.tx.nonce,
-          to: params.tx.to,
-          value: params.tx.value,
-          gasPrice: params.tx.gasPrice,
-        };
-      }
-    } else {
-      chainId = params.chainId;
-    }
-
-    return openapiService.gasMarketV2({
-      customGas: params.customGas,
-      chainId,
-      tx,
-    });
-  };
+  gasMarketV2 = loadGasMarketV2;
 
   changeDappProvider = ({
     origin,
@@ -6815,10 +6845,25 @@ export class WalletController extends BaseController {
   hasUnencryptedKeyringData = async () =>
     keyringService.hasUnencryptedKeyringData();
 
-  resetPassword = async (password: string) =>
-    keyringService.resetPassword(password);
+  resetPassword = async (password: string) => {
+    await keyringService.resetPassword(password);
+    // Not LOCK_WALLET: that event also drives `useAutoLock`, which would
+    // redirect the Forgot Password page to /unlock before it can render its
+    // next step. Other pages still re-gate off the refreshed status.
+    eventBus.emit(EVENTS.broadcastToUI, {
+      method: EVENTS.WALLET_STATUS_CHANGED,
+    });
+  };
 
-  resetBooted = async () => keyringService.resetBooted();
+  resetBooted = async () => {
+    await keyringService.resetBooted();
+    // This clears `booted` without locking, so the correct destination for
+    // other open pages is /welcome -- which PrivateRoute resolves once the
+    // status refreshes, unlike LOCK_WALLET's hardcoded /unlock.
+    eventBus.emit(EVENTS.broadcastToUI, {
+      method: EVENTS.WALLET_STATUS_CHANGED,
+    });
+  };
 
   getUnencryptedKeyringTypes = async () =>
     keyringService.getUnencryptedKeyringTypes();
@@ -6943,6 +6988,10 @@ export class WalletController extends BaseController {
   setSoundEnabled = perpsService.setSoundEnabled;
   getSkipMarketCloseConfirm = perpsService.getSkipMarketCloseConfirm;
   setSkipMarketCloseConfirm = perpsService.setSkipMarketCloseConfirm;
+  getPerpsOrderConfirmations = perpsService.getOrderConfirmations;
+  setPerpsOrderConfirmation = perpsService.setOrderConfirmation;
+  getPerpsShowPopularTradings = perpsService.getShowPopularTradings;
+  setPerpsShowPopularTradings = perpsService.setShowPopularTradings;
   getPerpsIsNeedSetDarkTheme = perpsService.getIsNeedSetDarkTheme;
   updatePerpsAgentWalletPreference = perpsService.updateAgentWalletPreference;
   setSendApproveAfterDeposit = perpsService.setSendApproveAfterDeposit;
@@ -6995,6 +7044,36 @@ export class WalletController extends BaseController {
     preferenceService.getPerpsWidgetBallPosition();
   setPerpsWidgetBallPosition = (pos: { x: number; y: number } | null) =>
     preferenceService.setPerpsWidgetBallPosition(pos);
+  /**
+   * Widget address → portfolio. The widget tracks the perps account, which can
+   * differ from the wallet's current account, so switch first — otherwise the
+   * portfolio would open on an unrelated address.
+   * Takes no params on purpose: it's reachable from content scripts, so the
+   * target address must come from trusted state, never from the caller.
+   */
+  openPerpsWidgetProfile = async () => {
+    try {
+      const perpsAccount = await perpsService.getCurrentAccount();
+      const current = preferenceService.getCurrentAccount();
+      if (
+        perpsAccount?.address &&
+        (current?.address?.toLowerCase() !==
+          perpsAccount.address.toLowerCase() ||
+          current?.type !== perpsAccount.type ||
+          current?.brandName !== perpsAccount.brandName)
+      ) {
+        this.changeAccount({
+          address: perpsAccount.address,
+          type: perpsAccount.type,
+          brandName: perpsAccount.brandName,
+        });
+      }
+    } catch (e) {
+      // Still open the portfolio on the account already selected.
+      console.warn('[perps-widget] switch account failed', e);
+    }
+    return this.openInDesktop('/desktop/profile');
+  };
 
   signPerpsSendSetReferrer = async ({
     address,

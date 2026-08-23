@@ -12,6 +12,7 @@ import {
 } from '@/utils/chain';
 import { Chain } from '@debank/common';
 import { RootModel } from '.';
+import { useSwapStore } from '@/ui/state/swap';
 import type { AccountState } from './account';
 
 type IState = {
@@ -41,22 +42,25 @@ export const chains = createModel<RootModel>()({
   },
 
   effects: (dispatch) => ({
-    init(_: void, store) {
+    async init(_: void, store) {
       store.app.wallet.getCustomTestnetLogos();
-      store.app.wallet.getCustomTestnetList().then((testnetList) => {
-        updateChainStore({
-          testnetList: testnetList,
-        });
-        this.setField({ testnetList });
-      });
-      getMainnetListFromLocal().then((mainnetList) => {
-        if (mainnetList.length) {
+      await Promise.all([
+        store.app.wallet.getCustomTestnetList().then((testnetList) => {
           updateChainStore({
-            mainnetList: mainnetList,
+            testnetList: testnetList,
           });
-          this.setField({ mainnetList });
-        }
-      });
+          this.setField({ testnetList });
+        }),
+        getMainnetListFromLocal().then((mainnetList) => {
+          if (mainnetList.length) {
+            updateChainStore({
+              mainnetList: mainnetList,
+            });
+            this.setField({ mainnetList });
+          }
+        }),
+      ]);
+      useSwapStore.getState().checkStore();
     },
     /**
      * @description get all chains current account could access, vary them and sort them
