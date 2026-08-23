@@ -5,11 +5,11 @@ import React, { useCallback, useState } from 'react';
 import { useRabbyFee, useSetRabbyFee } from '../hooks';
 import { SwapTxHistory } from './History';
 import { useTranslation } from 'react-i18next';
-import { useRabbyDispatch } from '@/ui/store';
+import { useSwapStore } from '@/ui/state/swap';
 import { RabbyFeePopup } from './RabbyFeePopup';
 import { useHistory } from 'react-router-dom';
 import { getUiType } from '@/ui/utils';
-import { ReactComponent as RcIconFullscreen } from '@/ui/assets/fullscreen-cc.svg';
+import { RcIconJumpBoldCC } from '@/ui/assets/dashboard';
 const isTab = getUiType().isTab;
 const isDesktop = getUiType().isDesktop;
 
@@ -41,11 +41,13 @@ export const Header = ({
     history.push('/dashboard');
   };
 
-  const dispath = useRabbyDispatch();
+  const getSwapSupportedDEXList = useSwapStore(
+    (s) => s.getSwapSupportedDEXList
+  );
 
   React.useEffect(() => {
-    dispath.swap.getSwapSupportedDEXList();
-  }, []);
+    getSwapSupportedDEXList();
+  }, [getSwapSupportedDEXList]);
 
   return (
     <>
@@ -65,7 +67,7 @@ export const Header = ({
                     onOpenInTab?.();
                   }}
                 >
-                  <RcIconFullscreen />
+                  <RcIconJumpBoldCC />
                 </div>
               )}
               <div

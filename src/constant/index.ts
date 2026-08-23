@@ -565,6 +565,9 @@ export const EVENTS = {
   },
   LOCK_WALLET: 'LOCK_WALLET',
   UNLOCK_WALLET: 'UNLOCK_WALLET',
+  // Boot/lock state changed out of band. Unlike LOCK_WALLET this carries no
+  // navigation intent, so the page that triggered the change keeps its route.
+  WALLET_STATUS_CHANGED: 'WALLET_STATUS_CHANGED',
   RELOAD_TX: 'RELOAD_TX',
   SIGN_BEGIN: 'SIGN_BEGIN',
   SIGN_WAITING_AMOUNTED: 'SIGN_WAITING_AMOUNTED',
@@ -597,10 +600,6 @@ export const EVENTS = {
   },
 
   RELOAD_APPROVAL: 'RELOAD_APPROVAL',
-  INNER_DAPP_CHANGE: {
-    ACCOUNT_CHANGED: 'INNER_DAPP_ACCOUNT_CHANGED',
-    DAPP_CHANGED: 'INNER_DAPP_DAPP_CHANGED',
-  },
 };
 
 export const EVENTS_IN_BG = {
@@ -1576,7 +1575,7 @@ export const DEX = {
   [DEX_ENUM.OPENOCEAN]: {
     id: DEX_ENUM.OPENOCEAN,
     logo: LogoOpenOcean,
-    name: 'OpenOcean',
+    name: 'De¹',
     chains: DEX_SUPPORT_CHAINS[DEX_ENUM.OPENOCEAN],
   },
   [DEX_ENUM.KYBERSWAP]: {
@@ -1714,3 +1713,4 @@ export const SELF_HOST_SAFE_NETWORKS = [
   '10',
   '8453',
 ];
+export const CUSTOM_RPC_ENABLED = true;

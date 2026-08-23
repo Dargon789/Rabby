@@ -1,8 +1,11 @@
-import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
+import { useSwapStore } from '@/ui/state/swap';
 import { getUiType, isSameAddress, useWallet } from '@/ui/utils';
 import { CHAINS_ENUM } from '@debank/common';
 import { TokenItem } from '@rabby-wallet/rabby-api/dist/types';
-import { WrapTokenAddressMap } from '@rabby-wallet/rabby-swap';
+import {
+  isSameTypeTokenPair,
+  WrapTokenAddressMap,
+} from '@rabby-wallet/rabby-swap';
 import BigNumber from 'bignumber.js';
 import {
   useCallback,
@@ -143,34 +146,36 @@ export interface FeeProps {
 }
 
 export const useTokenPair = (userAddress: string) => {
-  const dispatch = useRabbyDispatch();
   const refreshId = useRefreshId();
   const setRefreshId = useSetRefreshId();
   const wallet = useWallet();
   const depositFlowActive = useGasAccountDepositFlowActive();
 
+  const initialSelectedChain = useSwapStore(
+    (state) => state.$$initialSelectedChain
+  );
+  const storeSelectedChain = useSwapStore((state) => state.selectedChain);
+  const storeSelectedFromToken = useSwapStore(
+    (state) => state.selectedFromToken
+  );
+  const storeSelectedToToken = useSwapStore((state) => state.selectedToToken);
   const {
-    initialSelectedChain,
     oChain,
     defaultSelectedFromToken,
     defaultSelectedToToken,
-  } = useRabbySelector((state) => {
-    const selectedChain = state.swap.selectedChain || CHAINS_ENUM.ETH;
+  } = useMemo(() => {
+    const selectedChain = storeSelectedChain || CHAINS_ENUM.ETH;
     const selectedFromToken = isTokenOnChain(
-      state.swap.selectedFromToken,
+      storeSelectedFromToken,
       selectedChain
     )
-      ? state.swap.selectedFromToken
+      ? storeSelectedFromToken
       : undefined;
-    const selectedToToken = isTokenOnChain(
-      state.swap.selectedToToken,
-      selectedChain
-    )
-      ? state.swap.selectedToToken
+    const selectedToToken = isTokenOnChain(storeSelectedToToken, selectedChain)
+      ? storeSelectedToToken
       : undefined;
 
     return {
-      initialSelectedChain: state.swap.$$initialSelectedChain,
       oChain: selectedChain,
       defaultSelectedFromToken: selectedFromToken,
       defaultSelectedToToken:
@@ -178,7 +183,10 @@ export const useTokenPair = (userAddress: string) => {
           ? selectedToToken
           : undefined,
     };
-  });
+  }, [storeSelectedChain, storeSelectedFromToken, storeSelectedToToken]);
+  const setSelectedChain = useSwapStore((s) => s.setSelectedChain);
+  const setSelectedFromToken = useSwapStore((s) => s.setSelectedFromToken);
+  const setSelectedToToken = useSwapStore((s) => s.setSelectedToToken);
 
   const [chain, setChain] = useState(oChain);
 
@@ -186,20 +194,20 @@ export const useTokenPair = (userAddress: string) => {
     (c: CHAINS_ENUM) => {
       setChain(c);
       if (!isTab) {
-        dispatch.swap.setSelectedChain(c);
+        setSelectedChain(c);
       }
     },
-    [dispatch?.swap?.setSelectedChain]
+    [setSelectedChain]
   );
   const [refreshTokenId, updateRefreshTokenId] = useState(0);
-  const reloadTxRefreshPausedRef = useRef(false);
+  const quoteRefreshLockedRef = useRef(false);
   const refreshTokensInfo = useCallback(
     () => updateRefreshTokenId((e) => e + 1),
     [updateRefreshTokenId]
   );
   useEffect(() => {
     const refreshToken = (params: { addressList: string[] }) => {
-      if (depositFlowActive || reloadTxRefreshPausedRef.current) {
+      if (depositFlowActive || quoteRefreshLockedRef.current) {
         return;
       }
       if (
@@ -256,7 +264,7 @@ export const useTokenPair = (userAddress: string) => {
   const setActiveProvider: React.Dispatch<
     React.SetStateAction<QuoteProvider | undefined>
   > = useCallback((p) => {
-    if (reloadTxRefreshPausedRef.current) {
+    if (quoteRefreshLockedRef.current) {
       return;
     }
 
@@ -267,10 +275,7 @@ export const useTokenPair = (userAddress: string) => {
 
     if (p && !depositFlowActiveRef.current) {
       expiredTimer.current = setTimeout(() => {
-        if (
-          !depositFlowActiveRef.current &&
-          !reloadTxRefreshPausedRef.current
-        ) {
+        if (!depositFlowActiveRef.current && !quoteRefreshLockedRef.current) {
           setRefreshId((e) => e + 1);
         }
       }, 1000 * 20);
@@ -336,13 +341,13 @@ export const useTokenPair = (userAddress: string) => {
 
   useEffect(() => {
     if (!isTab) {
-      dispatch.swap.setSelectedFromToken(payToken);
+      setSelectedFromToken(payToken);
     }
   }, [payToken]);
 
   useEffect(() => {
     if (!isTab) {
-      dispatch.swap.setSelectedToToken(receiveToken);
+      setSelectedToToken(receiveToken);
     }
   }, [receiveToken]);
 
@@ -609,6 +614,13 @@ export const useTokenPair = (userAddress: string) => {
     return false;
   }, [payToken, receiveToken]);
 
+  const isFreeTokenPair = useMemo(
+    () => isSameTypeTokenPair(payToken, receiveToken),
+    [payToken, receiveToken]
+  );
+
+  const autoSlippageValue = getSwapAutoSlippageValue(isStableCoin);
+
   const [isWrapToken, wrapTokenSymbol] = useMemo(() => {
     if (payToken?.id && receiveToken?.id) {
       const res = isSwapWrapToken(payToken?.id, receiveToken?.id, chain);
@@ -643,14 +655,19 @@ export const useTokenPair = (userAddress: string) => {
       feeRate
     ) && inSufficientCanGetQuote;
 
+  const [autoSuggestSlippage, setAutoSuggestSlippage] = useState(
+    autoSlippageValue
+  );
+
   useEffect(() => {
     if (isWrapToken) {
       setFeeRate('0');
     }
     if (slippageObj.autoSlippage) {
-      slippageObj.setSlippage(getSwapAutoSlippageValue(isStableCoin));
+      slippageObj.setSlippage(autoSlippageValue);
+      setAutoSuggestSlippage(autoSlippageValue);
     }
-  }, [slippageObj.autoSlippage, isWrapToken, isStableCoin]);
+  }, [slippageObj.autoSlippage, isWrapToken, autoSlippageValue]);
 
   const [quoteList, setQuotesList] = useState<TDexQuoteData[]>([]);
   const fetchIdRef = useRef(0);
@@ -702,10 +719,6 @@ export const useTokenPair = (userAddress: string) => {
 
   const [pending, setPending] = useState(false);
 
-  const [autoSuggestSlippage, setAutoSuggestSlippage] = useState(
-    getSwapAutoSlippageValue(isStableCoin)
-  );
-
   const setAutoSlippage = useCallback(() => {
     slippageObj.setAutoSlippage(true);
   }, [slippageObj.setAutoSlippage]);
@@ -722,7 +735,7 @@ export const useTokenPair = (userAddress: string) => {
     { loading: quoteLoading, error: quotesError },
     getQuotes,
   ] = useAsyncFn(async () => {
-    if (depositFlowActiveRef.current || reloadTxRefreshPausedRef.current) {
+    if (depositFlowActiveRef.current || quoteRefreshLockedRef.current) {
       setPending(false);
       return;
     }
@@ -800,7 +813,7 @@ export const useTokenPair = (userAddress: string) => {
   ]);
 
   useEffect(() => {
-    if (canRunQuoteRequest && !reloadTxRefreshPausedRef.current) {
+    if (canRunQuoteRequest && !quoteRefreshLockedRef.current) {
       setPending(true);
     } else {
       setPending(false);
@@ -820,11 +833,11 @@ export const useTokenPair = (userAddress: string) => {
     [getQuotes]
   );
 
-  const setReloadTxRefreshPaused = useCallback(
-    (paused: boolean) => {
-      reloadTxRefreshPausedRef.current = paused;
+  const setQuoteRefreshLocked = useCallback(
+    (locked: boolean) => {
+      quoteRefreshLockedRef.current = locked;
 
-      if (!paused) {
+      if (!locked) {
         return;
       }
 
@@ -892,11 +905,7 @@ export const useTokenPair = (userAddress: string) => {
   }, [selectableQuoteListForDisplay.length]);
 
   useEffect(() => {
-    if (
-      reloadTxRefreshPausedRef.current ||
-      !canRunQuoteRequest ||
-      !receiveToken
-    ) {
+    if (quoteRefreshLockedRef.current || !canRunQuoteRequest || !receiveToken) {
       return;
     }
 
@@ -1196,7 +1205,7 @@ export const useTokenPair = (userAddress: string) => {
   }, [clearExpiredTimer]);
 
   return {
-    setReloadTxRefreshPaused,
+    setQuoteRefreshLocked,
     bestQuoteDex,
     gasLevel,
 
@@ -1220,6 +1229,7 @@ export const useTokenPair = (userAddress: string) => {
     inputAmount,
 
     isWrapToken,
+    isFreeTokenPair,
     wrapTokenSymbol,
     inSufficient,
     inSufficientCanGetQuote,

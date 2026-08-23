@@ -45,9 +45,8 @@ const tabCheckin = ({
   },
   session,
   origin,
-  isFromDesktopDapp,
 }) => {
-  session.setProp({ origin, name, icon, isFromDesktopDapp });
+  session.setProp({ origin, name, icon });
   const site = permissionService.getSite(origin);
   if (site) {
     permissionService.updateConnectSite(origin, { ...site, icon, name }, true);
@@ -150,7 +149,11 @@ const openInDesktop = async (req: ProviderRequest) => {
   }
 
   if (!keyringService.isUnlocked()) {
-    wallet.openInDesktop(`/unlock?address=${params.address || ''}`);
+    wallet.openInDesktop(
+      `/unlock?address=${encodeURIComponent(
+        params.address || ''
+      )}&from=${encodeURIComponent('/desktop/profile?utm_source=debank')}`
+    );
     return;
   }
   if (params.address) {
@@ -164,7 +167,7 @@ const openInDesktop = async (req: ProviderRequest) => {
       preferenceService.setCurrentAccount(account);
     }
   }
-  wallet.openInDesktop('/desktop/profile');
+  wallet.openInDesktop('/desktop/profile?utm_source=debank');
 };
 
 export default {

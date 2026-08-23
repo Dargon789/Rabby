@@ -26,7 +26,7 @@ import {
 import { WaitingSignMessageComponent } from './map';
 import { Account } from '@/background/service/preference';
 import { FooterBar } from './FooterBar/FooterBar';
-import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
+import { useSecurityEngineStore } from '@/ui/state/securityEngine';
 import {
   filterPrimaryType,
   parseSignTypedDataMessage,
@@ -40,11 +40,13 @@ import {
   normalizeTypeData,
 } from './TypedDataActions/utils';
 import {
+  ContextActionData,
   Level,
   defaultRules,
 } from '@rabby-wallet/rabby-security-engine/dist/rules';
 import { isTestnetChainId, findChain } from '@/utils/chain';
 import { TokenDetailPopup } from '@/ui/views/Dashboard/components/TokenDetailPopup';
+import { useSignStore } from '@/ui/state/sign';
 import { useEnterPassphraseModal } from '@/ui/hooks/useEnterPassphraseModal';
 import clsx from 'clsx';
 import stats from '@/stats';
@@ -62,12 +64,15 @@ import GnosisDrawer from './TxComponents/GnosisDrawer';
 import { generateTypedData } from '@safe-global/protocol-kit';
 import { ga4 } from '@/utils/ga4';
 import IconGnosis from 'ui/assets/walletlogo/safe.svg';
-import { getCexInfo } from '@/ui/models/exchange';
+import { getCexInfo } from '@/ui/state/exchange';
 import {
   MultiAction,
   TypeDataActionItem,
 } from '@rabby-wallet/rabby-api/dist/types';
 import { requestLedgerHIDPermission } from '@/ui/utils/ledger-dmk';
+import { tokenizeSignTypedDataMessage } from './signMessageHighlighter';
+import { addSignMessageOriginFallback } from './signMessageOrigin';
+import { useSignMessageAddressData } from './useSignMessageAddressData';
 
 interface SignTypedDataProps {
   method: string;
@@ -145,6 +150,7 @@ const SignTypedData = ({
   const scrollRefSize = useSize(scrollRef);
   const scrollInfo = useScroll(scrollRef);
   const securityEngineCtx = useRef<any>(null);
+  const isUnparsedAction = useRef(false);
   const logId = useRef('');
   const [isLoading, setIsLoading] = useState(true);
   const [isWatch, setIsWatch] = useState(false);
@@ -152,13 +158,12 @@ const SignTypedData = ({
   const [footerShowShadow, setFooterShowShadow] = useState(false);
   const { executeEngine } = useSecurityEngine();
   const [engineResults, setEngineResults] = useState<Result[]>([]);
-  const dispatch = useRabbyDispatch();
-  const { userData, rules, currentTx, tokenDetail } = useRabbySelector((s) => ({
-    userData: s.securityEngine.userData,
-    rules: s.securityEngine.rules,
-    currentTx: s.securityEngine.currentTx,
-    tokenDetail: s.sign.tokenDetail,
-  }));
+  const securityEngine = useSecurityEngineStore();
+  const { userData, rules, currentTx } = securityEngine;
+  const tokenDetail = useSignStore((state) => state.tokenDetail);
+  const closeTokenDetailPopup = useSignStore(
+    (state) => state.closeTokenDetailPopup
+  );
   const [currentChainId, setCurrentChainId] = useState<number | undefined>(
     undefined
   );
@@ -194,41 +199,6 @@ const SignTypedData = ({
     cantProcessReason,
     setCantProcessReason,
   ] = useState<ReactNode | null>();
-  const securityLevel = useMemo(() => {
-    const enableResults = engineResults.filter((result) => {
-      return result.enable && !currentTx.processedRules.includes(result.id);
-    });
-    if (enableResults.some((result) => result.level === Level.FORBIDDEN))
-      return Level.FORBIDDEN;
-    if (enableResults.some((result) => result.level === Level.DANGER))
-      return Level.DANGER;
-    if (enableResults.some((result) => result.level === Level.WARNING))
-      return Level.WARNING;
-    return undefined;
-  }, [engineResults, currentTx]);
-  const hasUnProcessSecurityResult = useMemo(() => {
-    const { processedRules } = currentTx;
-    const enableResults = engineResults.filter((item) => item.enable);
-    // const hasForbidden = enableResults.find(
-    //   (result) => result.level === Level.FORBIDDEN
-    // );
-    const hasSafe = !!enableResults.find(
-      (result) => result.level === Level.SAFE
-    );
-    const needProcess = enableResults.filter(
-      (result) =>
-        (result.level === Level.DANGER ||
-          result.level === Level.WARNING ||
-          result.level === Level.FORBIDDEN) &&
-        !processedRules.includes(result.id)
-    );
-    // if (hasForbidden) return true;
-    if (needProcess.length > 0) {
-      return !hasSafe;
-    } else {
-      return false;
-    }
-  }, [engineResults, currentTx]);
 
   const { data, session, method, isGnosis } = params;
   const [parsedMessage, setParsedMessage] = useState('');
@@ -296,6 +266,41 @@ const SignTypedData = ({
     }
   }, []);
 
+  const messageTokens = useMemo(() => {
+    if (!parsedMessage) return undefined;
+    if (isSignTypedDataV1) {
+      const fields = (Array.isArray(data[0]) ? data[0] : []) as Array<{
+        name: string;
+        type: string;
+        value: unknown;
+      }>;
+      const message = fields.reduce<Record<string, unknown>>(
+        (result, field) => {
+          result[field.name] = field.value;
+          return result;
+        },
+        {}
+      );
+      return tokenizeSignTypedDataMessage(
+        {
+          primaryType: 'RabbySignTypedDataV1',
+          types: {
+            RabbySignTypedDataV1: fields.map(({ name, type }) => ({
+              name,
+              type,
+            })),
+          },
+          message,
+        },
+        parsedMessage
+      );
+    }
+
+    return rawMessage
+      ? tokenizeSignTypedDataMessage(rawMessage, parsedMessage)
+      : undefined;
+  }, [data, isSignTypedDataV1, parsedMessage, rawMessage]);
+
   const chain = useMemo(() => {
     if (!isSignTypedDataV1 && normalizedSignTypedData) {
       let chainId;
@@ -309,8 +314,49 @@ const SignTypedData = ({
       }
     }
 
+    if (currentChainId) {
+      return findChain({ id: currentChainId }) || undefined;
+    }
+
     return undefined;
-  }, [data, isSignTypedDataV1, normalizedSignTypedData]);
+  }, [currentChainId, isSignTypedDataV1, normalizedSignTypedData]);
+  const addressData = useSignMessageAddressData({
+    tokens: messageTokens || [],
+    chain: chain || CHAINS.ETH,
+    accountAddress: currentAccount.address,
+  });
+
+  const securityLevel = useMemo(() => {
+    const enableResults = engineResults.filter((result) => {
+      return result.enable && !currentTx.processedRules.includes(result.id);
+    });
+    if (enableResults.some((result) => result.level === Level.FORBIDDEN))
+      return Level.FORBIDDEN;
+    if (enableResults.some((result) => result.level === Level.DANGER))
+      return Level.DANGER;
+    if (enableResults.some((result) => result.level === Level.WARNING))
+      return Level.WARNING;
+    return undefined;
+  }, [engineResults, currentTx]);
+  const hasUnProcessSecurityResult = useMemo(() => {
+    const { processedRules } = currentTx;
+    const enableResults = engineResults.filter((item) => item.enable);
+    const hasSafe = !!enableResults.find(
+      (result) => result.level === Level.SAFE
+    );
+    const needProcess = enableResults.filter(
+      (result) =>
+        (result.level === Level.DANGER ||
+          result.level === Level.WARNING ||
+          result.level === Level.FORBIDDEN) &&
+        !processedRules.includes(result.id)
+    );
+    if (needProcess.length > 0) {
+      return !hasSafe;
+    } else {
+      return false;
+    }
+  }, [engineResults, currentTx]);
 
   const getCurrentChainId = async () => {
     if (params.session.origin !== INTERNAL_REQUEST_ORIGIN) {
@@ -554,6 +600,7 @@ const SignTypedData = ({
       sender: currentAccount.address,
       chainId: chainServerId || CHAINS.ETH.serverId,
       walletProvider: {
+        ethRpc: wallet.requestETHRpc,
         hasPrivateKeyInWallet: wallet.hasPrivateKeyInWallet,
         hasAddress: wallet.hasAddress,
         getWhitelist: wallet.getWhitelist,
@@ -564,11 +611,19 @@ const SignTypedData = ({
       },
       cex: cexInfo,
       apiProvider: isTestnetChainId(data.chainId)
-        ? wallet.testnetOpenapi
+        ? ((wallet.fakeTestnetOpenapi as unknown) as any)
         : wallet.openapi,
     });
     return requireData;
   };
+
+  const withOriginFallback = (ctx: ContextActionData): ContextActionData =>
+    addSignMessageOriginFallback(ctx, {
+      isUnparsedAction: isUnparsedAction.current,
+      isInternalOrigin: params.session.origin === INTERNAL_REQUEST_ORIGIN,
+      message: parsedMessage,
+      origin: params.session.origin,
+    });
 
   const getSecurityEngineResult = async ({
     data,
@@ -583,7 +638,7 @@ const SignTypedData = ({
         id: Number(data.chainId),
       })?.serverId;
     }
-    const ctx = await formatSecurityEngineContext({
+    const baseCtx = await formatSecurityEngineContext({
       type: 'typed_data',
       actionData: data,
       requireData,
@@ -595,6 +650,7 @@ const SignTypedData = ({
       },
       origin: params.session.origin,
     });
+    const ctx = withOriginFallback(baseCtx);
     securityEngineCtx.current = ctx;
     const result = await executeEngine(ctx);
     return result;
@@ -611,7 +667,7 @@ const SignTypedData = ({
         id: Number(parsedActionData.chainId),
       })?.serverId;
     }
-    const ctx = await formatSecurityEngineContext({
+    const baseCtx = await formatSecurityEngineContext({
       type: 'typed_data',
       actionData: parsedActionData,
       requireData: actionRequireData,
@@ -623,39 +679,38 @@ const SignTypedData = ({
       },
       origin: params.session.origin,
     });
+    const ctx = withOriginFallback(baseCtx);
     const result = await executeEngine(ctx);
     setEngineResults(result);
   };
 
   const handleIgnoreAllRules = () => {
-    dispatch.securityEngine.processAllRules(
-      engineResults.map((result) => result.id)
-    );
+    securityEngine.processAllRules(engineResults.map((result) => result.id));
   };
 
   const handleIgnoreRule = (id: string) => {
-    dispatch.securityEngine.processRule(id);
-    dispatch.securityEngine.closeRuleDrawer();
+    securityEngine.processRule(id);
+    securityEngine.closeRuleDrawer();
   };
 
   const handleUndoIgnore = (id: string) => {
-    dispatch.securityEngine.unProcessRule(id);
-    dispatch.securityEngine.closeRuleDrawer();
+    securityEngine.unProcessRule(id);
+    securityEngine.closeRuleDrawer();
   };
 
   const handleRuleEnableStatusChange = async (id: string, value: boolean) => {
     if (currentTx.processedRules.includes(id)) {
-      dispatch.securityEngine.unProcessRule(id);
+      securityEngine.unProcessRule(id);
     }
     await wallet.ruleEnableStatusChange(id, value);
-    dispatch.securityEngine.init();
+    securityEngine.init();
   };
 
   const handleRuleDrawerClose = (update: boolean) => {
     if (update) {
       executeSecurityEngine();
     }
-    dispatch.securityEngine.closeRuleDrawer();
+    securityEngine.closeRuleDrawer();
   };
 
   const { run: reportLogId } = useDebounceFn(
@@ -758,6 +813,7 @@ const SignTypedData = ({
   useEffect(() => {
     const sender = isSignTypedDataV1 ? params.data[1] : params.data[0];
     if (!loading) {
+      isUnparsedAction.current = typedDataActionData?.action === null;
       if (typedDataActionData) {
         logId.current = typedDataActionData.log_id;
         actionType.current = typedDataActionData?.action?.type || '';
@@ -878,7 +934,7 @@ const SignTypedData = ({
   useEffect(() => {
     renderStartAt.current = Date.now();
     init();
-    dispatch.securityEngine.init();
+    securityEngine.init();
     checkWachMode();
     report('createSignText');
   }, []);
@@ -915,6 +971,7 @@ const SignTypedData = ({
             chain={chain}
             engineResults={engineResults}
             raw={isSignTypedDataV1 ? data[0] : rawMessage || data[1]}
+            copyMessage={isSignTypedDataV1 ? JSON.stringify(data[0]) : data[1]}
             message={parsedMessage}
             origin={params.session.origin}
             originLogo={params.session.icon}
@@ -928,6 +985,8 @@ const SignTypedData = ({
                   }
                 : undefined
             }
+            messageTokens={messageTokens}
+            addressData={addressData}
           />
         )}
         {isGnosisAccount && safeInfo && (
@@ -1037,7 +1096,7 @@ const SignTypedData = ({
       <TokenDetailPopup
         token={tokenDetail.selectToken}
         visible={tokenDetail.popupVisible}
-        onClose={() => dispatch.sign.closeTokenDetailPopup()}
+        onClose={closeTokenDetailPopup}
         canClickToken={false}
         hideOperationButtons
         variant="add"

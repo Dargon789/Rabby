@@ -6,8 +6,8 @@ import { Chain, TokenItem } from 'background/service/openapi';
 import AddressMemo from './AddressMemo';
 import userDataDrawer from './UserListDrawer';
 import { isSameAddress, useHover, useWallet } from 'ui/utils';
-import { getTimeSpan } from 'ui/utils/time';
-import { useRabbyDispatch } from 'ui/store';
+import { formatTimeSpanToMinutes, getTimeSpan } from 'ui/utils/time';
+import { useSecurityEngineStore } from '@/ui/state/securityEngine';
 import { formatUsdValue, formatAmount } from 'ui/utils/number';
 import LogoWithText from './LogoWithText';
 import { ellipsis } from '@/ui/utils/address';
@@ -26,6 +26,7 @@ import { getAddressScanLink } from '@/utils';
 import { findChain } from '@/utils/chain';
 import clsx from 'clsx';
 import { copyAddress } from '@/ui/utils/clipboard';
+import { useSignStore } from '@/ui/state/sign';
 
 const Boolean = ({ value }: { value: boolean }) => {
   return <>{value ? 'Yes' : 'No'}</>;
@@ -91,9 +92,11 @@ const TimeSpan = ({
 const TimeSpanFuture = ({
   from = Math.floor(Date.now() / 1000),
   to,
+  showMinutes = false,
 }: {
   from?: number;
   to: number;
+  showMinutes?: boolean;
 }) => {
   const timeSpan = useMemo(() => {
     if (!to) return '-';
@@ -107,6 +110,9 @@ const TimeSpanFuture = ({
     if (d >= 365000) {
       return 'Forever';
     }
+    if (showMinutes) {
+      return formatTimeSpanToMinutes({ d, h, m });
+    }
     if (d > 0) {
       return `${d} day${d > 1 ? 's' : ''}`;
     }
@@ -117,7 +123,7 @@ const TimeSpanFuture = ({
       return `${m} minutes`;
     }
     return '1 minute';
-  }, [from, to]);
+  }, [from, showMinutes, to]);
   return <>{timeSpan}</>;
 };
 
@@ -146,7 +152,7 @@ const AddressMark = ({
 }) => {
   const chainId = chain?.serverId;
   const wallet = useWallet();
-  const dispatch = useRabbyDispatch();
+  const initSecurityEngine = useSecurityEngineStore((state) => state.init);
   const { t } = useTranslation();
   const handleEditMark = () => {
     userDataDrawer({
@@ -232,7 +238,7 @@ const AddressMark = ({
             ),
           });
         }
-        dispatch.securityEngine.init();
+        initSecurityEngine();
         onChange();
       },
     });
@@ -468,9 +474,11 @@ const TokenSymbol = ({
   token: TokenItem;
   disableHover?: boolean;
 }) => {
-  const dispatch = useRabbyDispatch();
+  const openTokenDetailPopup = useSignStore(
+    (state) => state.openTokenDetailPopup
+  );
   const handleClickTokenSymbol = () => {
-    dispatch.sign.openTokenDetailPopup(token);
+    openTokenDetailPopup(token);
   };
   return (
     <span

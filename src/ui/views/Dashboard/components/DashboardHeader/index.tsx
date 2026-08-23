@@ -38,7 +38,7 @@ import { ga4 } from '@/utils/ga4';
 import { useMemoizedFn } from 'ahooks';
 import styled from 'styled-components';
 import { ReactComponent as IconArrowRight } from 'ui/assets/dashboard/arrow-right.svg';
-import { BalanceView } from '../BalanceView/BalanceView';
+import { BalanceView, BalanceViewJumpButton } from '../BalanceView/BalanceView';
 import { useHomeBalanceViewOuterPrefetch } from '../BalanceView/useHomeBalanceView';
 import PendingTxs from '../PendingTxs';
 import Queue from '../Queue';
@@ -46,6 +46,7 @@ import Tooltip from 'antd/es/tooltip';
 import { LOW_GAS_ACCOUNT_BALANCE } from '@/constant/gas-account';
 import { ReactComponent as RcIconFeedbackCC } from '@/ui/assets/icon-feedback-cc.svg';
 import { RcIconSuccessCC } from '@/ui/assets/desktop/common';
+import { useTransactionsStore } from '@/ui/state/transactions';
 import {
   useLatestRepliedFeedbacks,
   useViewingFeedback,
@@ -58,6 +59,10 @@ const Container = styled.div`
   position: relative;
   overflow: hidden;
   padding: 12px 16px;
+
+  &:has(.balance-view-jump-button-external:hover) .balance-view-card {
+    background: rgba(255, 255, 255, 0.05);
+  }
 `;
 
 export const DashboardHeader: React.FC<{ onSettingClick?(): void }> = ({
@@ -69,9 +74,12 @@ export const DashboardHeader: React.FC<{ onSettingClick?(): void }> = ({
 
   const currentAccount = useCurrentAccount();
 
-  const { pendingTransactionCount: pendingTxCount } = useRabbySelector((s) => ({
-    ...s.transactions,
-  }));
+  const pendingTxCount = useTransactionsStore(
+    (state) => state.pendingTransactionCount
+  );
+  const getPendingTxCountAsync = useTransactionsStore(
+    (state) => state.getPendingTxCountAsync
+  );
 
   const [displayName, setDisplayName] = useState<string>('');
   const isGnosis = currentAccount?.type === KEYRING_TYPE.GnosisKeyring;
@@ -80,13 +88,13 @@ export const DashboardHeader: React.FC<{ onSettingClick?(): void }> = ({
     if (!currentAccount) return;
     if (currentAccount.type === KEYRING_TYPE.GnosisKeyring) return;
 
-    dispatch.transactions.getPendingTxCountAsync(currentAccount.address);
+    void getPendingTxCountAsync(currentAccount.address);
   }, 30000);
 
   useEffect(() => {
     if (currentAccount) {
       if (currentAccount.type !== KEYRING_TYPE.GnosisKeyring) {
-        dispatch.transactions.getPendingTxCountAsync(currentAccount.address);
+        void getPendingTxCountAsync(currentAccount.address);
       }
 
       wallet
@@ -118,6 +126,15 @@ export const DashboardHeader: React.FC<{ onSettingClick?(): void }> = ({
 
   const brandIcon = useWalletConnectIcon(currentAccount);
   const { t } = useTranslation();
+
+  const hasTopRightAction = isGnosis || pendingTxCount > 0;
+
+  const onClickOpenInDesktop = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    wallet.openInDesktop('/desktop/profile');
+    window.close();
+  };
 
   return (
     <Container>
@@ -202,20 +219,35 @@ export const DashboardHeader: React.FC<{ onSettingClick?(): void }> = ({
           </div>
         </div>
       )}
-      {dashboardBalanceCacheInited && (
-        <BalanceView currentAccount={currentAccount} />
-      )}
-      {isGnosis ? (
-        <Queue
-          // count={gnosisPendingCount || 0}
-          count={0}
-          className={clsx(
-            'transition-all'
-            // !false ? 'opacity-0 pointer-events-none' : 'opacity-100'
+      {hasTopRightAction ? (
+        <div className="group/balance-view-actions relative">
+          {dashboardBalanceCacheInited && (
+            <BalanceView currentAccount={currentAccount} hideJumpButton />
           )}
-        />
+
+          <div className="absolute right-[12px] top-[10px] z-[1] flex items-center gap-[8px]">
+            <BalanceViewJumpButton
+              className="balance-view-jump-button-external group-hover/balance-view-actions:flex"
+              onClick={onClickOpenInDesktop}
+            />
+            {isGnosis ? (
+              <Queue
+                // count={gnosisPendingCount || 0}
+                count={0}
+                className={clsx(
+                  'transition-all'
+                  // !false ? 'opacity-0 pointer-events-none' : 'opacity-100'
+                )}
+              />
+            ) : (
+              <PendingTxs pendingTxCount={pendingTxCount} />
+            )}
+          </div>
+        </div>
       ) : (
-        pendingTxCount > 0 && <PendingTxs pendingTxCount={pendingTxCount} />
+        dashboardBalanceCacheInited && (
+          <BalanceView currentAccount={currentAccount} />
+        )
       )}
       <SeedPhraseBackupAlert className="absolute left-0 right-0 bottom-0" />
     </Container>

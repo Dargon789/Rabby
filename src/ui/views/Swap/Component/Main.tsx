@@ -7,6 +7,7 @@ import React, {
   useState,
 } from 'react';
 import { useRabbySelector } from '@/ui/store';
+import { useSwapStore } from '@/ui/state/swap';
 import { CHAINS, CHAINS_ENUM } from '@debank/common';
 import { useDetectLoss, useTokenPair } from '../hooks/token';
 import { Alert, Button, Input, InputRef, Modal } from 'antd';
@@ -27,7 +28,6 @@ import {
   useSetRefreshId,
 } from '../hooks';
 import { DEX_ENUM, DEX_SPENDER_WHITELIST } from '@rabby-wallet/rabby-swap';
-import { useDispatch } from 'react-redux';
 import { useRbiSource } from '@/ui/utils/ga-event';
 import { useCss, useDebounce } from 'react-use';
 import { DEX_WITH_WRAP } from '@/constant';
@@ -99,12 +99,9 @@ export const Main = () => {
     amountMode?: FormAmountMode;
   }
 
-  const { userAddress } = useRabbySelector((state) => ({
-    userAddress: state.account.currentAccount?.address || '',
-    unlimitedAllowance: state.swap.unlimitedAllowance || false,
-  }));
-
-  const dispatch = useDispatch();
+  const userAddress = useRabbySelector(
+    (state) => state.account.currentAccount?.address || ''
+  );
 
   const {
     passGasPrice,
@@ -127,6 +124,7 @@ export const Main = () => {
 
     payTokenIsGasToken,
     isWrapToken,
+    isFreeTokenPair,
     inSufficient,
 
     slippageState,
@@ -160,7 +158,7 @@ export const Main = () => {
     setLowCreditVisible,
     showMoreVisible,
     inSufficientCanGetQuote,
-    setReloadTxRefreshPaused,
+    setQuoteRefreshLocked,
 
     autoSuggestSlippage,
     setAutoSuggestSlippage,
@@ -181,17 +179,24 @@ export const Main = () => {
 
   const refreshId = useRefreshId();
 
-  const originPreferMEVGuarded = useRabbySelector(
-    (s) => !!s.swap.preferMEVGuarded
-  );
+  const originPreferMEVGuarded = useSwapStore((s) => !!s.preferMEVGuarded);
+  const setSwapPreferMEV = useSwapStore((s) => s.setSwapPreferMEV);
+  const setRecentSwapToToken = useSwapStore((s) => s.setRecentSwapToToken);
+  const resumeQuoteRefresh = useCallback(() => {
+    setQuoteRefreshLocked(false);
+    refresh((id) => id + 1);
+  }, [refresh, setQuoteRefreshLocked]);
 
   const showMEVGuardedSwitch = useMemo(() => chain === CHAINS_ENUM.ETH, [
     chain,
   ]);
 
-  const switchPreferMEV = useCallback((bool: boolean) => {
-    dispatch.swap.setSwapPreferMEV(bool);
-  }, []);
+  const switchPreferMEV = useCallback(
+    (bool: boolean) => {
+      setSwapPreferMEV(bool);
+    },
+    [setSwapPreferMEV]
+  );
 
   const preferMEVGuarded = useMemo(
     () => (chain === CHAINS_ENUM.ETH ? originPreferMEVGuarded : false),
@@ -229,6 +234,7 @@ export const Main = () => {
       activeProvider.name,
       activeProvider.shouldApproveToken ? '1' : '0',
       activeProvider.shouldTwoStepApprove ? '1' : '0',
+      preferMEVGuarded ? '1' : '0',
       activeProvider.quote.toTokenAmount,
       activeProvider.quote.tx?.to || '',
       activeProvider.quote.tx?.value || '',
@@ -242,6 +248,7 @@ export const Main = () => {
     chain,
     inputAmount,
     payToken,
+    preferMEVGuarded,
     receiveToken,
     slippage,
   ]);
@@ -804,14 +811,14 @@ export const Main = () => {
 
   const handleSwap = useMemoizedFn(async () => {
     submitTxRef.current = true;
-    setReloadTxRefreshPaused(true);
-    if (!isTab) {
-      dispatch.swap.setRecentSwapToToken(receiveToken);
+    setQuoteRefreshLocked(true);
+    if (!isTab && receiveToken) {
+      setRecentSwapToToken(receiveToken);
     }
     if (!isSupportedChain) {
       setSwapDappOpen(true);
       submitTxRef.current = false;
-      setReloadTxRefreshPaused(false);
+      setQuoteRefreshLocked(false);
       return;
     }
 
@@ -896,7 +903,7 @@ export const Main = () => {
       } finally {
         setMiniSignLoading(false);
         submitTxRef.current = false;
-        setReloadTxRefreshPaused(false);
+        setQuoteRefreshLocked(false);
       }
       return;
     } else {
@@ -904,7 +911,7 @@ export const Main = () => {
         await gotoSwap();
       } finally {
         submitTxRef.current = false;
-        setReloadTxRefreshPaused(false);
+        setQuoteRefreshLocked(false);
       }
     }
   });
@@ -1397,6 +1404,7 @@ export const Main = () => {
               setIsCustomSlippage={setIsCustomSlippage}
               type="swap"
               isWrapToken={isWrapToken}
+              isRabbyFeeFree={isFreeTokenPair}
               isBestQuote={
                 !!activeProvider &&
                 !!bestQuoteDex &&
@@ -1458,6 +1466,8 @@ export const Main = () => {
                 loading={miniSignLoading}
                 title={latestQuoteBtnText || btnText}
                 onConfirm={handleSwap}
+                onConfirmStart={() => setQuoteRefreshLocked(true)}
+                onCancel={resumeQuoteRefresh}
                 showRiskTips={showRiskTips && !swapBtnDisabled}
                 accountType={currentAccount?.type}
                 signatureInstance={instance}
@@ -1486,6 +1496,7 @@ export const Main = () => {
                         return;
                       }
                       if (activeProvider?.shouldTwoStepApprove) {
+                        setQuoteRefreshLocked(true);
                         return Modal.confirm({
                           width: 360,
                           closable: true,
@@ -1503,6 +1514,7 @@ export const Main = () => {
                             </>
                           ),
                           okText: t('page.swap.process-with-two-step-approve'),
+                          onCancel: resumeQuoteRefresh,
                           onOk() {
                             // gotoSwap();
                             handleSwap();

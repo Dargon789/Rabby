@@ -21,6 +21,7 @@ import { ReactComponent as RcIconWarningCC } from '@/ui/assets/riskWarning-cc.sv
 import { formatUsdValue } from '@/ui/utils';
 import ThemeIcon from '../../ThemeMode/ThemeIcon';
 import { TestnetChainLogo } from '../../TestnetChainLogo';
+import { useCustomRPCStore } from '@/ui/state/customRPC';
 
 export type TDisableCheckChainFn = (
   chain: string
@@ -59,13 +60,13 @@ export const SelectChainItem = forwardRef(
     }: SelectChainItemProps,
     ref: React.ForwardedRef<HTMLDivElement>
   ) => {
-    const { customRPC, cachedChainBalances } = useRabbySelector((s) => ({
-      customRPC: s.customRPC.customRPC,
+    const customRPC = useCustomRPCStore((state) => state.customRPC);
+    const cachedChainBalances = useRabbySelector((state) => ({
       cachedChainBalances: {
-        mainnet: s.account.matteredChainBalances,
-        testnet: s.account.testnetMatteredChainBalances,
+        mainnet: state.account.matteredChainBalances,
+        testnet: state.account.testnetMatteredChainBalances,
       },
-    }));
+    })).cachedChainBalances;
 
     const finalDisabledTips = useMemo(() => {
       if (typeof disabledTips === 'function') {
@@ -116,7 +117,7 @@ export const SelectChainItem = forwardRef(
           onClick={() => !disabled && onChange?.(data.enum)}
         >
           <div className="w-full h-[60px] flex items-center">
-            <div className="flex items-center flex-1">
+            <div className="flex items-center flex-1 min-w-0">
               {data.isTestnet ? (
                 data.logo ? (
                   <img
@@ -151,8 +152,10 @@ export const SelectChainItem = forwardRef(
                   )}
                 </>
               )}
-              <div className="select-chain-item-info">
-                <div className="select-chain-item-name">{data.name}</div>
+              <div className="select-chain-item-info min-w-0">
+                <div className="select-chain-item-name truncate">
+                  {data.name}
+                </div>
                 {!!chainBalanceItem?.usd_value && (
                   <div className="select-chain-item-balance">
                     <ThemeIcon

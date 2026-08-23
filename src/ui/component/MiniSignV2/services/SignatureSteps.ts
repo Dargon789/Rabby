@@ -34,7 +34,7 @@ import {
   SUPPORT_1559_KEYRING_TYPE,
 } from 'consts';
 import { normalizeTxParams } from '@/ui/views/Approval/components/SignTx';
-import { getCexInfo } from '@/ui/models/exchange';
+import { getCexInfo } from '@/ui/state/exchange';
 
 import type { OpenApiService } from '@rabby-wallet/rabby-api';
 import { buildFingerprint } from '@/ui/component/MiniSignV2/domain/ctx';
@@ -424,6 +424,7 @@ export class SignatureSteps {
               chainId: chain.serverId,
               sender: account.address,
               walletProvider: {
+                ethRpc: wallet.requestETHRpc,
                 findChain,
                 ALIAS_ADDRESS,
                 hasPrivateKeyInWallet: wallet.hasPrivateKeyInWallet,
@@ -440,7 +441,7 @@ export class SignatureSteps {
                 value: tx.value || '0x0',
               },
               apiProvider: isTestnet(chain.serverId)
-                ? wallet.testnetOpenapi
+                ? ((wallet.fakeTestnetOpenapi as unknown) as any)
                 : wallet.openapi,
             });
           })
@@ -482,6 +483,7 @@ export class SignatureSteps {
           chainId: chain.serverId,
           sender: account.address,
           walletProvider: {
+            ethRpc: wallet.requestETHRpc,
             hasPrivateKeyInWallet: wallet.hasPrivateKeyInWallet,
             hasAddress: wallet.hasAddress,
             getWhitelist: wallet.getWhitelist,
@@ -492,7 +494,7 @@ export class SignatureSteps {
           },
           tx: { ...last.tx, gas: '0x0' },
           apiProvider: isTestnet(chain.serverId)
-            ? wallet.testnetOpenapi
+            ? ((wallet.fakeTestnetOpenapi as unknown) as any)
             : wallet.openapi,
         });
         const ctx = await formatSecurityEngineContext({
