@@ -16,8 +16,7 @@ on:
         options:
           - debug
           - pro
-        default:
-          - debug
+        default: debug
 
 defaults:
   run:
