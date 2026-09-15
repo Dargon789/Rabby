@@ -190,9 +190,18 @@ class NotificationService extends Events {
   resolveApproval = async (
     data?: any,
     forceReject = false,
-    approvalId?: string
+    approvalId?: string,
+    approvalComponent?: Approval['data']['approvalComponent']
   ) => {
-    if (approvalId && approvalId !== this.currentApproval?.id) return;
+    if (
+      !this.currentApproval ||
+      (approvalId && approvalId !== this.currentApproval.id) ||
+      (approvalComponent &&
+        (!approvalId ||
+          approvalComponent !== this.currentApproval.data.approvalComponent))
+    ) {
+      return false;
+    }
     if (forceReject) {
       this.currentApproval?.reject &&
         this.currentApproval?.reject(
@@ -214,14 +223,27 @@ class NotificationService extends Events {
     }
 
     this.emit('resolve', data);
+    return true;
   };
 
-  rejectApproval = async (err?: string, stay = false, isInternal = false) => {
+  rejectApproval = async (
+    err?: string,
+    stay = false,
+    isInternal = false,
+    approvalId?: string,
+    approvalComponent?: Approval['data']['approvalComponent']
+  ) => {
+    if (
+      !this.currentApproval ||
+      (approvalId && approvalId !== this.currentApproval.id) ||
+      (approvalComponent &&
+        (!approvalId ||
+          approvalComponent !== this.currentApproval.data.approvalComponent))
+    ) {
+      return false;
+    }
     this.addLastRejectDapp();
     const approval = this.currentApproval;
-    if (this.approvals.length <= 1) {
-      await this.clear(stay); // TODO: FIXME
-    }
 
     if (isInternal) {
       approval?.reject && approval?.reject(ethErrors.rpc.internal(err));
@@ -241,6 +263,7 @@ class NotificationService extends Events {
       await this.clear(stay);
     }
     this.emit('reject', err);
+    return true;
   };
 
   requestApproval = async (
@@ -421,9 +444,25 @@ class NotificationService extends Events {
       winMgr.remove(this.notifiWindowId);
       this.notifiWindowId = null;
     }
-    winMgr.openNotification(winProps).then((winId) => {
-      this.notifiWindowId = winId!;
-    });
+    winMgr
+      .openNotification(winProps)
+      .then((winId) => {
+        if (winId == null) {
+          if (this.notifiWindowId === null) {
+            this.unLock();
+          }
+          return;
+        }
+        this.notifiWindowId = winId;
+      })
+      .catch((e) => {
+        if (this.notifiWindowId === null) {
+          this.unLock();
+        }
+        Sentry.captureException(e, {
+          tags: { function: 'openNotification' },
+        });
+      });
   };
 
   updateNotificationWinProps = (winProps: Windows.UpdateUpdateInfoType) => {
