@@ -39,7 +39,7 @@ import { ActionWrapper } from '../ActionWrapper';
 import { CHAINS, CHAINS_ENUM, Chain } from '@debank/common';
 import { OriginInfo } from '../OriginInfo';
 import { Card } from '../Card';
-import { HighlightedSignMessageText, MessageWrapper } from '../TextActions';
+import { MessageWrapper, SignMessageContent } from '../TextActions';
 import { Divide } from '../Divide';
 import { Col, Row } from '../Actions/components/Table';
 import LogoWithText from '../Actions/components/LogoWithText';
@@ -48,11 +48,16 @@ import { noop } from '@/ui/utils';
 import { BalanceChangeWrapper } from '../TxComponents/BalanceChangeWrapper';
 import { ParseCommonResponse } from '@rabby-wallet/rabby-api/dist/types';
 import { Account } from '@/background/service/preference';
+import { Copy } from 'ui/component';
+import { SignMessageHighlightToken } from '../signMessageHighlighter';
+import { SignMessageAddressDataMap } from '../signMessageAddressData';
+import { SecurityEngineScopeProvider } from '@/ui/state/securityEngine';
 
 export interface MultiActionProps {
   actionList: ParsedTypedDataActionData[] | ParsedTransactionActionData[];
   requireDataList: ActionRequireData[];
   engineResultList: Result[][];
+  securityScopes?: string[];
 }
 
 const ActionItem = ({
@@ -314,24 +319,30 @@ const Actions = ({
   chain = CHAINS[CHAINS_ENUM.ETH],
   engineResults,
   raw,
+  copyMessage,
   message,
   origin,
   originLogo,
   typedDataActionData,
   account,
   multiAction,
+  messageTokens,
+  addressData,
 }: {
   data: ParsedTypedDataActionData | null;
   requireData: ActionRequireData;
   chain?: Chain;
   engineResults: Result[];
   raw: Record<string, any>;
+  copyMessage: string;
   message: string;
   origin: string;
   originLogo?: string;
   typedDataActionData?: ParseCommonResponse | null;
   account: Account;
   multiAction?: MultiActionProps;
+  messageTokens?: SignMessageHighlightToken[];
+  addressData?: SignMessageAddressDataMap;
 }) => {
   const { t } = useTranslation();
 
@@ -361,17 +372,21 @@ const Actions = ({
         {isMultiAction && multiAction ? (
           (multiAction.actionList as ParsedTypedDataActionData[]).map(
             (action, index) => (
-              <ActionItem
+              <SecurityEngineScopeProvider
                 key={index}
-                data={action}
-                requireData={multiAction.requireDataList[index]}
-                chain={chain}
-                engineResults={multiAction.engineResultList[index]}
-                raw={raw}
-                message={message}
-                account={account}
-                origin={origin}
-              />
+                scope={multiAction.securityScopes?.[index]}
+              >
+                <ActionItem
+                  data={action}
+                  requireData={multiAction.requireDataList[index]}
+                  chain={chain}
+                  engineResults={multiAction.engineResultList[index] || []}
+                  raw={raw}
+                  message={message}
+                  account={account}
+                  origin={origin}
+                />
+              </SecurityEngineScopeProvider>
             )
           )
         ) : (
@@ -395,13 +410,17 @@ const Actions = ({
           })}
         >
           <div className="title">
-            <span className="title-text">
+            <span className="title-text flex items-center gap-4">
               {t('page.signTx.typedDataMessage')}
+              <Copy data={copyMessage} className="w-14 h-14" />
             </span>
           </div>
-          <div className="content">
-            <HighlightedSignMessageText text={message} />
-          </div>
+          <SignMessageContent
+            text={message}
+            tokens={messageTokens}
+            chain={chain}
+            addressData={addressData}
+          />
         </MessageWrapper>
       </Card>
     </>

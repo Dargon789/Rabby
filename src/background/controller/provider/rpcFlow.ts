@@ -4,10 +4,15 @@ import {
   notificationService,
   permissionService,
   preferenceService,
-  openapiService,
 } from 'background/service';
 import { PromiseFlow, underline2Camelcase } from 'background/utils';
-import { CHAINS_ENUM, EVENTS, KEYRING_CLASS } from 'consts';
+import {
+  EVENTS,
+  INTERNAL_REQUEST_ORIGIN,
+  KEYRING_CLASS,
+  KEYRING_TYPE,
+  SUPPORT_1559_KEYRING_TYPE,
+} from 'consts';
 import providerController from './controller';
 import eventBus from '@/eventBus';
 import { resemblesETHAddress } from '@/utils';
@@ -21,9 +26,19 @@ import { gnosisController } from './gnosisController';
 import { bgRetryTxMethods } from '@/background/utils/errorTxRetry';
 import { hexToNumber } from 'viem';
 import BigNumber from 'bignumber.js';
-import { Chain } from '@debank/common';
-import { shouldAutoConnect, shouldAutoPersonalSign } from './autoConnect';
 import { ga4 } from '@/utils/ga4';
+import {
+  buildSignTx,
+  normalizeTxParams,
+  shouldUpdateNonce,
+} from '@/utils/transaction';
+import type { Tx } from 'background/service/openapi';
+import {
+  cancelSignTxPreparation,
+  startSignTxPreparation,
+} from '@/background/service/signTxPreparation';
+import { v4 as uuidv4 } from 'uuid';
+import { isSigningCarrierReported, takeSigningCarrier } from '@/utils/sentry';
 
 const isSignApproval = (type: string) => {
   const SIGN_APPROVALS = ['SignText', 'SignTypedData', 'SignTx'];
@@ -122,7 +137,6 @@ const flowContext = flow
       request: {
         session: { origin, name, icon },
         data,
-        isFromDesktopDapp,
       },
       mapMethod,
     } = ctx;
@@ -136,49 +150,20 @@ const flowContext = flow
         ctx.request.requestedApproval = true;
         connectOrigins.add(origin);
 
-        let defaultAccount: any =
-          ctx.request.account || preferenceService.getCurrentAccount();
-
-        let defaultChain = CHAINS_ENUM.ETH;
         try {
           const isUnlock = keyringService.memStore.getState().isUnlocked;
 
-          if (
-            isFromDesktopDapp &&
-            defaultAccount &&
-            shouldAutoConnect(origin, data?.method)
-          ) {
-            try {
-              const recommendChains = await openapiService.getRecommendChains(
-                defaultAccount.address,
-                origin
-              );
-              let targetChain: Chain | null | undefined;
-              for (let i = 0; i < recommendChains.length; i++) {
-                targetChain = findChain({
-                  serverId: recommendChains[i].id,
-                });
-                if (targetChain) break;
-              }
-              defaultChain = targetChain ? targetChain.enum : CHAINS_ENUM.ETH;
-            } catch (error) {
-              console.log('shouldAutoConnect error', error);
-            }
-          } else {
-            const {
-              defaultChain: _defaultChain,
-              defaultAccount: _defaultAccount,
-            } = await notificationService.requestApproval(
-              {
-                params: { origin, name, icon, $ctx: data.$ctx },
-                account: ctx.request.account,
-                approvalComponent: 'Connect',
-              },
-              { height: isUnlock ? 800 : 628 }
-            );
-            defaultChain = _defaultChain;
-            defaultAccount = _defaultAccount;
-          }
+          const {
+            defaultChain,
+            defaultAccount,
+          } = await notificationService.requestApproval(
+            {
+              params: { origin, name, icon, $ctx: data.$ctx },
+              account: ctx.request.account,
+              approvalComponent: 'Connect',
+            },
+            { height: isUnlock ? 800 : 628 }
+          );
 
           const isEnabledDappAccount = preferenceService.getPreference(
             'isEnabledDappAccount'
@@ -220,7 +205,6 @@ const flowContext = flow
       request: {
         data: { params, method },
         session: { origin, name, icon, isFromRabby },
-        isFromDesktopDapp,
       },
       mapMethod,
     } = ctx;
@@ -275,29 +259,129 @@ const flowContext = flow
         }
       }
 
+      const approvalCtx = ctx?.request?.data?.$ctx;
+      // `params` is not always a tx array - wallet_watchAsset passes an object,
+      // so params[0] must only be read on the SignTx path.
+      const signTx = approvalType === 'SignTx' ? params[0] : undefined;
+      // SignTx renders and signs the dapp-normalized tx, so the preparation
+      // has to read its intent flags from that same copy - reading them off
+      // the raw dapp params lets a dapp set isSpeedUp/isSend and steer the
+      // prepared nonce and gas level. Normalizing can throw on malformed
+      // numeric input; that must only skip the preparation, never reject the
+      // approval the user would otherwise see.
+      let normalizedSignTx: (Tx & Record<string, any>) | undefined;
+      try {
+        normalizedSignTx = signTx
+          ? (normalizeTxParams(
+              { ...signTx },
+              !isFromRabby && origin !== INTERNAL_REQUEST_ORIGIN
+            ) as Tx & Record<string, any>)
+          : undefined;
+      } catch (e) {
+        Sentry.captureException(e);
+      }
+      const hasEip7702Authorization = Boolean(
+        (Array.isArray(signTx?.authorizationList) &&
+          signTx.authorizationList.length > 0) ||
+          approvalCtx?.eip7702Revoke ||
+          approvalCtx?.eip7702RevokeAuthorization
+      );
+      const signTxChain = signTx
+        ? findChain({ id: Number(signTx.chainId) })
+        : undefined;
+      const isSafeAccount =
+        ctx.request.account?.type === KEYRING_TYPE.GnosisKeyring ||
+        ctx.request.account?.type === KEYRING_TYPE.CoboArgusKeyring;
+      // SignTx sends its own parse/pre-exec requests with the approval
+      // account's address, not the dapp-supplied `from`, so the preparation
+      // has to use the same one or the two describe the request differently.
+      const preparationAddress = ctx.request.account?.address;
+      const canPrepareNonce = normalizedSignTx
+        ? shouldUpdateNonce({
+            nonce: normalizedSignTx.nonce,
+            from: normalizedSignTx.from,
+            to: normalizedSignTx.to,
+            isSpeedUp: normalizedSignTx.isSpeedUp,
+            isCancel: normalizedSignTx.isCancel,
+          }) || normalizedSignTx.nonce != null
+        : false;
+      let signTxPreparationId: string | undefined;
       if (
-        !isFromDesktopDapp ||
-        !shouldAutoPersonalSign({
-          origin,
-          method: ctx.request.data.method,
-          account: ctx.request.account,
-          msgParams: ctx.request.data.params,
-        })
+        signTx &&
+        normalizedSignTx &&
+        preparationAddress &&
+        signTxChain &&
+        !signTxChain.isTestnet &&
+        !isSafeAccount &&
+        canPrepareNonce &&
+        !hasEip7702Authorization
       ) {
-        ctx.approvalRes = await notificationService.requestApproval(
-          {
-            approvalComponent: approvalType,
-            params: {
-              $ctx: ctx?.request?.data?.$ctx,
-              method,
-              data: ctx.request.data.params,
-              session: { origin, name, icon, isFromRabby },
-            },
-            account: ctx.request.account,
-            origin,
+        signTxPreparationId = uuidv4();
+      }
+      try {
+        const approvalData = {
+          approvalComponent: approvalType,
+          params: {
+            $ctx: approvalCtx,
+            method,
+            data: ctx.request.data.params,
+            session: { origin, name, icon, isFromRabby },
           },
-          { height: windowHeight }
+          account: ctx.request.account,
+          origin,
+        };
+        const approvalPromise = notificationService.requestApproval(
+          approvalData,
+          { height: windowHeight },
+          {
+            onCurrent: () => {
+              if (
+                !signTxPreparationId ||
+                !signTx ||
+                !normalizedSignTx ||
+                !preparationAddress ||
+                !signTxChain
+              ) {
+                return;
+              }
+              Object.assign(approvalData.params, { signTxPreparationId });
+              startSignTxPreparation({
+                id: signTxPreparationId,
+                // must match how SignTx builds the tx it renders and signs -
+                // the prepared pre-exec result is shown as that tx's asset
+                // change. enable7702 is always false here, preparation is
+                // skipped for any 7702 authorization.
+                tx: buildSignTx({
+                  tx: normalizedSignTx,
+                  chainId: Number(signTx.chainId),
+                  gasLimit: normalizedSignTx.gasLimit,
+                }),
+                origin,
+                address: preparationAddress,
+                chainId: Number(signTx.chainId),
+                support1559:
+                  signTxChain.eip['1559'] &&
+                  SUPPORT_1559_KEYRING_TYPE.includes(
+                    ctx.request.account?.type as any
+                  ),
+                delegateCall:
+                  Boolean(normalizedSignTx.operation) &&
+                  ctx.request.account?.type === KEYRING_TYPE.GnosisKeyring,
+                isSpeedUp: normalizedSignTx.isSpeedUp,
+                isCancel: normalizedSignTx.isCancel,
+                isSend: normalizedSignTx.isSend,
+                isSwap: normalizedSignTx.isSwap,
+                isBridge: normalizedSignTx.isBridge,
+              });
+            },
+          }
         );
+
+        ctx.approvalRes = await approvalPromise;
+      } finally {
+        if (signTxPreparationId) {
+          cancelSignTxPreparation(signTxPreparationId);
+        }
       }
 
       if (isSignApproval(approvalType)) {
@@ -317,17 +401,7 @@ const flowContext = flow
     const { uiRequestComponent, ...rest } = approvalRes || {};
     const {
       session: { origin },
-      isFromDesktopDapp,
     } = request;
-
-    const isAutoPersonalSign =
-      isFromDesktopDapp &&
-      shouldAutoPersonalSign({
-        origin,
-        method: ctx.request.data.method,
-        account: ctx.request.account,
-        msgParams: ctx.request.data.params,
-      });
 
     const createRequestDeferFn = (
       originApprovalRes: typeof approvalRes
@@ -335,11 +409,7 @@ const flowContext = flow
       new Promise((resolve, reject) => {
         let waitSignComponentPromise = Promise.resolve();
 
-        if (
-          !isAutoPersonalSign &&
-          isSignApproval(approvalType) &&
-          uiRequestComponent
-        ) {
+        if (isSignApproval(approvalType) && uiRequestComponent) {
           waitSignComponentPromise = waitSignComponentAmounted();
         }
 
@@ -441,7 +511,17 @@ const flowContext = flow
                 payload.params = e.message;
               }
 
-              Sentry.captureException(e);
+              const signingCarrier = takeSigningCarrier(e);
+              if (signingCarrier) {
+                if (!isSigningCarrierReported(signingCarrier)) {
+                  Sentry.captureException(signingCarrier);
+                }
+              } else if (
+                !isSignApproval(approvalType) ||
+                (e && typeof e === 'object')
+              ) {
+                Sentry.captureException(e);
+              }
               if (isSignApproval(approvalType)) {
                 eventBus.emit(EVENTS.broadcastToUI, payload);
               }
@@ -477,7 +557,7 @@ const flowContext = flow
       }
     }
 
-    if (!isAutoPersonalSign && uiRequestComponent) {
+    if (uiRequestComponent) {
       ctx.request.requestedApproval = true;
       const result = await requestApprovalLoop({ uiRequestComponent, ...rest });
       reportStatsData();

@@ -62,7 +62,9 @@ jest.mock('@/utils/env', () => ({
   isManifestV3: true,
 }));
 
-import { getLedgerErrorMessage } from 'background/service/keyring/eth-ledger-keyring';
+import LedgerBridgeKeyring, {
+  getLedgerErrorMessage,
+} from 'background/service/keyring/eth-ledger-keyring';
 
 describe('getLedgerErrorMessage', () => {
   it('extracts readable DMK object errors without losing status codes', () => {
@@ -106,5 +108,146 @@ describe('getLedgerErrorMessage', () => {
 
     expect(message).toContain('RefusedByUserDAError');
     expect(message).toContain('0x6985');
+  });
+
+  it('exposes structured provider diagnostics without parsing Sentry text', () => {
+    const keyring = new LedgerBridgeKeyring();
+    const diagnostics = keyring.getLedgerSigningDiagnostics({
+      statusCode: '0x6a80',
+    });
+
+    expect(diagnostics).toMatchObject({
+      wallet_provider: 'ledger',
+      transport: 'webhid',
+      provider_code: '0x6a80',
+      error_category: 'unknown',
+    });
+    expect(diagnostics).not.toHaveProperty('signing_original_error');
+  });
+
+  it('finds a Ledger status word through nested signing wrappers', () => {
+    const keyring = new LedgerBridgeKeyring();
+    const diagnostics = keyring.getLedgerSigningDiagnostics({
+      cause: {
+        cause: {
+          statusCode: '0x6a80',
+        },
+      },
+    });
+
+    expect(diagnostics).toMatchObject({
+      provider_code: '0x6a80',
+      error_category: 'unknown',
+    });
+  });
+
+  it('reports a bare 0x6985 as unknown instead of assuming user cancellation', () => {
+    const keyring = new LedgerBridgeKeyring();
+    const diagnostics = keyring.getLedgerSigningDiagnostics({
+      statusCode: '0x6985',
+    });
+
+    expect(diagnostics).toMatchObject({
+      provider_code: '0x6985',
+      error_category: 'unknown',
+    });
+  });
+
+  it('preserves the allowlisted DMK error tag', () => {
+    const keyring = new LedgerBridgeKeyring();
+    const diagnostics = keyring.getLedgerSigningDiagnostics({
+      _tag: 'EthAppCommandError',
+      errorCode: '6985',
+    });
+
+    expect(diagnostics).toMatchObject({
+      provider_code: '0x6985',
+      provider_error_tag: 'EthAppCommandError',
+    });
+    expect(
+      keyring.getLedgerSigningDiagnostics({ _tag: 'UnexpectedError' })
+    ).not.toHaveProperty('provider_error_tag');
+  });
+
+  it('classifies Rabby-generated device readiness errors', () => {
+    const keyring = new LedgerBridgeKeyring();
+
+    expect(
+      keyring.getLedgerSigningDiagnostics(
+        new Error('Ledger: Device is locked 0x5515')
+      )
+    ).toMatchObject({
+      provider_code: '0x5515',
+      error_category: 'device_locked',
+      provider_reason: 'device_locked',
+    });
+
+    expect(
+      keyring.getLedgerSigningDiagnostics(
+        new Error('Ledger: Device disconnected')
+      )
+    ).toMatchObject({
+      error_category: 'disconnected',
+      provider_reason: 'device_disconnected',
+    });
+  });
+
+  it('classifies an explicit DMK user rejection as user cancellation', () => {
+    const keyring = new LedgerBridgeKeyring();
+    const diagnostics = keyring.getLedgerSigningDiagnostics({
+      _tag: 'RefusedByUserDAError',
+    });
+
+    expect(diagnostics).toMatchObject({
+      provider_code: '0x6985',
+      error_category: 'user_cancelled',
+    });
+  });
+
+  it('uses the explicit signing attempt when a shared unlock error is reused', () => {
+    const keyring = new LedgerBridgeKeyring();
+    const firstAttempt = {
+      operation: 'transaction',
+      startedAt: 1,
+      stage: 'sign',
+      setStage: jest.fn(),
+    } as any;
+    const secondAttempt = {
+      operation: 'transaction',
+      startedAt: 2,
+      stage: 'sign',
+      setStage: jest.fn(),
+    } as any;
+    const firstState = keyring.beginSigningAttempt(
+      'transaction',
+      undefined,
+      firstAttempt
+    ) as any;
+    const secondState = keyring.beginSigningAttempt(
+      'transaction',
+      undefined,
+      secondAttempt
+    ) as any;
+    firstState.steps.push(
+      'first-attempt',
+      'signer.eth.steps.blindSignTransactionFallback'
+    );
+    firstState.last_required_user_interaction = 'sign-transaction';
+    secondState.steps.push('second-attempt');
+
+    const sharedError = new Error('Ledger: Device disconnected');
+    keyring.endSigningAttempt(firstState, sharedError);
+    keyring.endSigningAttempt(secondState, sharedError);
+
+    const metadata = keyring.getLedgerSigningDiagnostics(
+      sharedError,
+      firstAttempt
+    ).provider_metadata as any;
+    expect(metadata).toMatchObject({
+      device_action_steps:
+        'first-attempt>signer.eth.steps.blindSignTransactionFallback',
+      last_required_user_interaction: 'sign-transaction',
+      used_fallback: true,
+    });
   });
 });

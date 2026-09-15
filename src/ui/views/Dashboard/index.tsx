@@ -1,4 +1,3 @@
-import clsx from 'clsx';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
@@ -21,7 +20,12 @@ import { CHAINS_ENUM, KEYRING_CLASS } from '@/constant';
 import Settings from './components/Settings';
 import { useMemoizedFn, useMount } from 'ahooks';
 import { useEnterPassphraseModal } from '@/ui/hooks/useEnterPassphraseModal';
-import { useGasAccountDiscovery } from '@/ui/views/GasAccount/hooks';
+import {
+  useGasAccountDiscovery,
+  useGasAccountSign,
+} from '@/ui/views/GasAccount/hooks';
+import { StablecoinSwapPopup } from './components/StablecoinSwapPopup';
+import { useAppVersionStore } from '@/ui/state/appVersion';
 
 const Dashboard = () => {
   const history = useHistory();
@@ -31,10 +35,17 @@ const Dashboard = () => {
   const { refreshDiscovery } = useGasAccountDiscovery({
     autoRefresh: false,
   });
+  const { sig, accountId } = useGasAccountSign();
+  const hasGasAccountSession = !!sig && !!accountId;
 
-  const { firstNotice, updateContent, version } = useRabbySelector((s) => ({
-    ...s.appVersion,
-  }));
+  const {
+    firstNotice,
+    updateContent,
+    version,
+    checkIfFirstLoginAsync,
+    afterFirstLogin,
+  } = useAppVersionStore();
+  const locale = useRabbySelector((s) => s.preference.locale);
   const accountsDiscoveryKey = useRabbySelector((s) =>
     s.accountToDisplay.accountsList
       .map(
@@ -81,8 +92,15 @@ const Dashboard = () => {
     })();
   }, []);
 
+  // Discovery costs one gas account balance lookup per address. The dashboard
+  // only consumes the two fields discovery derives for a logged-out wallet —
+  // autoLoginAccount and pendingHardwareAccount — and both are forced to
+  // undefined once a session exists, so with one the whole round is wasted. The
+  // remaining field, accountsWithGasAccountBalance, is read by the GasAccount
+  // page, which refreshes discovery on its own mount. Losing a session mid-flight
+  // still rediscovers, from useGasAccountInfo's invalidateSession.
   useEffect(() => {
-    if (!accountsDiscoveryKey) {
+    if (!accountsDiscoveryKey || hasGasAccountSession) {
       return;
     }
     refreshDiscovery().catch((error) => {
@@ -91,11 +109,11 @@ const Dashboard = () => {
         error
       );
     });
-  }, [accountsDiscoveryKey, refreshDiscovery]);
+  }, [accountsDiscoveryKey, hasGasAccountSession, refreshDiscovery]);
 
-  useEffect(() => {
-    dispatch.appVersion.checkIfFirstLoginAsync();
-  }, [dispatch]);
+  useMount(() => {
+    void checkIfFirstLoginAsync(locale);
+  });
 
   const { t } = useTranslation();
   const [currentConnectedSiteChain, setCurrentConnectedSiteChain] = useState(
@@ -171,20 +189,25 @@ const Dashboard = () => {
 
   return (
     <>
-      <div className={clsx('dashboard')}>
-        <DashboardHeader onSettingClick={toggleShowMoreSettings} />
-        <DashboardPanel onSettingClick={toggleShowMoreSettings} />
-        <div className="px-[16px] pb-[13px]">
-          <GasPriceBar currentConnectedSiteChain={currentConnectedSiteChain} />
-          <CurrentConnection onChainChange={setCurrentConnectedSiteChain} />
+      <div className="relative h-full overflow-hidden">
+        <div className="dashboard h-full overflow-y-auto">
+          <DashboardHeader onSettingClick={toggleShowMoreSettings} />
+          <DashboardPanel onSettingClick={toggleShowMoreSettings} />
+          <div className="px-[16px] pb-[13px]">
+            <GasPriceBar
+              currentConnectedSiteChain={currentConnectedSiteChain}
+            />
+            <CurrentConnection onChainChange={setCurrentConnectedSiteChain} />
+          </div>
         </div>
+        <StablecoinSwapPopup />
       </div>
       <Modal
         visible={firstNotice && updateContent}
         title={t('page.dashboard.home.whatsNew')}
         className="first-notice"
         onCancel={() => {
-          dispatch.appVersion.afterFirstLogin();
+          afterFirstLogin();
         }}
         maxHeight="420px"
       >

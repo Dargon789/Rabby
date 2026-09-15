@@ -1,6 +1,7 @@
 import { Account } from '@/background/service/preference';
 import { FallbackSiteLogo } from '@/ui/component';
-import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
+import { useSecurityEngineStore } from '@/ui/state/securityEngine';
+import { useShallow } from 'zustand/react/shallow';
 import { useWallet } from '@/ui/utils';
 import { TooltipWithMagnetArrow } from '@/ui/component/Tooltip/TooltipWithMagnetArrow';
 import { Chain } from '@debank/common';
@@ -25,6 +26,7 @@ import {
 } from './GasLessComponents';
 import { GasAccountCheckResult } from '@/background/service/openapi';
 import { shouldShowGasLessNotEnough } from './gasAccountDecision';
+import { isApprovalProcessDisabled } from './securityGate';
 
 interface Props extends Omit<ActionGroupProps, 'account'> {
   chain?: Chain;
@@ -34,6 +36,7 @@ interface Props extends Omit<ActionGroupProps, 'account'> {
   origin?: string;
   originLogo?: string;
   hasUnProcessSecurityResult?: boolean;
+  securityBlocked?: boolean;
   hasShadow?: boolean;
   isTestnet?: boolean;
   engineResults?: Result[];
@@ -157,6 +160,7 @@ export const FooterBar: React.FC<Props> = ({
   securityLevel,
   engineResults = [],
   hasUnProcessSecurityResult,
+  securityBlocked = false,
   hasShadow = false,
   showGasLess = false,
   useGasLess = false,
@@ -189,13 +193,15 @@ export const FooterBar: React.FC<Props> = ({
   ] = React.useState<ConnectedSite | null>(null);
   const account = gnosisAccount || currentAccount;
   const wallet = useWallet();
-  const dispatch = useRabbyDispatch();
   const { t } = useTranslation();
 
-  const { rules, processedRules } = useRabbySelector((s) => ({
-    rules: s.securityEngine.rules,
-    processedRules: s.securityEngine.currentTx.processedRules,
-  }));
+  const { rules, processedRules, openRuleDrawer } = useSecurityEngineStore(
+    useShallow((s) => ({
+      rules: s.rules,
+      processedRules: s.currentTx.processedRules,
+      openRuleDrawer: s.openRuleDrawer,
+    }))
+  );
 
   const currentChain = useMemo(() => {
     if (origin === INTERNAL_REQUEST_ORIGIN) {
@@ -222,7 +228,7 @@ export const FooterBar: React.FC<Props> = ({
     const rule = rules.find((item) => item.id === id);
     if (!rule) return;
     const result = engineResultMap[id];
-    dispatch.securityEngine.openRuleDrawer({
+    openRuleDrawer({
       ruleConfig: rule,
       value: result?.value,
       level: result?.level,
@@ -283,14 +289,15 @@ export const FooterBar: React.FC<Props> = ({
           account={account}
           gasLess={useGasLess && !payGasByGasAccount}
           {...props}
-          disabledProcess={
-            payGasByGasAccount
-              ? !gasAccountCanPay ||
-                (!!securityLevel && !!hasUnProcessSecurityResult)
-              : useGasLess
-              ? false
-              : props.disabledProcess
-          }
+          disabledProcess={isApprovalProcessDisabled({
+            securityBlocked,
+            hasUnprocessedSecurityResult:
+              !!securityLevel && !!hasUnProcessSecurityResult,
+            payGasByGasAccount,
+            gasAccountCanPay,
+            useGasLess,
+            disabledProcess: props.disabledProcess,
+          })}
           enableTooltip={
             payGasByGasAccount
               ? false

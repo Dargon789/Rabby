@@ -29,11 +29,12 @@ import { AccountItem } from '@/ui/component/AccountSelector/AccountItem';
 import { ellipsisAddress } from '@/ui/utils/address';
 
 import { getUiType, isSameAddress, useWallet } from '@/ui/utils';
-import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
+import { useRabbySelector } from '@/ui/store';
+import { useWhitelistStore } from '@/ui/state/whitelist';
 import { groupBy } from 'lodash';
 import { findAccountByPriority } from '@/utils/account';
 import { padWatchAccount } from '../util';
-import { IDisplayedAccountWithBalance } from '@/ui/models/accountToDisplay';
+import { IDisplayedAccountWithBalance } from '@/ui/state/accountToDisplay';
 
 // icons
 import { ReactComponent as RcIconDeleteAddress } from 'ui/assets/address/delete.svg';
@@ -249,14 +250,16 @@ export default function TabWhitelist({
   onManagePwdForNonWhitelistedTx: () => void;
 }) {
   const history = useHistory();
-  const dispatch = useRabbyDispatch();
   const wallet = useWallet();
   const { t } = useTranslation();
 
-  const { accountsList, whitelist } = useRabbySelector((s) => ({
-    accountsList: s.accountToDisplay.accountsList,
-    whitelist: s.whitelist.whitelist,
-  }));
+  const accountsList = useRabbySelector(
+    (state) => state.accountToDisplay.accountsList
+  );
+  const whitelist = useWhitelistStore((state) => state.whitelists);
+  const updateWhitelistOrder = useWhitelistStore(
+    (state) => state.updateWhitelistOrder
+  );
 
   const importedWhitelistAccounts = useMemo<
     IDisplayedAccountWithBalance[]
@@ -381,7 +384,7 @@ export default function TabWhitelist({
     const [removed] = nextWhitelist.splice(oldIndex, 1);
     nextWhitelist.splice(newIndex, 0, removed);
 
-    dispatch.whitelist.updateWhitelistOrder(nextWhitelist);
+    updateWhitelistOrder(nextWhitelist);
     resetSuppressClick();
   };
 
@@ -398,8 +401,6 @@ export default function TabWhitelist({
         await wallet.updateCexId(address, '');
       }
     }
-    dispatch.whitelist.getWhitelist();
-    dispatch.contactBook.getContactBookAsync();
     message.success({
       icon: <img src={IconSuccess} className="icon icon-success" />,
       content: t('page.whitelist.tips.removed'),

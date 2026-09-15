@@ -17,7 +17,7 @@ import { isValidAddress, toChecksumAddress } from '@ethereumjs/util';
 import abiCoderInst, { AbiCoder } from 'web3-eth-abi';
 import { useRequest } from 'ahooks';
 import { CHAINS_ENUM, KEYRING_CLASS, KEYRING_TYPE } from 'consts';
-import { useRabbyDispatch, connectStore } from 'ui/store';
+import { connectStore } from 'ui/store';
 import {
   useWallet,
   openInTab,
@@ -32,7 +32,7 @@ import './style.less';
 import { getKRCategoryByType } from '@/utils/transaction';
 import { filterRbiSource, useRbiSource } from '@/ui/utils/ga-event';
 import { ReactComponent as RcIconExternal } from 'ui/assets/icon-share-currentcolor.svg';
-import { ReactComponent as RcIconFullscreen } from '@/ui/assets/fullscreen-cc.svg';
+import { RcIconJumpBoldCC } from '@/ui/assets/dashboard';
 import { useMiniSigner } from '@/ui/hooks/useSigner';
 import { MINI_SIGN_ERROR } from '@/ui/component/MiniSignV2/state/SignatureManager';
 
@@ -78,8 +78,6 @@ const SendNFT = () => {
   const { search } = useLocation();
   const { t } = useTranslation();
   const rbisource = useRbiSource();
-  const dispatch = useRabbyDispatch();
-
   const currentAccount = useCurrentAccount();
   const [chain, setChain] = useState<CHAINS_ENUM | undefined>(undefined);
 
@@ -529,9 +527,6 @@ const SendNFT = () => {
   }, [nftItem, wallet, history.location.pathname, form]);
 
   const init = useCallback(async () => {
-    dispatch.whitelist.getWhitelistEnabled();
-    dispatch.whitelist.getWhitelist();
-    dispatch.contactBook.getContactBookAsync();
     const account = await wallet.syncGetCurrentAccount();
 
     if (!account) {
@@ -539,7 +534,7 @@ const SendNFT = () => {
       return;
     }
     setInited(true);
-  }, [dispatch.contactBook, dispatch.whitelist, history, wallet]);
+  }, [history, wallet]);
 
   useEffect(() => {
     init();
@@ -611,7 +606,7 @@ const SendNFT = () => {
                   window.close();
                 }}
               >
-                <RcIconFullscreen />
+                <RcIconJumpBoldCC />
               </div>
             )
           }

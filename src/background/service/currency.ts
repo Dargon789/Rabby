@@ -1,33 +1,50 @@
-import { createPersistStore } from 'background/utils';
+import { createPersistStore, patchPersistStore } from 'background/utils';
 import openapiService, { CurrencyItem } from './openapi';
+import { z } from 'zod';
+import { isManifestV3 } from '@/utils/env';
+import browser from 'webextension-polyfill';
+import { ALARMS_SYNC_CURRENCY_LIST } from '../utils/alarms';
 
-export interface CurrencyStore {
-  currencyList: CurrencyItem[];
-  updatedAt: number;
-  currency: string;
-}
+const currencyItemSchema = z.object({
+  symbol: z.string(),
+  code: z.string(),
+  logo_url: z.string(),
+  usd_rate: z.number(),
+  is_prefix: z.boolean(),
+});
+
+const currencyListSchema = z.array(currencyItemSchema);
+const CURRENCY_LIST_SYNC_PERIOD_IN_MINUTES = 60;
+
+const currencyStoreSchema = z.object({
+  currencyList: currencyListSchema.default(() => []),
+  updatedAt: z.number().default(0),
+  currency: z.string().min(1).default('USD'),
+});
+
+export type CurrencyStore = z.output<typeof currencyStoreSchema>;
+
+const createCurrencyStoreTemplate = (): CurrencyStore =>
+  currencyStoreSchema.parse({});
 
 class CurrencyService {
-  store!: CurrencyStore;
+  store: CurrencyStore = createCurrencyStoreTemplate();
   timer: ReturnType<typeof setInterval> | null = null;
 
   init = async () => {
     this.store = await createPersistStore<CurrencyStore>({
       name: 'currency',
-      template: {
-        currencyList: [],
-        updatedAt: 0,
-        currency: 'USD',
-      },
+      template: createCurrencyStoreTemplate(),
+      schema: currencyStoreSchema,
     });
 
-    if (!Array.isArray(this.store.currencyList)) {
+    if (!currencyListSchema.safeParse(this.store.currencyList).success) {
       this.store.currencyList = [];
     }
-    if (!this.store.updatedAt) {
+    if (!z.number().safeParse(this.store.updatedAt).success) {
       this.store.updatedAt = 0;
     }
-    if (!this.store.currency) {
+    if (!z.string().min(1).safeParse(this.store.currency).success) {
       this.store.currency = 'USD';
     }
 
@@ -47,13 +64,19 @@ class CurrencyService {
   };
 
   setCurrency = (currency: CurrencyItem['code']) => {
-    this.store.currency = currency || 'USD';
+    this.patchStore({ currency: currency || 'USD' });
+  };
+
+  patchStore = (partials: Partial<CurrencyStore>) => {
+    patchPersistStore(this.store, partials);
   };
 
   syncCurrencyList = async (force = false) => {
     const currentStore = this.getStore();
     const shouldSkip =
-      !force && Date.now() - currentStore.updatedAt < 9 * 60 * 1000;
+      !force &&
+      Date.now() - currentStore.updatedAt <
+        (CURRENCY_LIST_SYNC_PERIOD_IN_MINUTES - 1) * 60 * 1000;
 
     if (shouldSkip) {
       return currentStore.currencyList;
@@ -61,8 +84,10 @@ class CurrencyService {
 
     try {
       const currencyList = await openapiService.getCurrencyList();
-      this.store.currencyList = currencyList;
-      this.store.updatedAt = Date.now();
+      this.patchStore({
+        currencyList,
+        updatedAt: Date.now(),
+      });
       return currencyList;
     } catch (error) {
       console.error('fetch currency list error: ', error);
@@ -71,15 +96,29 @@ class CurrencyService {
   };
 
   resetTimer = () => {
-    const periodInMinutes = 10;
+    const periodInMinutes = CURRENCY_LIST_SYNC_PERIOD_IN_MINUTES;
     if (this.timer) {
       clearInterval(this.timer);
+      this.timer = null;
+    } else if (isManifestV3) {
+      browser.alarms.clear(ALARMS_SYNC_CURRENCY_LIST);
     }
 
-    this.syncCurrencyList(true);
-    this.timer = setInterval(() => {
-      this.syncCurrencyList();
-    }, periodInMinutes * 60 * 1000);
+    if (isManifestV3) {
+      browser.alarms.create(ALARMS_SYNC_CURRENCY_LIST, {
+        delayInMinutes: periodInMinutes,
+        periodInMinutes,
+      });
+      browser.alarms.onAlarm.addListener((alarm) => {
+        if (alarm.name === ALARMS_SYNC_CURRENCY_LIST) {
+          this.syncCurrencyList();
+        }
+      });
+    } else {
+      this.timer = setInterval(() => {
+        this.syncCurrencyList();
+      }, periodInMinutes * 60 * 1000);
+    }
   };
 }
 

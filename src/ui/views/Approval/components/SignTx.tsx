@@ -1,20 +1,28 @@
 import stats from '@/stats';
 import {
+  BlockInfo,
   calcGasLimit,
+  buildParseTxRequest,
+  buildPreExecTxRequest,
+  buildSignTx,
   checkGasAndNonce,
-  convertLegacyTo1559,
   explainGas,
   GasTokenInfo,
   getGasTokenBalance,
   getKRCategoryByType,
   getPendingTxs,
+  applySelectedGasToTx,
   is7702Tx,
+  normalizeTxParams as normalizeTransactionParams,
+  prepareInitialGasSelection,
+  resolve1559MaxPriorityFee,
+  shouldUpdateNonce,
   validateGasPriceRange,
 } from '@/utils/transaction';
 import Safe, { BasicSafeInfo } from '@rabby-wallet/gnosis-sdk';
 import * as Sentry from '@sentry/browser';
 import { Drawer, message, Modal } from 'antd';
-import { maxBy, omit } from 'lodash';
+import { maxBy } from 'lodash';
 import {
   Chain,
   ExplainTxResponse,
@@ -37,7 +45,6 @@ import {
   GAS_TOP_UP_ADDRESS,
   ALIAS_ADDRESS,
 } from 'consts';
-import { addHexPrefix, isHexString } from '@ethereumjs/util';
 import React, { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { matomoRequestEvent } from '@/utils/matomo-request';
 import { useTranslation, Trans } from 'react-i18next';
@@ -47,7 +54,6 @@ import IconGnosis from 'ui/assets/walletlogo/safe.svg';
 import {
   useApproval,
   useWallet,
-  isStringOrNumber,
   useCommonPopupView,
   getTimeSpan,
 } from '@/ui/utils';
@@ -55,20 +61,31 @@ import { WaitingSignComponent, WaitingSignMessageComponent } from './map';
 import GnosisDrawer from './TxComponents/GnosisDrawer';
 import Loading from './TxComponents/Loading';
 import { intToHex } from 'ui/utils/number';
-import { calcMaxPriorityFee } from '@/utils/transaction';
 import { FooterBar } from './FooterBar/FooterBar';
 import Actions from './Actions';
-import { useSecurityEngine } from 'ui/utils/securityEngine';
-import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
+import { useRabbySelector } from '@/ui/store';
 import RuleDrawer from './SecurityEngine/RuleDrawer';
 import {
-  Level,
+  ContextActionData,
   defaultRules,
 } from '@rabby-wallet/rabby-security-engine/dist/rules';
 import { TokenDetailPopup } from '@/ui/views/Dashboard/components/TokenDetailPopup';
+import { useSignStore } from '@/ui/state/sign';
+import {
+  useSecurityEngineStore,
+  SecurityEngineScopeProvider,
+} from '@/ui/state/securityEngine';
+import {
+  getActionSecurityGate,
+  hasActionSecurityError,
+} from './SecurityEngine/actionSecurity';
 import { CoboDelegatedDrawer } from './TxComponents/CoboDelegatedDrawer';
 import { BroadcastMode } from './BroadcastMode';
-import { MultiAction, TxPushType } from '@rabby-wallet/rabby-api/dist/types';
+import {
+  MultiAction,
+  SendAction,
+  TxPushType,
+} from '@rabby-wallet/rabby-api/dist/types';
 import type {
   GasAccountCheckResult,
   TokenItem,
@@ -97,7 +114,7 @@ import { ga4 } from '@/utils/ga4';
 import { EIP7702Warning } from './EIP7702Warning';
 import { getEIP7702MiniGasLimit } from '@/background/utils/7702';
 import { MultiActionProps } from './TypedDataActions';
-import { getCexInfo } from '@/ui/models/exchange';
+import { getCexInfo } from '@/ui/state/exchange';
 import {
   buildTempoTransaction,
   calcTempoMaxGasCostRawAmountIn18,
@@ -123,104 +140,25 @@ interface BasicCoboArgusInfo {
   delegates: string[];
 }
 
-const normalizeHex = (value: string | number) => {
-  if (typeof value === 'number') {
-    return intToHex(Math.floor(value));
-  }
-  if (typeof value === 'string') {
-    if (!isHexString(value)) {
-      return addHexPrefix(value);
-    }
-    return value;
-  }
-  return value;
-};
+// Let concurrently started promises land first, and let each original
+// boundary decide when to throw.
+const settle = <T,>(
+  promise: Promise<T>
+): Promise<{ value: T } | { error: any }> =>
+  promise.then(
+    (value) => ({ value }),
+    (error) => ({ error })
+  );
 
 export const normalizeTxParams = (tx, isDapp?: boolean) => {
-  let copy = tx;
   try {
-    if ('nonce' in copy && isStringOrNumber(copy.nonce)) {
-      copy.nonce = normalizeHex(copy.nonce);
-    }
-    if ('gas' in copy && isStringOrNumber(copy.gas)) {
-      copy.gas = normalizeHex(copy.gas);
-    }
-    if ('gasLimit' in copy && isStringOrNumber(copy.gasLimit)) {
-      copy.gas = normalizeHex(copy.gasLimit);
-    }
-    if ('gasPrice' in copy && isStringOrNumber(copy.gasPrice)) {
-      copy.gasPrice = normalizeHex(copy.gasPrice);
-    }
-    if ('maxFeePerGas' in copy && isStringOrNumber(copy.maxFeePerGas)) {
-      copy.maxFeePerGas = normalizeHex(copy.maxFeePerGas);
-    }
-    if (
-      'maxPriorityFeePerGas' in copy &&
-      isStringOrNumber(copy.maxPriorityFeePerGas)
-    ) {
-      copy.maxPriorityFeePerGas = normalizeHex(copy.maxPriorityFeePerGas);
-    }
-    if ('value' in copy) {
-      if (!isStringOrNumber(copy.value)) {
-        copy.value = '0x0';
-      } else {
-        copy.value = normalizeHex(copy.value);
-      }
-    }
-    if ('data' in copy) {
-      if (!tx.data.startsWith('0x')) {
-        copy.data = `0x${tx.data}`;
-      }
-    }
-
-    if ('authorizationList' in copy) {
-      copy.authorizationList = copy.authorizationList.map((item) => {
-        return normalizeHex(item);
-      });
-    }
-
-    if (isDapp) {
-      copy = omit(copy, [
-        'isSpeedUp',
-        'isCancel',
-        'isSend',
-        'isSwap',
-        'isBridge',
-        'swapPreferMEVGuarded',
-        'isViewGnosisSafe',
-        'reqId',
-      ]);
-    }
+    return normalizeTransactionParams(tx, isDapp);
   } catch (e) {
     Sentry.captureException(
       new Error(`normalizeTxParams failed, ${JSON.stringify(e)}`)
     );
+    return tx;
   }
-  return copy;
-};
-
-const getCachedMaxPriorityFee = (
-  lastTimeGas: ChainGas | null,
-  customGasPrice: number
-) => {
-  if (typeof lastTimeGas?.maxPriorityFee !== 'number') {
-    return undefined;
-  }
-
-  return Math.min(lastTimeGas.maxPriorityFee, customGasPrice);
-};
-
-const resolve1559MaxPriorityFee = (
-  maxFeePerGas: string | number | undefined,
-  maxPriorityFee: number
-) => {
-  const nextMaxFeePerGas = Math.max(0, Math.round(Number(maxFeePerGas || 0)));
-
-  if (!Number.isFinite(maxPriorityFee) || maxPriorityFee < 0) {
-    return nextMaxFeePerGas;
-  }
-
-  return Math.min(Math.round(maxPriorityFee), nextMaxFeePerGas);
 };
 
 export const TxTypeComponent = ({
@@ -410,12 +348,28 @@ interface SignTxProps<TData extends any[] = any[]> {
     isGnosis?: boolean;
     account?: Account;
     $ctx?: any;
+    signTxPreparationId?: string;
   };
   origin?: string;
   account: Account;
+  approvalId?: string;
 }
 
-const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
+type PreparedTxActions = {
+  type: 'single' | 'multi';
+  actions: {
+    data: ParsedTransactionActionData;
+    requireData: ActionRequireData;
+    ctx: ContextActionData;
+  }[];
+};
+
+const SignTx = ({
+  params,
+  origin,
+  account: $account,
+  approvalId,
+}: SignTxProps) => {
   const { isGnosis } = params;
   const currentAccount = params.isGnosis ? params.account! : $account;
   const renderStartAt = useRef(0);
@@ -423,6 +377,11 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
   const securityEngineCtx = useRef<any>(null);
   const logId = useRef('');
   const actionType = useRef('');
+  const explainEpochRef = useRef(0);
+  const gasPriceMedianRequestRef = useRef<Promise<void> | null>(null);
+  const preparedBlockPromiseRef = useRef<Promise<BlockInfo | null> | null>(
+    null
+  );
   const [isReady, setIsReady] = useState(false);
   const [nonceChanged, setNonceChanged] = useState(false);
   const [canProcess, setCanProcess] = useState(true);
@@ -491,10 +450,14 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
       contract_protocol_name: '',
     },
   });
-  const [actionData, setActionData] = useState<ParsedTransactionActionData>({});
-  const [actionRequireData, setActionRequireData] = useState<ActionRequireData>(
-    null
-  );
+  const [
+    preparedActions,
+    setPreparedActions,
+  ] = useState<PreparedTxActions | null>(null);
+  const preparedActionsRef = useRef(preparedActions);
+  preparedActionsRef.current = preparedActions;
+  const actionData = preparedActions?.actions[0]?.data || {};
+  const actionRequireData = preparedActions?.actions[0]?.requireData || null;
   const { t } = useTranslation();
   const [preprocessSuccess, setPreprocessSuccess] = useState(true);
   const [chainId, setChainId] = useState<number>(
@@ -566,26 +529,32 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const scrollRefSize = useSize(scrollRef);
   const scrollInfo = useScroll(scrollRef);
-  const [getApproval, resolveApproval, rejectApproval] = useApproval();
-  const dispatch = useRabbyDispatch();
+  const canResolveSecurityRef = useRef<() => boolean>(() => false);
+  const evaluationSequence = useRef(0);
+  const renderSecurityVersion = evaluationSequence.current;
+  const isCurrentSecurityEvaluation = () =>
+    renderSecurityVersion === evaluationSequence.current &&
+    canResolveSecurityRef.current();
+  const [getApproval, resolveApproval, rejectApproval] = useApproval({
+    approvalId,
+    approvalComponent: 'SignTx',
+    canResolve: isCurrentSecurityEvaluation,
+  });
+  const securityEngine = useSecurityEngineStore();
   const wallet = useWallet();
   if (!chain) throw new Error('No support chain found');
-  const [support1559, setSupport1559] = useState(chain.eip['1559']);
+  const [support1559, setSupport1559] = useState(
+    chain.eip['1559'] &&
+      SUPPORT_1559_KEYRING_TYPE.includes(currentAccount.type as any)
+  );
   const [support7702, setSupport7702] = useState(chain.eip['7702']);
   const [isLedger, setIsLedger] = useState(false);
-  const {
-    userData,
-    rules,
-    currentTx,
-    tokenDetail,
-    cachedTokenList,
-  } = useRabbySelector((s) => ({
-    userData: s.securityEngine.userData,
-    rules: s.securityEngine.rules,
-    currentTx: s.securityEngine.currentTx,
-    tokenDetail: s.sign.tokenDetail,
-    cachedTokenList: s.account.tokens.list,
-  }));
+  const { userData, rules, currentTx } = securityEngine;
+  const cachedTokenList = useRabbySelector((s) => s.account.tokens.list);
+  const tokenDetail = useSignStore((state) => state.tokenDetail);
+  const closeTokenDetailPopup = useSignStore(
+    (state) => state.closeTokenDetailPopup
+  );
   const cachedTokenItems = useMemo(
     () => (cachedTokenList || []).map(abstractTokenToTokenItem),
     [cachedTokenList]
@@ -593,6 +562,9 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
   const [footerShowShadow, setFooterShowShadow] = useState(false);
 
   const recommendNoncePromiseRef = useRef<Promise<string> | null>(null);
+  // A failed background gas request makes its parse/pre-exec results stale.
+  const preparationGasReadyRef = useRef(false);
+  const signTxPreparationId = params.signTxPreparationId;
 
   const gaEvent = async (type: 'allow' | 'cancel') => {
     const ga:
@@ -667,6 +639,13 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
     });
   };
 
+  const normalizedTx = useMemo(() => {
+    return normalizeTxParams(
+      params.data[0],
+      !params.session.isFromRabby && origin !== INTERNAL_REQUEST_ORIGIN
+    );
+  }, [params.data]);
+
   const {
     data = '0x',
     from,
@@ -695,12 +674,7 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
     keyAuthorization,
     validBefore,
     validAfter,
-  } = useMemo(() => {
-    return normalizeTxParams(
-      params.data[0],
-      !params.session.isFromRabby && origin !== INTERNAL_REQUEST_ORIGIN
-    );
-  }, [params.data]);
+  } = normalizedTx;
 
   const is7702 = is7702Tx({ authorizationList } as any);
 
@@ -724,54 +698,23 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
     type: swapPreferMEVGuarded ? 'mev' : 'default',
   });
 
-  let updateNonce = true;
-  if (isCancel || isSpeedUp || (nonce && from === to) || nonceChanged)
-    updateNonce = false;
-
-  const getGasPrice = () => {
-    let result = '';
-    if (maxFeePerGas) {
-      result = isHexString(maxFeePerGas)
-        ? maxFeePerGas
-        : intToHex(maxFeePerGas);
-    }
-    if (gasPrice) {
-      result = isHexString(gasPrice) ? gasPrice : intToHex(parseInt(gasPrice));
-    }
-    if (Number.isNaN(Number(result))) {
-      result = '';
-    }
-    return result;
-  };
+  const updateNonce = shouldUpdateNonce({
+    nonce,
+    from,
+    to,
+    isCancel,
+    isSpeedUp,
+    nonceChanged,
+  });
 
   const [tx, setTx] = useState<Tx>(
-    omit(
-      {
-        chainId,
-        data: data || '0x', // can not execute with empty string, use 0x instead
-        from,
-        gas: enable7702
-          ? getEIP7702MiniGasLimit(gas || params.data[0].gasLimit)
-          : gas || params.data[0].gasLimit,
-        gasPrice: getGasPrice(),
-        nonce,
-        to,
-        value,
-        type,
-        calls,
-        feeToken,
-        maxFeePerGas,
-        feePayer,
-        feePayerSignature,
-        nonceKey,
-        keyAuthorization,
-        validBefore,
-        validAfter,
-        authorizationList:
-          params?.$ctx?.eip7702RevokeAuthorization || authorizationList,
-      },
-      !enable7702 ? ['authorizationList'] : []
-    ) as any
+    buildSignTx({
+      tx: normalizedTx,
+      chainId,
+      gasLimit: params.data[0].gasLimit,
+      enable7702,
+      revokeAuthorization: params?.$ctx?.eip7702RevokeAuthorization,
+    })
   );
   const [manualGasMethod, setManualGasMethod] = useState<
     ApprovalGasMethod | undefined
@@ -799,33 +742,84 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
   const checkTxValueInBalance = useMemo(() => !isTempoChain(chain?.serverId), [
     chain?.serverId,
   ]);
-  const { executeEngine } = useSecurityEngine();
-  const [engineResults, setEngineResults] = useState<Result[]>([]);
-  const [multiActionList, setMultiActionList] = useState<
-    ParsedTransactionActionData[]
-  >([]);
-  const [multiActionRequireDataList, setMultiActionRequireDataList] = useState<
-    ActionRequireData[]
-  >([]);
-  const [
-    multiActionEngineResultList,
-    setMultiActionEngineResultList,
-  ] = useState<Result[][]>([]);
-  const isMultiActions = useMemo(() => {
-    return multiActionList.length > 0;
-  }, [multiActionList]);
-  const securityLevel = useMemo(() => {
-    const enableResults = engineResults.filter((result) => {
-      return result.enable && !currentTx.processedRules.includes(result.id);
-    });
-    if (enableResults.some((result) => result.level === Level.FORBIDDEN))
-      return Level.FORBIDDEN;
-    if (enableResults.some((result) => result.level === Level.DANGER))
-      return Level.DANGER;
-    if (enableResults.some((result) => result.level === Level.WARNING))
-      return Level.WARNING;
-    return undefined;
-  }, [engineResults, currentTx]);
+  const executeEngine = wallet.executeSecurityEngine;
+  const [securityReload, setSecurityReload] = useState(0);
+  const [securityError, setSecurityError] = useState(false);
+  const [securityEvaluation, setSecurityEvaluation] = useState<{
+    prepared: PreparedTxActions;
+    rules: typeof rules;
+    userData: typeof userData;
+    reload: number;
+    version: number;
+    results: Result[][];
+  } | null>(null);
+  const isSecurityReady =
+    !!securityEvaluation &&
+    securityEvaluation.prepared === preparedActions &&
+    securityEvaluation.rules === rules &&
+    securityEvaluation.userData === userData &&
+    securityEvaluation.reload === securityReload;
+  const securityGroups = useMemo(
+    () =>
+      isSecurityReady && securityEvaluation
+        ? securityEvaluation.results.map((results, index) => ({
+            scope: `${approvalId}:${securityEvaluation.version}:${index}`,
+            results,
+          }))
+        : [],
+    [isSecurityReady, securityEvaluation, approvalId]
+  );
+  const securityGate = getActionSecurityGate(
+    securityGroups,
+    currentTx.processedRules,
+    'transaction'
+  );
+  const { securityLevel, hasUnProcessSecurityResult } = securityGate;
+  const securityBlocked = !isSecurityReady || hasUnProcessSecurityResult;
+  const engineResults = useMemo(
+    () => securityGroups.flatMap((group) => group.results),
+    [securityGroups]
+  );
+  const isMultiActions = preparedActions?.type === 'multi';
+  const multiActionList =
+    preparedActions?.actions.map((action) => action.data) || [];
+  const multiActionRequireDataList =
+    preparedActions?.actions.map((action) => action.requireData) || [];
+  const multiActionEngineResultList = securityGroups.map(
+    (group) => group.results
+  );
+  canResolveSecurityRef.current = () => {
+    const current = useSecurityEngineStore.getState();
+    return (
+      isReady &&
+      isSecurityReady &&
+      preparedActionsRef.current === securityEvaluation?.prepared &&
+      securityEvaluation?.version === evaluationSequence.current &&
+      current.rules === securityEvaluation.rules &&
+      current.userData === securityEvaluation.userData &&
+      !getActionSecurityGate(
+        securityGroups,
+        current.currentTx.processedRules,
+        'transaction'
+      ).hasUnProcessSecurityResult
+    );
+  };
+  const invalidateSecurity = () => {
+    evaluationSequence.current += 1;
+    canResolveSecurityRef.current = () => false;
+    preparedActionsRef.current = null;
+    setPreparedActions(null);
+    setSecurityEvaluation(null);
+    setSecurityError(false);
+    securityEngine.resetCurrentTx();
+  };
+  const executeSecurityEngine = () => {
+    evaluationSequence.current += 1;
+    canResolveSecurityRef.current = () => false;
+    setSecurityEvaluation(null);
+    setSecurityError(false);
+    setSecurityReload((value) => value + 1);
+  };
 
   const isGasTopUp = tx.to?.toLowerCase() === GAS_TOP_UP_ADDRESS.toLowerCase();
   const isGasAccountTopUpFlow =
@@ -1143,27 +1137,58 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
     autoSwitchKey: gasMethodScopeKey,
   });
 
-  useEffect(() => {
-    const hasCustomRPC = async () => {
-      if (chain?.enum) {
-        const b = await wallet.hasCustomRPC(chain?.enum);
-        if (b) {
-          setGasLessFailedReason(
-            t('page.signFooterBar.gasless.customRpcUnavailableTip')
-          );
-        }
-        setNoCustomRPC(!b);
-      }
-    };
-    hasCustomRPC();
-  }, [chain?.enum]);
+  const loadLatestBlock = () =>
+    wallet
+      .requestETHRpc<BlockInfo>(
+        {
+          method: 'eth_getBlockByNumber',
+          params: ['latest', false],
+        },
+        chain.serverId
+      )
+      .catch(() => null);
 
-  const explainTx = async (address: string) => {
+  const explainTx = async (address: string, detailEpoch: number) => {
+    const shouldCalculateGasLimit =
+      !(tx.gas && origin === INTERNAL_REQUEST_ORIGIN) && !gasLimit;
+    const preparedBlock = shouldCalculateGasLimit
+      ? preparedBlockPromiseRef.current || loadLatestBlock()
+      : undefined;
+    preparedBlockPromiseRef.current = null;
     let recommendNonce = updateNonce ? '0x0' : tx.nonce || '0x0';
+    // Don't block explain on requests whose results canUsePreparation is
+    // already guaranteed to discard - getSignTxPreparation awaits every
+    // prepared request, including ones the fallback path has raced past.
+    const preparation =
+      signTxPreparationId && preparationGasReadyRef.current
+        ? await wallet.getSignTxPreparation(signTxPreparationId)
+        : null;
+    // Only trust the preparation when its nonce actually resolved and it was
+    // computed for the same nonce/account path this explain is taking -
+    // otherwise the other prepared results may have been built against a
+    // fallback nonce that no longer matches the nonce fetched below.
+    const canUsePreparation =
+      preparationGasReadyRef.current &&
+      preparation?.recommendNonce !== undefined &&
+      (updateNonce || preparation.recommendNonce === tx.nonce) &&
+      !isGnosisAccount &&
+      !isCoboArugsAccount;
+    const prepared = canUsePreparation ? preparation : undefined;
+    const preparedRecommendNonce = prepared?.recommendNonce;
+    const preparedPendingTxList = prepared?.pendingTxList;
+    const preparedParseTx = prepared?.parseTx;
+    const preparedPreExecTx = prepared?.preExecTx;
+    if (preparedRecommendNonce !== undefined) {
+      recommendNonce = preparedRecommendNonce;
+    }
+    let shouldSetRecommendNonce = false;
     if (!isGnosisAccount && !isCoboArugsAccount) {
       try {
         if (updateNonce) {
-          if (recommendNoncePromiseRef.current) {
+          if (preparedRecommendNonce !== undefined) {
+            // Reuse the background preparation instead of starting a second nonce request.
+            recommendNoncePromiseRef.current = null;
+          } else if (recommendNoncePromiseRef.current) {
             recommendNonce = (await recommendNoncePromiseRef.current) || '0x0';
             recommendNoncePromiseRef.current = null;
           } else {
@@ -1178,182 +1203,189 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
             });
           }
         }
-        setRecommendNonce(recommendNonce);
+        shouldSetRecommendNonce = true;
       } catch (e) {
         if (await wallet.hasCustomRPC(chain.enum)) {
-          triggerCustomRPCErrorModal();
+          if (explainEpochRef.current === detailEpoch) {
+            triggerCustomRPCErrorModal();
+          }
         }
       }
     }
-    if (updateNonce && !isGnosisAccount && !isCoboArugsAccount) {
-      setRealNonce(recommendNonce);
-    } // do not overwrite nonce if from === to(cancel transaction)
+    if (explainEpochRef.current !== detailEpoch) {
+      return;
+    }
     const explainNonce = (updateNonce ? recommendNonce : tx.nonce) || '0x1';
     const delegateCall = isGnosisAccount
       ? !!params?.data?.[0]?.operation
       : false;
 
-    const parseTxPromise = wallet.openapi.parseTx({
-      chainId: chain.serverId,
-      tx: omit(
-        {
-          ...tx,
-          gas: '0x0',
-          nonce: explainNonce,
-          value: tx.value || '0x0',
-          // todo
-          to: tx.to || '',
-          type: is7702Tx(tx) ? 4 : support1559 ? 2 : undefined,
-          authorizationList:
-            params?.$ctx?.eip7702RevokeAuthorization ||
-            authorizationList?.map((e) => [
-              new BigNumber(e.chainId).toNumber(),
-              e.address,
-              new BigNumber(e.nonce).toNumber(),
-            ]),
-        },
-        !enable7702 ? ['authorizationList'] : []
-      ),
-      origin: origin || '',
-      addr: address,
-    });
+    const parseTxPromise = preparedParseTx
+      ? Promise.resolve(preparedParseTx)
+      : wallet.openapi.parseTx(
+          buildParseTxRequest({
+            tx,
+            chainId: chain.serverId,
+            nonce: explainNonce,
+            origin: origin || '',
+            addr: address,
+            support1559,
+            enable7702,
+            authorizationList:
+              params?.$ctx?.eip7702RevokeAuthorization || authorizationList,
+          })
+        );
+    const parseTxResultPromise = settle(parseTxPromise);
+    const cexInfoResultPromiseListPromise = parseTxResultPromise.then(
+      (result) => {
+        if ('error' in result || explainEpochRef.current !== detailEpoch) {
+          return [];
+        }
+        const { action } = result.value;
+        const actions =
+          action?.type === 'multi_actions'
+            ? (action.data as MultiAction)
+            : [action];
+        return actions.map((item) =>
+          settle(
+            getCexInfo(
+              item?.type === 'send_token'
+                ? (item.data as SendAction)?.to || ''
+                : '',
+              wallet
+            )
+          )
+        );
+      }
+    );
 
-    const pendingTxListPromise = getPendingTxs({
-      recommendNonce,
-      wallet,
-      address,
-      chainId: tx.chainId,
-    });
-
-    const res = await wallet.openapi.preExecTx({
-      tx: {
-        ...tx,
-        nonce: explainNonce, // set a mock nonce for explain if dapp not set it
-        data: tx.data,
-        value: tx.value || '0x0',
-        gas: tx.gas || '', // set gas limit if dapp not set
-      },
-      origin: origin || '',
-      address,
-      updateNonce,
-      pending_tx_list: await pendingTxListPromise,
-      delegate_call: delegateCall,
-    });
-
-    let estimateGas = 0;
-    if (res.gas.success) {
-      estimateGas = res.gas.gas_limit || res.gas.gas_used;
+    const res = preparedPreExecTx
+      ? preparedPreExecTx
+      : await wallet.openapi.preExecTx(
+          buildPreExecTxRequest({
+            tx,
+            nonce: explainNonce,
+            origin: origin || '',
+            address,
+            updateNonce,
+            pendingTxList:
+              preparedPendingTxList ??
+              (await getPendingTxs({
+                recommendNonce,
+                wallet,
+                address,
+                chainId: tx.chainId,
+              })),
+            delegateCall,
+          })
+        );
+    if (explainEpochRef.current !== detailEpoch) {
+      return;
     }
-    const { gas: gasRaw, needRatio, gasUsed } = await wallet.getRecommendGas({
-      gasUsed: res.gas.gas_used,
-      gas: estimateGas,
-      tx,
-      chainId,
-    });
-    const gas = new BigNumber(gasRaw);
-    setGasUsed(gasUsed);
-    setRecommendGasLimit(`0x${gas.toString(16)}`);
-    if (tx.gas && origin === INTERNAL_REQUEST_ORIGIN) {
-      setGasLimit(intToHex(Number(tx.gas))); // use origin gas as gasLimit when tx is an internal tx with gasLimit(i.e. for SendMax native token)
-    } else if (!gasLimit) {
-      const { gasLimit, recommendGasLimitRatio } = await calcGasLimit({
-        chain,
-        tx,
-        gas,
-        selectedGas,
-        nativeTokenBalance,
-        explainTx: res,
-        needRatio,
-        wallet,
-        gasTokenDecimals: gasToken.decimals || 18,
-        checkTxValueInBalance,
-      });
-      setGasLimit(gasLimit);
-      setRecommendGasLimitRatio(recommendGasLimitRatio);
-    }
-    setTxDetail(res);
-
-    setPreprocessSuccess(res.pre_exec.success);
-
-    const actionData = await parseTxPromise;
-    logId.current = actionData.log_id;
-    actionType.current = actionData?.action?.type || '';
-
-    let parsed: ParsedTransactionActionData, requiredData: ActionRequireData;
-    if (actionData.action?.type === 'multi_actions') {
-      const actions = actionData.action.data as MultiAction;
-      const parsedActions = actions.map((action) =>
-        parseAction({
+    const actionSecurityStatePromise = (async () => {
+      const parseTxResult = await parseTxResultPromise;
+      if ('error' in parseTxResult) {
+        throw parseTxResult.error;
+      }
+      const actionData = parseTxResult.value;
+      const cexInfoResultPromiseList = await cexInfoResultPromiseListPromise;
+      const getActionRequiredDataOptions = async (
+        parsed: ParsedTransactionActionData,
+        index: number
+      ) => {
+        const cexInfoResult = await cexInfoResultPromiseList[index];
+        if ('error' in cexInfoResult) {
+          throw cexInfoResult.error;
+        }
+        return {
           type: 'transaction',
-          data: action,
-          balanceChange: res.balance_change,
+          actionData: parsed,
+          contractCall: actionData.contract_call,
+          chainId: chain.serverId,
+          cex: cexInfoResult.value,
+          sender: address,
+          walletProvider: {
+            ethRpc: wallet.requestETHRpc,
+            findChain,
+            ALIAS_ADDRESS,
+            hasPrivateKeyInWallet: wallet.hasPrivateKeyInWallet,
+            hasAddress: wallet.hasAddress,
+            getWhitelist: wallet.getWhitelist,
+            isWhitelistEnabled: wallet.isWhitelistEnabled,
+            getPendingTxsByNonce: wallet.getPendingTxsByNonce,
+          },
           tx: {
             ...tx,
             gas: '0x0',
             nonce: explainNonce,
             value: tx.value || '0x0',
           },
-          preExecVersion: res.pre_exec_version,
-          gasUsed: res.gas.gas_used,
-          sender: tx.from,
-        })
-      );
-      const requireDataList = await Promise.all(
-        parsedActions.map(async (item) => {
-          const cexInfo = await getCexInfo(item.send?.to || '', wallet);
-          return fetchActionRequiredData({
+          apiProvider: isTestnet(chain.serverId)
+            ? ((wallet.fakeTestnetOpenapi as unknown) as any)
+            : wallet.openapi,
+        } as const;
+      };
+      const loadActionRequiredData = async (
+        parsed: ParsedTransactionActionData,
+        index: number
+      ) =>
+        fetchActionRequiredData(
+          await getActionRequiredDataOptions(parsed, index)
+        );
+      const formatActionSecurityContext = (
+        parsed: ParsedTransactionActionData,
+        requiredData: ActionRequireData
+      ) =>
+        formatSecurityEngineContext({
+          type: 'transaction',
+          actionData: parsed,
+          requireData: requiredData,
+          chainId: chain.serverId,
+          isTestnet: isTestnet(chain.serverId),
+          provider: {
+            getTimeSpan,
+            hasAddress: wallet.hasAddress,
+          },
+        });
+
+      if (actionData.action?.type === 'multi_actions') {
+        const actions = actionData.action.data as MultiAction;
+        if (!actions.length) throw new Error('Empty transaction action batch');
+        const parsedActions = actions.map((action) =>
+          parseAction({
             type: 'transaction',
-            actionData: item,
-            contractCall: actionData.contract_call,
-            chainId: chain.serverId,
-            sender: address,
-            walletProvider: {
-              findChain,
-              ALIAS_ADDRESS,
-              hasPrivateKeyInWallet: wallet.hasPrivateKeyInWallet,
-              hasAddress: wallet.hasAddress,
-              getWhitelist: wallet.getWhitelist,
-              isWhitelistEnabled: wallet.isWhitelistEnabled,
-              getPendingTxsByNonce: wallet.getPendingTxsByNonce,
-            },
-            cex: cexInfo,
+            data: action,
+            balanceChange: res.balance_change,
             tx: {
               ...tx,
               gas: '0x0',
               nonce: explainNonce,
               value: tx.value || '0x0',
             },
-            apiProvider: isTestnet(chain.serverId)
-              ? wallet.testnetOpenapi
-              : wallet.openapi,
-          });
-        })
-      );
-      const ctxList = await Promise.all(
-        requireDataList.map((requireData, index) => {
-          return formatSecurityEngineContext({
-            type: 'transaction',
-            actionData: parsedActions[index],
-            requireData,
-            chainId: chain.serverId,
-            isTestnet: isTestnet(chain.serverId),
-            provider: {
-              getTimeSpan,
-              hasAddress: wallet.hasAddress,
-            },
-          });
-        })
-      );
-      const resultList = await Promise.all(
-        ctxList.map((ctx) => executeEngine(ctx))
-      );
-      parsed = parsedActions[0];
-      requiredData = requireDataList[0];
-      setMultiActionList(parsedActions);
-      setMultiActionRequireDataList(requireDataList);
-      setMultiActionEngineResultList(resultList);
-    } else {
-      parsed = parseAction({
+            preExecVersion: res.pre_exec_version,
+            gasUsed: res.gas.gas_used,
+            sender: tx.from,
+          })
+        );
+        const requireDataList = await Promise.all(
+          parsedActions.map(loadActionRequiredData)
+        );
+        const ctxList = await Promise.all(
+          requireDataList.map((requiredData, index) =>
+            formatActionSecurityContext(parsedActions[index], requiredData)
+          )
+        );
+        return {
+          type: 'multi' as const,
+          actionData,
+          parsed: parsedActions[0],
+          parsedActions,
+          requireDataList,
+          ctxList,
+        };
+      }
+
+      const parsed = parseAction({
         type: 'transaction',
         data: actionData.action,
         balanceChange: res.balance_change,
@@ -1367,52 +1399,108 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
         gasUsed: res.gas.gas_used,
         sender: tx.from,
       });
-      const cexInfo = await getCexInfo(parsed.send?.to || '', wallet);
-      requiredData = await fetchActionRequiredData({
-        type: 'transaction',
-        actionData: parsed,
-        contractCall: actionData.contract_call,
-        chainId: chain.serverId,
-        cex: cexInfo,
-        sender: address,
-        walletProvider: {
-          findChain,
-          ALIAS_ADDRESS,
-          hasPrivateKeyInWallet: wallet.hasPrivateKeyInWallet,
-          hasAddress: wallet.hasAddress,
-          getWhitelist: wallet.getWhitelist,
-          isWhitelistEnabled: wallet.isWhitelistEnabled,
-          getPendingTxsByNonce: wallet.getPendingTxsByNonce,
-        },
-        tx: {
-          ...tx,
-          gas: '0x0',
-          nonce: explainNonce,
-          value: tx.value || '0x0',
-        },
-        apiProvider: isTestnet(chain.serverId)
-          ? wallet.testnetOpenapi
-          : wallet.openapi,
+      const options = await getActionRequiredDataOptions(parsed, 0);
+      const requiredData = await fetchActionRequiredData(options);
+      const ctx = await formatActionSecurityContext(parsed, requiredData);
+      return {
+        type: 'single' as const,
+        actionData,
+        parsed,
+        requiredData,
+        ctx,
+      };
+    })();
+    const actionSecurityStateResultPromise = settle(actionSecurityStatePromise);
+
+    let estimateGas = 0;
+    if (res.gas.success) {
+      estimateGas = res.gas.gas_limit || res.gas.gas_used;
+    }
+    const { gas: gasRaw, needRatio, gasUsed } = await wallet.getRecommendGas({
+      gasUsed: res.gas.gas_used,
+      gas: estimateGas,
+      tx,
+      chainId,
+    });
+    const gas = new BigNumber(gasRaw);
+    let nextGasLimit: string | undefined;
+    let nextRecommendGasLimitRatio: number | undefined;
+    if (tx.gas && origin === INTERNAL_REQUEST_ORIGIN) {
+      nextGasLimit = intToHex(Number(tx.gas)); // use origin gas as gasLimit when tx is an internal tx with gasLimit(i.e. for SendMax native token)
+    } else if (shouldCalculateGasLimit) {
+      const { gasLimit, recommendGasLimitRatio } = await calcGasLimit({
+        chain,
+        tx,
+        gas,
+        selectedGas,
+        nativeTokenBalance,
+        explainTx: res,
+        needRatio,
+        wallet,
+        preparedBlock,
+        gasTokenDecimals: gasToken.decimals || 18,
+        checkTxValueInBalance,
       });
-      const ctx = await formatSecurityEngineContext({
-        type: 'transaction',
-        actionData: parsed,
-        requireData: requiredData,
-        chainId: chain.serverId,
-        isTestnet: isTestnet(chain.serverId),
-        provider: {
-          getTimeSpan,
-          hasAddress: wallet.hasAddress,
-        },
-      });
-      securityEngineCtx.current = ctx;
-      const result = await executeEngine(ctx);
-      setEngineResults(result);
-      setActionData(parsed);
-      setActionRequireData(requiredData);
+      nextGasLimit = gasLimit;
+      nextRecommendGasLimitRatio = recommendGasLimitRatio;
     }
 
+    const actionSecurityStateResult = await actionSecurityStateResultPromise;
+    if ('error' in actionSecurityStateResult) {
+      throw actionSecurityStateResult.error;
+    }
+    const actionSecurityState = actionSecurityStateResult.value;
+    const { actionData, parsed } = actionSecurityState;
+    const requiredData =
+      actionSecurityState.type === 'multi'
+        ? actionSecurityState.requireDataList[0]
+        : actionSecurityState.requiredData;
+
     const approval = await getApproval();
+    if (
+      explainEpochRef.current !== detailEpoch ||
+      !approval ||
+      approval.id !== approvalId ||
+      approval.data.approvalComponent !== 'SignTx'
+    ) {
+      return;
+    }
+
+    if (shouldSetRecommendNonce) {
+      setRecommendNonce(recommendNonce);
+    }
+    if (updateNonce && !isGnosisAccount && !isCoboArugsAccount) {
+      setRealNonce(recommendNonce);
+    } // do not overwrite nonce if from === to(cancel transaction)
+    setGasUsed(gasUsed);
+    setRecommendGasLimit(`0x${gas.toString(16)}`);
+    if (nextGasLimit !== undefined) {
+      setGasLimit(nextGasLimit);
+    }
+    if (nextRecommendGasLimitRatio !== undefined) {
+      setRecommendGasLimitRatio(nextRecommendGasLimitRatio);
+    }
+    setTxDetail(res);
+    setPreprocessSuccess(res.pre_exec.success);
+    logId.current = actionData.log_id;
+    actionType.current = actionData?.action?.type || '';
+    const actions =
+      actionSecurityState.type === 'multi'
+        ? actionSecurityState.parsedActions.map((data, index) => ({
+            data,
+            requireData: actionSecurityState.requireDataList[index],
+            ctx: actionSecurityState.ctxList[index],
+          }))
+        : [
+            {
+              data: parsed,
+              requireData: actionSecurityState.requiredData,
+              ctx: actionSecurityState.ctx,
+            },
+          ];
+    securityEngineCtx.current =
+      actionSecurityState.type === 'single' ? actionSecurityState.ctx : null;
+    setPreparedActions({ type: actionSecurityState.type, actions });
 
     approval.signingTxId &&
       (await wallet.updateSigningTx(approval.signingTxId, {
@@ -1432,11 +1520,15 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
   };
 
   const explain = async () => {
+    const detailEpoch = ++explainEpochRef.current;
+    invalidateSecurity();
     try {
       setIsReady(false);
-      await explainTx(currentAccount.address);
+      await explainTx(currentAccount.address, detailEpoch);
+      if (explainEpochRef.current !== detailEpoch) return;
       setIsReady(true);
     } catch (e: any) {
+      if (explainEpochRef.current !== detailEpoch) return;
       Modal.error({
         title: 'Error',
         content: e.message || JSON.stringify(e),
@@ -1446,12 +1538,24 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
     }
   };
 
+  const canSubmitCurrentApproval = async () => {
+    if (!isCurrentSecurityEvaluation()) return false;
+    const approval = await getApproval();
+    return (
+      !!approval &&
+      approval.id === approvalId &&
+      approval.data.approvalComponent === 'SignTx' &&
+      isCurrentSecurityEvaluation()
+    );
+  };
+
   const handleGnosisConfirm = async (account: Account) => {
     if (!safeInfo) return;
     setGnosisFooterBarVisible(true);
     setCurrentGnosisAdmin(account);
   };
   const handleGnosisSign = async () => {
+    if (!(await canSubmitCurrentApproval())) return;
     const account = currentGnosisAdmin;
     if (!safeInfo || !account) {
       return;
@@ -1497,6 +1601,7 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
       throw new Error('Failed to generate typed data');
     }
 
+    if (!(await canSubmitCurrentApproval())) return;
     if (WaitingSignMessageComponent[account.type]) {
       wallet.signTypedDataWithUI(
         account.type,
@@ -1505,6 +1610,8 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
         {
           brandName: account.brandName,
           version: 'V4',
+          sourceApprovalId: approvalId,
+          approvalComponent: WaitingSignMessageComponent[account.type],
         }
       );
       if (isSend) {
@@ -1516,6 +1623,7 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
         address: account.address,
         data: [account.address, JSON.stringify(typedData)],
         isGnosis: true,
+        sourceApprovalId: approvalId,
         account: account,
         $account: account,
         extra: {
@@ -1568,7 +1676,7 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
   });
 
   const handleCoboArugsConfirm = async (account: Account) => {
-    if (!coboArgusInfo) return;
+    if (!coboArgusInfo || !(await canSubmitCurrentApproval())) return;
 
     wallet.reportStats('signTransaction', {
       type: KEYRING_TYPE.CoboArgusKeyring,
@@ -1608,6 +1716,23 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
     }
 
     const approval = await getApproval();
+    if (
+      !approval ||
+      approval.id !== approvalId ||
+      approval.data.approvalComponent !== 'SignTx' ||
+      !isCurrentSecurityEvaluation()
+    ) {
+      if (!approval || approval.id === approvalId) {
+        const current = await wallet.getCurrentAccount();
+        if (
+          current?.address === account.address &&
+          current.type === account.type
+        ) {
+          await wallet.coboSafeResetCurrentAccount();
+        }
+      }
+      return;
+    }
 
     wallet.sendRequest({
       $ctx: params.$ctx,
@@ -1640,7 +1765,7 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
   const { activeApprovalPopup } = useCommonPopupView();
   const invokeEnterPassphrase = useEnterPassphraseModal('address');
   const handleAllow = async () => {
-    if (!selectedGas) return;
+    if (!selectedGas || !(await canSubmitCurrentApproval())) return;
 
     if (activeApprovalPopup()) {
       return;
@@ -1736,6 +1861,13 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
       delete submitTransaction.validAfter;
     }
     const approval = await getApproval();
+    if (
+      !approval ||
+      approval.id !== approvalId ||
+      approval.data.approvalComponent !== 'SignTx' ||
+      !isCurrentSecurityEvaluation()
+    )
+      return;
     gaEvent('allow');
 
     approval.signingTxId &&
@@ -1923,6 +2055,8 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
   };
 
   const handleCancel = () => {
+    explainEpochRef.current += 1;
+    invalidateSecurity();
     gaEvent('cancel');
     rejectApproval('User rejected the request.');
   };
@@ -1932,6 +2066,9 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
   };
 
   const handleTxChange = (obj: Record<string, any>) => {
+    explainEpochRef.current += 1;
+    invalidateSecurity();
+    setIsReady(false);
     setTx({
       ...tx,
       ...obj,
@@ -1953,38 +2090,45 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
     return list;
   };
 
-  const loadGasMedian = async (chain: Chain) => {
-    const { median } = await wallet.openapi.gasPriceStats(chain.serverId);
-    setGasPriceMedian(median);
-    return median;
-  };
+  const loadGasMedian = useMemoizedFn(() => {
+    if (gasPriceMedian !== null || gasPriceMedianRequestRef.current) {
+      return;
+    }
+    gasPriceMedianRequestRef.current = wallet.openapi
+      .gasPriceStats(chain.serverId)
+      .then(({ median }) => {
+        setGasPriceMedian(median);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        gasPriceMedianRequestRef.current = null;
+      });
+  });
 
   const checkCanProcess = async () => {
-    const session = params.session;
-    const site = await wallet.getConnectedSite(session.origin);
-
     if (currentAccount.type === KEYRING_TYPE.WatchAddressKeyring) {
       setCanProcess(false);
       setCantProcessReason(
         <div>{t('page.signTx.canOnlyUseImportedAddress')}</div>
       );
+      return;
     }
-    if (currentAccount.type === KEYRING_TYPE.GnosisKeyring || isGnosis) {
-      const networkIds = await wallet.getGnosisNetworkIds(
-        currentAccount.address
+    if (currentAccount.type !== KEYRING_TYPE.GnosisKeyring && !isGnosis) {
+      return;
+    }
+    const networkIds = await wallet.getGnosisNetworkIds(currentAccount.address);
+    const site = chainId
+      ? undefined
+      : await wallet.getConnectedSite(params.session.origin);
+    const gnosisChainId = chainId || (site && CHAINS[site.chain]?.id);
+    if (!gnosisChainId || !networkIds.includes(gnosisChainId.toString())) {
+      setCanProcess(false);
+      setCantProcessReason(
+        <div className="flex items-center gap-6">
+          <img src={IconGnosis} alt="" className="w-[24px] shrink-0" />
+          {t('page.signTx.multiSigChainNotMatch')}
+        </div>
       );
-
-      if (
-        !networkIds.includes((chainId || CHAINS[site!.chain].id).toString())
-      ) {
-        setCanProcess(false);
-        setCantProcessReason(
-          <div className="flex items-center gap-6">
-            <img src={IconGnosis} alt="" className="w-[24px] shrink-0" />
-            {t('page.signTx.multiSigChainNotMatch')}
-          </div>
-        );
-      }
     }
   };
 
@@ -2126,34 +2270,34 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
   };
 
   const handleIgnoreAllRules = () => {
-    dispatch.securityEngine.processAllRules(
-      engineResults.map((result) => result.id)
-    );
+    if (!isSecurityReady) return;
+    securityEngine.processAllRules([
+      ...currentTx.processedRules,
+      ...securityGate.pendingRuleKeys,
+    ]);
   };
 
   const handleIgnoreRule = (id: string) => {
-    dispatch.securityEngine.processRule(id);
-    dispatch.securityEngine.closeRuleDrawer();
+    securityEngine.processRule(id, currentTx.ruleDrawer.selectRule?.scope);
+    securityEngine.closeRuleDrawer();
   };
 
   const handleUndoIgnore = (id: string) => {
-    dispatch.securityEngine.unProcessRule(id);
-    dispatch.securityEngine.closeRuleDrawer();
+    securityEngine.unProcessRule(id, currentTx.ruleDrawer.selectRule?.scope);
+    securityEngine.closeRuleDrawer();
   };
 
   const handleRuleEnableStatusChange = async (id: string, value: boolean) => {
-    if (currentTx.processedRules.includes(id)) {
-      dispatch.securityEngine.unProcessRule(id);
-    }
+    securityEngine.unProcessRule(id, currentTx.ruleDrawer.selectRule?.scope);
     await wallet.ruleEnableStatusChange(id, value);
-    dispatch.securityEngine.init();
+    securityEngine.init();
   };
 
   const handleRuleDrawerClose = (update: boolean) => {
     if (update) {
       executeSecurityEngine();
     }
-    dispatch.securityEngine.closeRuleDrawer();
+    securityEngine.closeRuleDrawer();
   };
 
   const { run: reportLogId } = useDebounceFn(
@@ -2217,16 +2361,38 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
   });
 
   const init = async () => {
-    try {
-      await wallet.syncDefaultRPC();
-    } catch (error) {
+    const syncDefaultRPCPromise = wallet.syncDefaultRPC().catch((error) => {
       console.error('before submit sync default rpc error', error);
+    });
+    if (!(tx.gas && origin === INTERNAL_REQUEST_ORIGIN) && !gasLimit) {
+      preparedBlockPromiseRef.current = syncDefaultRPCPromise.then(
+        loadLatestBlock
+      );
     }
-    dispatch.securityEngine.init();
-    dispatch.securityEngine.resetCurrentTx();
+    const hasCustomRPCResultPromise = wallet.hasCustomRPC(chain.enum).then(
+      (value) => {
+        setNoCustomRPC(!value);
+        if (value) {
+          setGasLessFailedReason(
+            t('page.signFooterBar.gasless.customRpcUnavailableTip')
+          );
+        }
+        return { value };
+      },
+      (error) => ({ error })
+    );
+    securityEngine.init();
+    securityEngine.resetCurrentTx();
     checkBlockedAddress();
-    loadGasMedian(chain);
-    if (!isGnosisAccount && !isCoboArugsAccount) {
+    const isGnosisAccountType =
+      currentAccount.type === KEYRING_TYPE.GnosisKeyring;
+    const isCoboArgusAccountType =
+      currentAccount.type === KEYRING_TYPE.CoboArgusKeyring;
+    if (
+      !isGnosisAccountType &&
+      !isCoboArgusAccountType &&
+      !signTxPreparationId
+    ) {
       recommendNoncePromiseRef.current = wallet.getRecommendNonce({
         from: tx.from,
         chainId,
@@ -2237,17 +2403,35 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
           | undefined,
       });
     }
-    const lastTimeGasPromise = wallet.getLastTimeGasSelection(chainId);
-    try {
-      const is1559 =
-        support1559 &&
-        SUPPORT_1559_KEYRING_TYPE.includes(currentAccount.type as any);
-      setIsLedger(currentAccount?.type === KEYRING_CLASS.HARDWARE.LEDGER);
-      setIsHardware(
-        !!Object.values(HARDWARE_KEYRING_TYPES).find(
-          (item) => item.type === currentAccount.type
-        )
-      );
+    const is1559 =
+      support1559 &&
+      SUPPORT_1559_KEYRING_TYPE.includes(currentAccount.type as any);
+    const preparationGasPromise = signTxPreparationId
+      ? wallet.getSignTxPreparationGas(signTxPreparationId).catch(() => null)
+      : Promise.resolve(null);
+    const loadInitialGasSelection = () =>
+      preparationGasPromise.then(async (prepared) => {
+        if (prepared) {
+          preparationGasReadyRef.current = true;
+          return prepared;
+        }
+        const lastTimeGas = await wallet.getLastTimeGasSelection(chainId);
+        return prepareInitialGasSelection({
+          tx,
+          chainId,
+          support1559: is1559,
+          enable7702,
+          lastTimeGas,
+          loadGasMarket: (customGasPrice) =>
+            loadGasMarket(chain, customGasPrice),
+          isSpeedUp,
+          isCancel,
+          isSend,
+          isSwap,
+          isBridge,
+        });
+      });
+    const loadInitialGasTokenState = async () => {
       try {
         const balanceInfo = await getGasTokenBalance({
           wallet,
@@ -2284,12 +2468,37 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
           }
         }
       } catch (e) {
-        if (await wallet.hasCustomRPC(chain.enum)) {
+        const hasCustomRPCResult = await hasCustomRPCResultPromise;
+        if ('error' in hasCustomRPCResult) {
+          throw hasCustomRPCResult.error;
+        }
+        if (hasCustomRPCResult.value) {
           triggerCustomRPCErrorModal();
         }
       } finally {
         setTempoGasTokenLoading(false);
       }
+    };
+    try {
+      setIsLedger(currentAccount?.type === KEYRING_CLASS.HARDWARE.LEDGER);
+      setIsHardware(
+        !!Object.values(HARDWARE_KEYRING_TYPES).find(
+          (item) => item.type === currentAccount.type
+        )
+      );
+      const initialGasSelectionResultPromise = settle(
+        loadInitialGasSelection()
+      );
+      let accountInitPromise = Promise.resolve();
+      if (isGnosisAccountType) {
+        setIsGnosisAccount(true);
+        accountInitPromise = getSafeInfo();
+      } else if (isCoboArgusAccountType) {
+        setIsCoboArugsAccount(true);
+        accountInitPromise = getCoboDelegates();
+      }
+      const accountInitResultPromise = settle(accountInitPromise);
+      await Promise.all([syncDefaultRPCPromise, loadInitialGasTokenState()]);
 
       matomoRequestEvent({
         category: 'Transaction',
@@ -2301,78 +2510,22 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
         event_category: 'Transaction',
       });
 
-      if (currentAccount.type === KEYRING_TYPE.GnosisKeyring) {
-        setIsGnosisAccount(true);
-        await getSafeInfo();
+      const accountInitResult = await accountInitResultPromise;
+      if ('error' in accountInitResult) {
+        throw accountInitResult.error;
       }
-      if (currentAccount.type === KEYRING_TYPE.CoboArgusKeyring) {
-        setIsCoboArugsAccount(true);
-        await getCoboDelegates();
-      }
-
       checkCanProcess();
-      const lastTimeGas: ChainGas | null = await lastTimeGasPromise;
-      let customGasPrice = 0;
-      let useCachedCustomGasPrice = false;
-      if (lastTimeGas?.lastTimeSelect === 'gasPrice' && lastTimeGas.gasPrice) {
-        // use cached gasPrice if exist
-        customGasPrice = lastTimeGas.gasPrice;
-        useCachedCustomGasPrice = true;
-      }
-      if (
-        isSpeedUp ||
-        isCancel ||
-        ((isSend || isSwap || isBridge) && tx.gasPrice)
-      ) {
-        // use gasPrice set by dapp when it's a speedup or cancel tx
-        customGasPrice = parseInt(tx.gasPrice!);
-        useCachedCustomGasPrice = false;
-      }
-      let gasList = await loadGasMarket(chain, customGasPrice);
-      let gas: GasLevel | null = null;
 
-      if (
-        ((isSend || isSwap || isBridge) && customGasPrice) ||
-        isSpeedUp ||
-        isCancel ||
-        lastTimeGas?.lastTimeSelect === 'gasPrice'
-      ) {
-        gas = gasList.find((item) => item.level === 'custom')!;
-      } else if (
-        lastTimeGas?.lastTimeSelect &&
-        lastTimeGas?.lastTimeSelect === 'gasLevel'
-      ) {
-        const target = gasList.find(
-          (item) => item.level === lastTimeGas?.gasLevel
-        )!;
-        if (target) {
-          gas = target;
-        } else {
-          gas = gasList.find((item) => item.level === 'normal')!;
+      const initialGasSelection = await initialGasSelectionResultPromise.then(
+        (result) => {
+          if ('error' in result) {
+            throw result.error;
+          }
+          return result.value;
         }
-      } else {
-        // no cache, use the fast level in gasMarket
-        gas = gasList.find((item) => item.level === 'normal')!;
-      }
-      const cachedMaxPriorityFee =
-        useCachedCustomGasPrice && gas?.level === 'custom'
-          ? getCachedMaxPriorityFee(lastTimeGas, customGasPrice)
-          : undefined;
-      if (typeof cachedMaxPriorityFee === 'number') {
-        gas = {
-          ...gas,
-          priority_price: cachedMaxPriorityFee,
-        };
-        gasList = gasList.map((item) =>
-          item.level === 'custom' ? (gas as GasLevel) : item
-        );
-      }
-      const fee = calcMaxPriorityFee(
-        gasList,
-        gas,
-        chainId,
-        isCancel || isSpeedUp
       );
+      const { gasList, gas, fee, tx: selectedTx } = initialGasSelection;
+      setGasList(gasList);
 
       wallet.reportStats('createTransaction', {
         type: currentAccount.brandName,
@@ -2390,27 +2543,29 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
 
       setSelectedGas(gas);
       setSupport1559(is1559);
-      if (is1559) {
-        setTx((prev) => {
-          const is7702 = is7702Tx(prev as any);
-          return omit(
-            {
-              ...prev,
-              ...convertLegacyTo1559({
-                ...prev,
-                gasPrice: intToHex(gas!.price),
-              }),
-              authorizationList: (prev as any).authorizationList,
-            },
-            [...(is7702 ? [] : ['authorizationList']), 'gasPrice']
-          ) as any;
-        });
-      } else {
-        setTx((prev) => ({
-          ...prev,
-          gasPrice: intToHex(gas!.price),
-        }));
-      }
+      // Prepared path: adopt the tx the background pre-executed, so the tx we
+      // render and sign is that exact tx rather than a second construction
+      // that has to agree with it - a silent disagreement would show the user
+      // the asset change of a different transaction. Safe here because
+      // rpcFlow skips preparation for Gnosis and CoboArgus, so getSafeInfo /
+      // getCoboDelegates never run alongside this init, and every other setTx
+      // caller is gated behind isReady.
+      //
+      // Fallback path: there is no background pre-execution to agree with, so
+      // adopting selectedTx buys nothing. Keep transforming the latest tx -
+      // getSafeInfo() does run in this init for Gnosis and fixes a missing or
+      // stale Safe nonce through setTx, and overwriting that would leave
+      // pre-exec simulating the old nonce while the signature uses realNonce.
+      setTx((prev) =>
+        preparationGasReadyRef.current
+          ? selectedTx
+          : (applySelectedGasToTx({
+              tx: prev,
+              gasPrice: intToHex(gas.price),
+              support1559: is1559,
+              enable7702: is7702Tx(prev as any),
+            }) as any)
+      );
       setInited(true);
     } catch (e) {
       Modal.error({
@@ -2458,55 +2613,6 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
     //   }
     // }
   };
-
-  const executeSecurityEngine = async () => {
-    const ctx = await formatSecurityEngineContext({
-      type: 'transaction',
-      actionData: actionData,
-      requireData: actionRequireData,
-      chainId: chain.serverId,
-      isTestnet: isTestnet(chain.serverId),
-      provider: {
-        getTimeSpan,
-        hasAddress: wallet.hasAddress,
-      },
-    });
-    const result = await executeEngine(ctx);
-    setEngineResults(result);
-  };
-
-  const hasUnProcessSecurityResult = useMemo(() => {
-    const { processedRules } = currentTx;
-    const enableResults = engineResults.filter((item) => item.enable);
-    // const hasForbidden = enableResults.find(
-    //   (result) => result.level === Level.FORBIDDEN
-    // );
-    const hasSafe = !!enableResults.find(
-      (result) => result.level === Level.SAFE
-    );
-    const needProcess = enableResults.filter(
-      (result) =>
-        (result.level === Level.DANGER ||
-          result.level === Level.WARNING ||
-          result.level === Level.FORBIDDEN) &&
-        !processedRules.includes(result.id)
-    );
-
-    const trueDanger = needProcess.some(
-      (item) =>
-        ['1016', '1019', '1020', '1021'].includes(item.id) &&
-        item.level === Level.DANGER
-    );
-    if (trueDanger) {
-      return true;
-    }
-    // if (hasForbidden) return true;
-    if (needProcess.length > 0) {
-      return !hasSafe;
-    } else {
-      return false;
-    }
-  }, [engineResults, currentTx]);
 
   useEffect(() => {
     renderStartAt.current = Date.now();
@@ -2624,11 +2730,56 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
   }, [inited, updateId]);
 
   useEffect(() => {
-    executeSecurityEngine();
-  }, [userData, rules]);
+    if (!preparedActions) return;
+    let cancelled = false;
+    const version = ++evaluationSequence.current;
+    setSecurityEvaluation(null);
+    setSecurityError(false);
+    securityEngine.resetCurrentTx();
+    Promise.all(
+      preparedActions.actions.map((action) => executeEngine(action.ctx))
+    )
+      .then((results) => {
+        if (cancelled || evaluationSequence.current !== version) return;
+        if (hasActionSecurityError(results)) {
+          setSecurityError(true);
+          return;
+        }
+        setSecurityEvaluation({
+          prepared: preparedActions,
+          rules,
+          userData,
+          reload: securityReload,
+          version,
+          results,
+        });
+      })
+      .catch((error) => {
+        if (cancelled || evaluationSequence.current !== version) return;
+        Sentry.captureException(error);
+        setSecurityError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [preparedActions, userData, rules, securityReload]);
+
+  useEffect(
+    () => () => {
+      explainEpochRef.current += 1;
+      evaluationSequence.current += 1;
+      canResolveSecurityRef.current = () => false;
+    },
+    []
+  );
 
   useEffect(() => {
-    if (logId.current && isReady && securityEngineCtx.current) {
+    if (
+      logId.current &&
+      isReady &&
+      isSecurityReady &&
+      securityEngineCtx.current
+    ) {
       try {
         const keys = Object.keys(securityEngineCtx.current);
         const key: any = keys[0];
@@ -2652,7 +2803,7 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
         // IGNORE
       }
     }
-  }, [isReady, engineResults]);
+  }, [isReady, isSecurityReady, engineResults]);
 
   useEffect(() => {
     if (scrollRef.current && scrollInfo && scrollRefSize) {
@@ -2667,7 +2818,7 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
   }, [scrollInfo, scrollRefSize]);
 
   return (
-    <>
+    <SecurityEngineScopeProvider scope={securityGroups[0]?.scope}>
       <div
         className={clsx('approval-tx', {
           'pre-process-failed': !preprocessSuccess,
@@ -2676,10 +2827,21 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
       >
         {txDetail && (
           <>
-            {txDetail && (
+            {securityError ? (
+              <div className="py-24 text-center text-r-neutral-body">
+                <p>{t('global.failed')}</p>
+                <button
+                  type="button"
+                  className="mt-8 text-r-blue-default"
+                  onClick={executeSecurityEngine}
+                >
+                  {t('global.refresh')}
+                </button>
+              </div>
+            ) : (
               <TxTypeComponent
                 account={currentAccount}
-                isReady={isReady}
+                isReady={isReady && isSecurityReady}
                 actionData={actionData}
                 actionRequireData={actionRequireData}
                 chain={chain}
@@ -2700,6 +2862,9 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
                         actionList: multiActionList,
                         requireDataList: multiActionRequireDataList,
                         engineResultList: multiActionEngineResultList,
+                        securityScopes: securityGroups.map(
+                          (group) => group.scope
+                        ),
                       }
                     : undefined
                 }
@@ -2790,8 +2955,9 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
               gnosisAccount={currentGnosisAdmin}
               account={currentGnosisAdmin}
               onCancel={handleCancel}
-              // securityLevel={securityLevel}
-              // hasUnProcessSecurityResult={hasUnProcessSecurityResult}
+              securityLevel={securityLevel}
+              hasUnProcessSecurityResult={hasUnProcessSecurityResult}
+              securityBlocked={securityBlocked}
               onSubmit={runHandleGnosisSign}
               enableTooltip={
                 currentGnosisAdmin?.type === KEYRING_TYPE.WatchAddressKeyring
@@ -2896,6 +3062,7 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
                     tempoGasTokenLoading={tempoGasTokenLoading}
                     checkTxValueInBalance={checkTxValueInBalance}
                     gasPriceMedian={gasPriceMedian}
+                    onCustomGasSheetOpen={loadGasMedian}
                     checkGasLevelIsNotEnough={checkGasLevelIsNotEnough}
                   />
                 </div>
@@ -2940,6 +3107,7 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
             gasTipsApprovalUiStyle
             hasUnProcessSecurityResult={hasUnProcessSecurityResult}
             securityLevel={securityLevel}
+            securityBlocked={securityBlocked}
             gnosisAccount={isGnosis ? params.account : undefined}
             account={currentAccount}
             chain={chain}
@@ -2968,7 +3136,7 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
               (isCoboArugsAccount ? !coboArgusInfo : false) ||
               !canProcess ||
               !!checkErrors.find((item) => item.level === 'forbidden') ||
-              hasUnProcessSecurityResult ||
+              securityBlocked ||
               (isGnosisAccount &&
                 new BigNumber(realNonce || 0).isLessThan(safeInfo?.nonce || 0))
             }
@@ -2985,13 +3153,13 @@ const SignTx = ({ params, origin, account: $account }: SignTxProps) => {
       <TokenDetailPopup
         token={tokenDetail.selectToken}
         visible={tokenDetail.popupVisible}
-        onClose={() => dispatch.sign.closeTokenDetailPopup()}
+        onClose={closeTokenDetailPopup}
         canClickToken={false}
         hideOperationButtons
         variant="add"
         account={currentAccount}
       />
-    </>
+    </SecurityEngineScopeProvider>
   );
 };
 

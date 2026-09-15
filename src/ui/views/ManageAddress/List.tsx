@@ -2,7 +2,7 @@ import React from 'react';
 import { DisplayedAccount } from './hooks';
 import { IHighlightedAddress } from '@/background/service/preference';
 import { KEYRING_TYPE } from '@/constant';
-import { IDisplayedAccountWithBalance } from 'ui/models/accountToDisplay';
+import { IDisplayedAccountWithBalance } from '@/ui/state/accountToDisplay';
 import AddressItem from '../AddressManagement/AddressItem';
 import clsx from 'clsx';
 import { useHistory } from 'react-router-dom';
@@ -58,6 +58,7 @@ export const AccountList = ({
         }}
         data={accounts}
         defaultItemHeight={80}
+        increaseViewportBy={800}
         computeItemKey={(_, item) =>
           `${item.address}-${item.type}-${item.brandName}`
         }
@@ -93,7 +94,7 @@ export const AccountList = ({
                 };
 
           return (
-            <div className="address-wrap px-[20px]">
+            <div className="px-[20px] pb-8">
               <AddressItem
                 balance={account.balance}
                 address={account.address}

@@ -1,30 +1,27 @@
-import { MarketData } from '@/ui/models/perps';
+import { MarketData } from '@/ui/state/perps';
 import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
 import { formatUsdValue, splitNumberByStep } from '@/ui/utils';
-import { useMemoizedFn, useRequest } from 'ahooks';
+import { useMemoizedFn } from 'ahooks';
 import { Button, Modal } from 'antd';
 import BigNumber from 'bignumber.js';
 import clsx from 'clsx';
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ReactComponent as RcIconCloseCC } from 'ui/assets/component/close-cc.svg';
 import { DesktopPerpsInput } from '../components/DesktopPerpsInput';
 import { PerpsPositionCard } from '../components/PerpsPositionCard';
 import { usePerpsProPosition } from '../hooks/usePerpsProPosition';
 import { PositionFormatData } from '../components/UserInfoHistory/PositionsInfo';
-import {
-  calculateDistanceToLiquidation,
-  calLiquidationPrice,
-  formatPerpsPct,
-  formatTpOrSlPrice,
-  validatePriceInput,
-} from '../../Perps/utils';
+import { formatTpOrSlPrice, validatePriceInput } from '../../Perps/utils';
 import { PositionSizeInputAndSlider } from '../components/TradingPanel/components/PositionSizeInputAndSlider';
 import { PositionSize } from '../types';
 import stats from '@/stats';
 import { formatPerpsCoin, getStatsReportSide } from '../utils';
 import { PerpsDisplayCoinName } from '../../Perps/components/PerpsDisplayCoinName';
 import { ReactComponent as RcIconReverseArrowDown } from '@/ui/assets/perps/icon-reverse-arrow-down.svg';
+import { useOrderConfirm } from './OrderConfirmProvider';
+import type { OrderConfirmContent } from './OrderConfirmProvider';
+import { ConfirmAmount } from './OrderConfirmLiveValues';
 
 export interface Props {
   visible: boolean;
@@ -141,106 +138,129 @@ const ClosePositionModalContent: React.FC<Omit<Props, 'visible'>> = ({
     handleCloseWithMarketOrder,
   } = usePerpsProPosition();
 
-  const { loading, runAsync: runSubmit } = useRequest(
-    async () => {
-      const isBuy = position.direction === 'Short';
-      const size = new BigNumber(positionSize.amount).toFixed(
-        marketData.szDecimals
-      );
-      if (type === 'limit') {
-        const price = new BigNumber(limitPrice).toFixed(marketData.pxDecimals);
-        await handleOpenLimitOrder({
-          coin: position.coin,
-          dex: marketData.dexId ?? '',
-          isBuy,
-          size,
-          limitPx: price,
-          reduceOnly: true,
-        });
+  const doSubmit = useMemoizedFn(async () => {
+    const isBuy = position.direction === 'Short';
+    const size = new BigNumber(positionSize.amount).toFixed(
+      marketData.szDecimals
+    );
+    if (type === 'limit') {
+      const price = new BigNumber(limitPrice).toFixed(marketData.pxDecimals);
+      await handleOpenLimitOrder({
+        coin: position.coin,
+        dex: marketData.dexId ?? '',
+        isBuy,
+        size,
+        limitPx: price,
+        reduceOnly: true,
+      });
+      stats.report('perpsTradeHistory', {
+        created_at: new Date().getTime(),
+        user_addr: currentPerpsAccount?.address || '',
+        trade_type: 'close limit',
+        leverage: position.leverage.toString(),
+        trade_side: getStatsReportSide(isBuy, true),
+        margin_mode: position.type === 'cross' ? 'cross' : 'isolated',
+        coin: position.coin,
+        size,
+        price,
+        trade_usd_value: new BigNumber(price).times(size).toFixed(2),
+        service_provider: 'hyperliquid',
+        app_version: process.env.release || '0',
+        address_type: currentPerpsAccount?.type || '',
+      });
+    } else if (type === 'market') {
+      const res = await handleCloseWithMarketOrder({
+        coin: position.coin,
+        dex: marketData.dexId ?? '',
+        isBuy,
+        size: new BigNumber(positionSize.amount).toFixed(marketData.szDecimals),
+        midPx: marketPrice,
+        reduceOnly: true,
+      });
+      if (res) {
+        const { totalSz, avgPx } = res;
         stats.report('perpsTradeHistory', {
           created_at: new Date().getTime(),
           user_addr: currentPerpsAccount?.address || '',
-          trade_type: 'close limit',
+          trade_type: 'close market',
           leverage: position.leverage.toString(),
           trade_side: getStatsReportSide(isBuy, true),
           margin_mode: position.type === 'cross' ? 'cross' : 'isolated',
           coin: position.coin,
-          size,
-          price,
-          trade_usd_value: new BigNumber(price).times(size).toFixed(2),
+          size: totalSz,
+          price: avgPx,
+          trade_usd_value: new BigNumber(avgPx).times(totalSz).toFixed(2),
           service_provider: 'hyperliquid',
           app_version: process.env.release || '0',
           address_type: currentPerpsAccount?.type || '',
         });
-      } else if (type === 'market') {
-        const res = await handleCloseWithMarketOrder({
-          coin: position.coin,
-          dex: marketData.dexId ?? '',
-          isBuy,
-          size: new BigNumber(positionSize.amount).toFixed(
-            marketData.szDecimals
-          ),
-          midPx: marketPrice,
-          reduceOnly: true,
-        });
-        if (res) {
-          const { totalSz, avgPx } = res;
-          stats.report('perpsTradeHistory', {
-            created_at: new Date().getTime(),
-            user_addr: currentPerpsAccount?.address || '',
-            trade_type: 'close market',
-            leverage: position.leverage.toString(),
-            trade_side: getStatsReportSide(isBuy, true),
-            margin_mode: position.type === 'cross' ? 'cross' : 'isolated',
-            coin: position.coin,
-            size: totalSz,
-            price: avgPx,
-            trade_usd_value: new BigNumber(avgPx).times(totalSz).toFixed(2),
-            service_provider: 'hyperliquid',
-            app_version: process.env.release || '0',
-            address_type: currentPerpsAccount?.type || '',
-          });
-        }
-      } else if (type === 'reverse') {
-        const res = await handleCloseWithMarketOrder({
-          coin: position.coin,
-          dex: marketData.dexId ?? '',
-          isBuy,
-          size: new BigNumber(position.size || 0)
-            .times(2)
-            .toFixed(marketData.szDecimals),
-          midPx: marketPrice,
-          reduceOnly: false,
-        });
-        if (res) {
-          const { totalSz, avgPx } = res;
-          stats.report('perpsTradeHistory', {
-            created_at: new Date().getTime(),
-            user_addr: currentPerpsAccount?.address || '',
-            trade_type: 'reverse market',
-            leverage: position.leverage.toString(),
-            trade_side: getStatsReportSide(isBuy, false),
-            margin_mode: position.type === 'cross' ? 'cross' : 'isolated',
-            coin: position.coin,
-            size: totalSz,
-            price: avgPx,
-            trade_usd_value: new BigNumber(avgPx).times(totalSz).toFixed(2),
-            service_provider: 'hyperliquid',
-            app_version: process.env.release || '0',
-            address_type: currentPerpsAccount?.type || '',
-          });
-        }
       }
-    },
-    {
-      manual: true,
-      onSuccess: () => {
-        // ClearinghouseState is refreshed inside the handlers (single-dex path).
-        dispatch.perps.fetchUserHistoricalOrders();
-        onConfirm?.();
-      },
+    } else if (type === 'reverse') {
+      const res = await handleCloseWithMarketOrder({
+        coin: position.coin,
+        dex: marketData.dexId ?? '',
+        isBuy,
+        size: new BigNumber(position.size || 0)
+          .times(2)
+          .toFixed(marketData.szDecimals),
+        midPx: marketPrice,
+        reduceOnly: false,
+      });
+      if (res) {
+        const { totalSz, avgPx } = res;
+        stats.report('perpsTradeHistory', {
+          created_at: new Date().getTime(),
+          user_addr: currentPerpsAccount?.address || '',
+          trade_type: 'reverse market',
+          leverage: position.leverage.toString(),
+          trade_side: getStatsReportSide(isBuy, false),
+          margin_mode: position.type === 'cross' ? 'cross' : 'isolated',
+          coin: position.coin,
+          size: totalSz,
+          price: avgPx,
+          trade_usd_value: new BigNumber(avgPx).times(totalSz).toFixed(2),
+          service_provider: 'hyperliquid',
+          app_version: process.env.release || '0',
+          address_type: currentPerpsAccount?.type || '',
+        });
+      }
     }
-  );
+  });
+
+  const inFlightRef = useRef(false);
+  const [loading, setLoading] = useState(false);
+
+  /**
+   * The single submit path for both buttons, and the only in-flight guard.
+   *
+   * Deliberately not `useRequest`: ahooks cancels an in-flight `runAsync` when
+   * this content unmounts (a WS position update can remove the position — and
+   * with it this modal — before the order response returns), and a cancelled
+   * `runAsync` returns a promise that never settles, deadlocking the confirm
+   * dialog in its submitting state.
+   *
+   * The ref matters because the dialog is not always there to block a second
+   * click: when the user has opted out of the confirmation for this order
+   * type, `requestConfirm` submits immediately with no dialog and no mask, so
+   * without it a double click sends two close orders.
+   */
+  const runSubmit = useMemoizedFn(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    setLoading(true);
+    try {
+      await doSubmit();
+      // ClearinghouseState is refreshed inside the handlers (single-dex path).
+      dispatch.perps.fetchUserHistoricalOrders();
+      onConfirm?.();
+    } catch (e) {
+      // Swallowed on purpose: the handlers report their own failures, and the
+      // confirm dialog's `await` has to settle either way.
+    } finally {
+      inFlightRef.current = false;
+      setLoading(false);
+    }
+  });
 
   const handleMidClick = () => {
     setLimitPrice(
@@ -301,6 +321,88 @@ const ClosePositionModalContent: React.FC<Omit<Props, 'visible'>> = ({
 
   const baseAsset = formatPerpsCoin(position.coin);
   const quoteAsset = marketData.quoteAsset || 'USDC';
+
+  // `reverse` is deliberately excluded: that mode of this modal already is the
+  // confirmation step, so it keeps submitting directly and has no settings
+  // toggle.
+  const requestConfirm = useOrderConfirm();
+
+  const buildConfirmContent = useMemoizedFn(
+    (): OrderConfirmContent => {
+      const isLong = position.direction === 'Long';
+      const isProfit = closedPnl.isGreaterThanOrEqualTo(0);
+
+      return {
+        title: `${baseAsset}-${quoteAsset}`,
+        titleSuffix: {
+          // Coloured by the trade the close places, not by the position being
+          // closed: closing a long sells (red), closing a short buys (green).
+          text: isLong
+            ? t('page.perpsPro.orderConfirm.closeLong')
+            : t('page.perpsPro.orderConfirm.closeShort'),
+          tone: isLong ? 'down' : 'up',
+        },
+        sections: [
+          {
+            key: 'close',
+            rows: [
+              {
+                key: 'price',
+                label: t('page.perpsPro.orderConfirm.price'),
+                value:
+                  type === 'limit'
+                    ? `${splitNumberByStep(limitPrice)} ${quoteAsset}`
+                    : t('page.perpsPro.orderConfirm.marketPrice'),
+              },
+              {
+                key: 'amount',
+                label: t('page.perpsPro.orderConfirm.amount'),
+                value: (
+                  <ConfirmAmount
+                    amount={positionSize.amount || '0'}
+                    coin={position.coin}
+                    price={type === 'limit' ? limitPrice : marketPrice}
+                    quoteAsset={quoteAsset}
+                  />
+                ),
+              },
+              {
+                key: 'estPnl',
+                label: t('page.perpsPro.orderConfirm.estPnl'),
+                tone: isProfit ? 'up' : 'down',
+                // Only the number is tinted; the unit stays title-1 per design.
+                value: (
+                  <>
+                    <span>
+                      {isProfit ? '+' : '-'}
+                      {splitNumberByStep(closedPnl.abs().toFixed(2))}
+                    </span>
+                    <span className="text-rb-neutral-title-1">{` ${quoteAsset}`}</span>
+                  </>
+                ),
+              },
+            ],
+          },
+        ],
+      };
+    }
+  );
+
+  const handleSubmitClick = useMemoizedFn(() => {
+    const confirmType = type === 'limit' ? 'closeLimit' : 'closeMarket';
+    requestConfirm({
+      type: confirmType,
+      content: buildConfirmContent,
+      dontShowAgainText: t('page.perpsPro.orderConfirm.dontShowAgain', {
+        orderType: t(`page.perpsPro.orderConfirm.orderTypeName.${confirmType}`),
+      }),
+      // Returned so the dialog can show loading while the order is in flight.
+      // `runSubmit` always settles and carries the in-flight guard the
+      // opted-out (no-dialog) path has nothing else to fall back on.
+      submit: () => runSubmit(),
+    });
+  });
+
   const reverseDexTag = useMemo(() => {
     const marketName = marketData.name || '';
     if (!marketName.includes(':')) return '';
@@ -350,43 +452,6 @@ const ClosePositionModalContent: React.FC<Omit<Props, 'visible'>> = ({
 
   const reverseDirection =
     position.direction === 'Long' ? ('Short' as const) : ('Long' as const);
-
-  const reverseEstimatedLiquidationPrice = useMemo(() => {
-    const markPrice = Number(marketData.markPx);
-    const margin = Number(position.marginUsed);
-    const positionSize = Number(position.size);
-    const maxLeverage = Number(marketData.maxLeverage);
-
-    if (!markPrice || !margin || !positionSize || !maxLeverage) {
-      return 0;
-    }
-
-    return calLiquidationPrice(
-      markPrice,
-      margin,
-      reverseDirection,
-      positionSize,
-      positionSize * markPrice,
-      maxLeverage
-    );
-  }, [
-    marketData.markPx,
-    marketData.maxLeverage,
-    position.marginUsed,
-    position.size,
-    reverseDirection,
-  ]);
-
-  const reverseLiquidationDistance = useMemo(() => {
-    if (!reverseEstimatedLiquidationPrice || !Number(marketData.markPx)) {
-      return 0;
-    }
-
-    return calculateDistanceToLiquidation(
-      reverseEstimatedLiquidationPrice,
-      marketData.markPx
-    );
-  }, [reverseEstimatedLiquidationPrice, marketData.markPx]);
 
   const renderReverseTag = (
     children: React.ReactNode,
@@ -679,7 +744,7 @@ const ClosePositionModalContent: React.FC<Omit<Props, 'visible'>> = ({
             className="h-[44px] text-15 font-medium"
             disabled={!validation.isValid}
             loading={loading}
-            onClick={runSubmit}
+            onClick={handleSubmitClick}
           >
             {validation.error ? validation.error : btnText}
           </Button>

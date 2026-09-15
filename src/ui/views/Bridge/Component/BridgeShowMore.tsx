@@ -5,23 +5,24 @@ import {
   TokenItem,
   Tx,
 } from '@rabby-wallet/rabby-api/dist/types';
-import { Button, Skeleton, Switch, Tooltip } from 'antd';
+import { Button, DrawerProps, Skeleton, Switch, Tooltip } from 'antd';
 import clsx from 'clsx';
 import React, {
-  Dispatch,
   PropsWithChildren,
-  SetStateAction,
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
-import { ReactComponent as IconArrowDownCC } from 'ui/assets/bridge/tiny-down-arrow-cc.svg';
 import { ReactComponent as RcIconInfo } from 'ui/assets/info-cc.svg';
-import { BridgeSlippage } from './BridgeSlippage';
+import { ReactComponent as RcInfoRowArrowRight } from '@/ui/assets/swap/info-row-arrow-right.svg';
+import { BridgeSlippage, SlippageValidationResult } from './BridgeSlippage';
 import { tokenPriceImpact } from '../hooks';
 import imgBestQuoteSharpBg from '@/ui/assets/swap/best-quote-sharp-bg.svg';
+import { RabbyFeeTag } from '../../Swap/Component/RabbyFeeTag';
+import type { RabbyFeeTier } from '../../Swap/hooks/fee';
 import styled from 'styled-components';
 import { findChainByServerID } from '@/utils/chain';
 import BigNumber from 'bignumber.js';
@@ -100,13 +101,10 @@ export const BridgeShowMore = ({
   toAmount,
   quoteLoading,
   gasFeeLoading,
-  slippageError,
   autoSlippage,
   isCustomSlippage,
   setAutoSlippage,
   setIsCustomSlippage,
-  open,
-  setOpen,
   type,
   isWrapToken,
   isBestQuote,
@@ -119,9 +117,13 @@ export const BridgeShowMore = ({
   autoSuggestSlippage,
   insufficient = false,
   signatureInstance,
+  feeTier = 'default',
+  getContainer,
+  validateSlippage,
+  renderSwapQuotes,
+  onRefreshSwapQuotes,
+  swapQuotesLoading,
 }: {
-  open: boolean;
-  setOpen: Dispatch<SetStateAction<boolean>>;
   openQuotesList: () => void;
   sourceName: string;
   sourceLogo: string;
@@ -136,7 +138,6 @@ export const BridgeShowMore = ({
   toAmount?: string | number;
   quoteLoading?: boolean;
   gasFeeLoading?: boolean;
-  slippageError?: boolean;
   autoSlippage: boolean;
   isCustomSlippage: boolean;
   insufficient?: boolean;
@@ -156,11 +157,16 @@ export const BridgeShowMore = ({
   autoSuggestSlippage?: string;
   supportDirectSign?: boolean;
   signatureInstance: SignatureManager;
+  feeTier?: RabbyFeeTier;
+  getContainer?: DrawerProps['getContainer'];
+  validateSlippage?: (
+    slippage: string
+  ) => Promise<SlippageValidationResult | undefined>;
+  renderSwapQuotes?: (onSelect: () => void) => React.ReactNode;
+  onRefreshSwapQuotes?: () => void;
+  swapQuotesLoading?: boolean;
 }) => {
   const { t } = useTranslation();
-  const sourceAlwaysShow = type === 'bridge';
-
-  const RABBY_FEE = '0.25%';
 
   const data = useMemo(() => {
     if (quoteLoading || (!sourceLogo && !sourceName)) {
@@ -194,7 +200,7 @@ export const BridgeShowMore = ({
     return undefined;
   }, [isBestQuote]);
 
-  const showSlippageError = slippageError;
+  const showSourceFallback = insufficient || !fromToken || !supportDirectSign;
 
   const showMinDuration = useMemo(() => {
     return Math.max(Math.round((duration || 0) / 60), 1);
@@ -208,19 +214,12 @@ export const BridgeShowMore = ({
     if (showMinDuration > 3) {
       return 'text-r-orange-default';
     }
-    return 'text-r-blue-default';
+    return 'text-r-neutral-title-1';
   }, [showMinDuration]);
 
-  const sourceContentRender = useMemoizedFn(() => {
+  const sourceSelectorRender = useMemoizedFn((clickable = true) => {
     return (
-      <ListItem
-        name={
-          type === 'bridge'
-            ? t('page.bridge.showMore.source')
-            : t('page.swap.source')
-        }
-        className="mb-12 h-18"
-      >
+      <>
         {quoteLoading ? (
           <Skeleton.Input
             active
@@ -233,7 +232,7 @@ export const BridgeShowMore = ({
         ) : (
           <div
             className="flex items-center gap-4  cursor-pointer"
-            onClick={openQuotesList}
+            onClick={clickable ? openQuotesList : undefined}
           >
             <div
               className={clsx(
@@ -264,15 +263,44 @@ export const BridgeShowMore = ({
               ) : null}
             </div>
             {type === 'bridge' && (
-              <span className={`text-12 font-medium ${durationColor}`}>
-                {' · '}
-                {t('page.bridge.duration', {
-                  duration: showMinDuration,
-                })}
-              </span>
+              <>
+                <span
+                  className={clsx(
+                    'text-12',
+                    sourceLogo || sourceName
+                      ? durationColor
+                      : 'text-r-neutral-foot'
+                  )}
+                >
+                  {' · '}
+                  {sourceLogo || sourceName
+                    ? t('page.bridge.duration', {
+                        duration: showMinDuration,
+                      })
+                    : '-'}
+                </span>
+                {Boolean(sourceLogo || sourceName) && (
+                  <RcInfoRowArrowRight className="h-14 w-14 text-r-neutral-foot" />
+                )}
+              </>
             )}
           </div>
         )}
+      </>
+    );
+  });
+
+  const sourceContentRender = useMemoizedFn(() => {
+    return (
+      <ListItem
+        name={
+          type === 'bridge'
+            ? t('page.bridge.showMore.source')
+            : t('page.swap.source')
+        }
+        className="h-18"
+      >
+        {sourceSelectorRender()}
       </ListItem>
     );
   });
@@ -281,7 +309,7 @@ export const BridgeShowMore = ({
     return (
       <>
         {data?.showLoss && !quoteLoading && (
-          <div className="leading-4 text-12 text-r-neutral-foot">
+          <div className="price-impact-warning leading-4 text-12 text-r-neutral-foot">
             <div className="flex justify-between">
               <span>{t('page.bridge.price-impact')}</span>
               <span
@@ -317,7 +345,7 @@ export const BridgeShowMore = ({
                 </Tooltip>
               </span>
             </div>
-            <div className="mt-[8px] rounded-[4px] border-[0.5px] border-rabby-red-default bg-r-red-light p-8 text-13 font-normal text-r-red-default">
+            <div className="mt-8 flex min-h-[32px] items-center rounded-[4px] border-[0.5px] border-rabby-red-default bg-r-red-light px-12 py-7 text-12 font-normal leading-normal text-r-red-default">
               {t('page.bridge.loss-tips', {
                 usd: data?.lossUsd,
               })}
@@ -328,75 +356,67 @@ export const BridgeShowMore = ({
     );
   }, [data, quoteLoading, toToken, fromToken]);
 
-  return (
-    <div className="mx-16">
-      <div className="space-y-16">
-        {sourceAlwaysShow && sourceContentRender()}
+  const rabbyFeeContentRender = () => (
+    <ListItem name={t('page.swap.rabbyFee.title')} className="mt-12 h-18">
+      <RabbyFeeTag type={type} feeTier={feeTier} onOpenCompare={openFeePopup} />
+    </ListItem>
+  );
 
+  return (
+    <InfoCardWrapper className="no-scrollbar overflow-y-auto rounded-t-[8px] bg-r-neutral-card-1 px-16 py-12">
+      <div className="space-y-12">
         {lostValueContentRender()}
 
-        {!insufficient && fromToken && supportDirectSign ? (
+        {type === 'bridge' && sourceContentRender()}
+
+        {!showSourceFallback && fromToken ? (
           <DirectSignGasInfo
             supportDirectSign={supportDirectSign}
             loading={!!quoteLoading || !!gasFeeLoading}
             openShowMore={noop}
             noQuote={!sourceLogo && !sourceName}
+            type={type}
             chainServeId={fromToken?.chain}
             signatureInstance={signatureInstance}
+            sourceSelector={
+              type === 'swap' && (quoteLoading || sourceLogo || sourceName)
+                ? sourceSelectorRender(false)
+                : undefined
+            }
+            fallbackSourceSelector={
+              type === 'swap' && (quoteLoading || sourceLogo || sourceName)
+                ? sourceSelectorRender()
+                : undefined
+            }
+            showTopMargin={false}
+            useInfoCardStyle
+            renderSwapQuotes={renderSwapQuotes}
+            onRefreshSwapQuotes={onRefreshSwapQuotes}
+            swapQuotesLoading={swapQuotesLoading}
           />
+        ) : type === 'swap' ? (
+          sourceContentRender()
         ) : null}
 
-        {showSlippageError && (
-          <BridgeSlippage
-            autoSuggestSlippage={autoSuggestSlippage}
-            value={slippage}
-            displaySlippage={displaySlippage}
-            onChange={onSlippageChange}
-            autoSlippage={autoSlippage}
-            isCustomSlippage={isCustomSlippage}
-            setAutoSlippage={setAutoSlippage}
-            setIsCustomSlippage={setIsCustomSlippage}
-            type={type}
-            isWrapToken={isWrapToken}
-            recommendValue={recommendValue}
-          />
-        )}
-        <div />
+        <BridgeSlippage
+          autoSuggestSlippage={autoSuggestSlippage}
+          value={slippage}
+          displaySlippage={displaySlippage}
+          onChange={onSlippageChange}
+          autoSlippage={autoSlippage}
+          isCustomSlippage={isCustomSlippage}
+          setAutoSlippage={setAutoSlippage}
+          setIsCustomSlippage={setIsCustomSlippage}
+          type={type}
+          isWrapToken={isWrapToken}
+          recommendValue={recommendValue}
+          getContainer={getContainer}
+          validateSlippage={validateSlippage}
+        />
       </div>
 
-      <div className={clsx('overflow-hidden', !open && 'h-0')}>
-        {!sourceAlwaysShow && sourceContentRender()}
-        {!showSlippageError && (
-          <BridgeSlippage
-            autoSuggestSlippage={autoSuggestSlippage}
-            value={slippage}
-            displaySlippage={displaySlippage}
-            onChange={onSlippageChange}
-            autoSlippage={autoSlippage}
-            isCustomSlippage={isCustomSlippage}
-            setAutoSlippage={setAutoSlippage}
-            setIsCustomSlippage={setIsCustomSlippage}
-            type={type}
-            isWrapToken={isWrapToken}
-            recommendValue={recommendValue}
-          />
-        )}
-
-        <ListItem name={t('page.swap.rabbyFee.title')} className="mt-12 h-18">
-          <div
-            className={clsx(
-              'text-12 font-medium',
-              isWrapToken
-                ? 'text-r-neutral-foot'
-                : 'text-r-blue-default cursor-pointer'
-            )}
-            onClick={openFeePopup}
-          >
-            {isWrapToken && type === 'swap'
-              ? t('page.swap.no-fees-for-wrap')
-              : RABBY_FEE}
-          </div>
-        </ListItem>
+      <div>
+        {rabbyFeeContentRender()}
 
         {showMEVGuardedSwitch && type === 'swap' ? (
           <ListItem
@@ -413,6 +433,9 @@ export const BridgeShowMore = ({
           >
             <Tooltip
               placement={'topRight'}
+              arrowPointAtCenter
+              // Arrow center: 13px right inset + half its 22px container.
+              align={{ offset: [24, -4] }}
               overlayClassName={clsx('rectangle', 'max-w-[312px]')}
               title={t('page.swap.preferMEVTip')}
             >
@@ -424,31 +447,17 @@ export const BridgeShowMore = ({
           </ListItem>
         ) : null}
       </div>
-
-      <div className="flex items-center justify-center gap-8 mt-8">
-        <div
-          className={clsx(
-            'flex items-center opacity-50',
-            'cursor-pointer',
-            'text-r-neutral-foot text-12'
-          )}
-          onClick={() => setOpen((e) => !e)}
-        >
-          <span>{t('page.bridge.showMore.title')}</span>
-          <IconArrowDownCC
-            viewBox="0 0 14 14"
-            width={14}
-            height={14}
-            className={clsx(
-              'transition-transform',
-              open && 'rotate-180 translate-y-1'
-            )}
-          />
-        </div>
-      </div>
-    </div>
+    </InfoCardWrapper>
   );
 };
+
+const InfoCardWrapper = styled.div`
+  max-height: 124px;
+
+  &:has(.security-level-tip):not(:has(.price-impact-warning)) {
+    max-height: 150px;
+  }
+`;
 
 const GasTipsWrapper = styled.div`
   position: relative;
@@ -468,7 +477,60 @@ const GasTipsWrapper = styled.div`
       margin-right: 6px;
     }
   }
+
+  &.info-card-style {
+    .security-level-tip {
+      min-height: 32px !important;
+      margin-top: 6px !important;
+      padding: 4px 8px;
+      gap: 10px;
+      border-width: 0.5px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 400;
+      line-height: normal;
+
+      .ant-btn {
+        min-width: 72px;
+        height: 24px;
+        padding: 5px 12px;
+        border-radius: 4px;
+        box-shadow: none;
+        font-size: 12px;
+        font-weight: 500;
+        line-height: normal;
+      }
+    }
+  }
 `;
+
+const StableSignMainnetGasSelectorHeader = ({
+  headerProps,
+  dynamicProps,
+  className,
+}: {
+  headerProps?: React.ComponentProps<typeof SignMainnetGasSelectorHeader>;
+  dynamicProps?: Partial<
+    React.ComponentProps<typeof SignMainnetGasSelectorHeader>
+  >;
+  className?: string;
+}) => {
+  const lastHeaderPropsRef = useRef(headerProps);
+  if (headerProps) {
+    lastHeaderPropsRef.current = headerProps;
+  }
+
+  const cachedHeaderProps = lastHeaderPropsRef.current;
+  if (!cachedHeaderProps) {
+    return null;
+  }
+
+  return (
+    <div className={className}>
+      <SignMainnetGasSelectorHeader {...cachedHeaderProps} {...dynamicProps} />
+    </div>
+  );
+};
 
 export const DirectSignGasInfo = ({
   supportDirectSign,
@@ -478,6 +540,13 @@ export const DirectSignGasInfo = ({
   type = 'bridge',
   chainServeId,
   signatureInstance,
+  sourceSelector,
+  fallbackSourceSelector,
+  showTopMargin = true,
+  useInfoCardStyle = false,
+  renderSwapQuotes,
+  onRefreshSwapQuotes,
+  swapQuotesLoading,
 }: {
   supportDirectSign: boolean;
   loading: boolean;
@@ -486,8 +555,16 @@ export const DirectSignGasInfo = ({
   type?: 'send' | 'swap' | 'bridge';
   chainServeId: string;
   signatureInstance: SignatureManager;
+  sourceSelector?: React.ReactNode;
+  fallbackSourceSelector?: React.ReactNode;
+  showTopMargin?: boolean;
+  useInfoCardStyle?: boolean;
+  renderSwapQuotes?: (onSelect: () => void) => React.ReactNode;
+  onRefreshSwapQuotes?: () => void;
+  swapQuotesLoading?: boolean;
 }) => {
   const wallet = useWallet();
+  const [swapGasQuoteVisible, setSwapGasQuoteVisible] = useState(false);
   const { cachedTokenList } = useRabbySelector((s) => ({
     cachedTokenList: s.account.tokens.list,
   }));
@@ -1033,7 +1110,7 @@ export const DirectSignGasInfo = ({
     return null;
   }
   const gasTipsComponent = () => (
-    <GasTipsWrapper>
+    <GasTipsWrapper className={clsx(useInfoCardStyle && 'info-card-style')}>
       {showGasLessToSign ? (
         <GasLessActivityToSign
           directSubmit
@@ -1113,69 +1190,101 @@ export const DirectSignGasInfo = ({
     </GasTipsWrapper>
   );
 
+  const gasSelectorHeaderProps: React.ComponentProps<
+    typeof SignMainnetGasSelectorHeader
+  > | null = showGasContent
+    ? {
+        tx: currentTx!,
+        gasAccountCost: gasAccount as any,
+        gasMethod: effectiveGasMethod,
+        onChangeGasMethod: handleChangeGasMethod,
+        onAutoChangeGasMethod: handleAutoChangeGasMethod,
+        disableAutoGasLevelSwitch: !!manualGasMethod,
+        isWalletConnect:
+          currentAccount?.type === KEYRING_TYPE.WalletConnectKeyring,
+        disabled: false,
+        isReady,
+        gasLimit: String(txsResult?.[0]?.gasLimit || currentTx?.gas || 0),
+        noUpdate: false,
+        gasList: gasList || [],
+        selectedGas,
+        version: txsResult?.[0]?.preExecResult?.pre_exec_version || 'v0',
+        recommendGasLimit: txsResult?.[0]?.gasLimit || currentTx?.gas || 0,
+        recommendNonce: currentTx?.nonce || '0',
+        chainId,
+        onChange: handleGasChange,
+        nonce: String(currentTx?.nonce || '0'),
+        disableNonce: true,
+        isSpeedUp: !!isSpeedUp,
+        isCancel: !!isCancel,
+        is1559: support1559,
+        isHardware,
+        manuallyChangeGasLimit: false,
+        errors: checkErrors,
+        nativeTokenBalance,
+        gasToken,
+        gasPriceMedian,
+        gas: totalGasCost,
+        gasCalcMethod,
+        directSubmit: true,
+        checkGasLevelIsNotEnough,
+        nativeTokenInsufficient: isGasNotEnough,
+        freeGasAvailable: canUseGasLess,
+        noCustomRPC,
+        showTempoGasTokenSelector,
+        tempoGasTokenList,
+        tempoPreferredFeeTokenId,
+        onSelectTempoGasToken: handleSelectTempoGasToken,
+        tempoGasTokenLoading,
+        getContainer,
+        rightPrefix: sourceSelector,
+        summaryClassName: useInfoCardStyle ? 'font-normal' : undefined,
+        summaryTextClassName: useInfoCardStyle
+          ? 'text-r-neutral-title-1'
+          : undefined,
+        summarySuffix: useInfoCardStyle ? (
+          <RcInfoRowArrowRight className="h-14 w-14 text-r-neutral-foot" />
+        ) : undefined,
+        hideGasLevelInSummary: useInfoCardStyle,
+        renderSwapQuotes,
+        onRefreshSwapQuotes,
+        swapQuotesLoading,
+        swapGasQuoteVisible,
+        onSwapGasQuoteVisibleChange: setSwapGasQuoteVisible,
+      }
+    : null;
+  const keepCombinedGasHeaderMounted =
+    !!renderSwapQuotes && !!swapGasQuoteVisible;
+
   return (
     <>
-      {showGasContent ? (
-        <div className={clsx(type !== 'send' && 'mt-12')}>
-          <SignMainnetGasSelectorHeader
-            tx={currentTx!}
-            gasAccountCost={gasAccount as any}
-            gasMethod={effectiveGasMethod}
-            onChangeGasMethod={handleChangeGasMethod}
-            onAutoChangeGasMethod={handleAutoChangeGasMethod}
-            disableAutoGasLevelSwitch={!!manualGasMethod}
-            isWalletConnect={
-              currentAccount?.type === KEYRING_TYPE.WalletConnectKeyring
-            }
-            disabled={false}
-            isReady={isReady}
-            gasLimit={String(txsResult?.[0]?.gasLimit || currentTx?.gas || 0)}
-            noUpdate={false}
-            gasList={gasList || []}
-            selectedGas={selectedGas}
-            version={txsResult?.[0]?.preExecResult?.pre_exec_version || 'v0'}
-            recommendGasLimit={txsResult?.[0]?.gasLimit || currentTx?.gas || 0}
-            recommendNonce={currentTx?.nonce || '0'}
-            chainId={chainId}
-            onChange={handleGasChange}
-            nonce={String(currentTx?.nonce || '0')}
-            disableNonce={true}
-            isSpeedUp={!!isSpeedUp}
-            isCancel={!!isCancel}
-            is1559={support1559}
-            isHardware={isHardware}
-            manuallyChangeGasLimit={false}
-            errors={checkErrors}
-            nativeTokenBalance={nativeTokenBalance}
-            gasToken={gasToken}
-            gasPriceMedian={gasPriceMedian}
-            gas={totalGasCost}
-            gasCalcMethod={gasCalcMethod}
-            directSubmit
-            checkGasLevelIsNotEnough={checkGasLevelIsNotEnough}
-            nativeTokenInsufficient={isGasNotEnough}
-            freeGasAvailable={canUseGasLess}
-            noCustomRPC={noCustomRPC}
-            showTempoGasTokenSelector={showTempoGasTokenSelector}
-            tempoGasTokenList={tempoGasTokenList}
-            tempoPreferredFeeTokenId={tempoPreferredFeeTokenId}
-            onSelectTempoGasToken={handleSelectTempoGasToken}
-            tempoGasTokenLoading={tempoGasTokenLoading}
-            getContainer={getContainer}
-          />
-        </div>
+      {showGasContent || keepCombinedGasHeaderMounted ? (
+        <StableSignMainnetGasSelectorHeader
+          headerProps={gasSelectorHeaderProps || undefined}
+          dynamicProps={{
+            renderSwapQuotes,
+            onRefreshSwapQuotes,
+            swapQuotesLoading,
+            swapGasInteractionDisabled: !showGasContent,
+            swapGasQuoteVisible,
+            onSwapGasQuoteVisibleChange: setSwapGasQuoteVisible,
+          }}
+          className={clsx(showTopMargin && type !== 'send' && 'mt-12')}
+        />
       ) : !loading && noQuote ? (
         <ListItem
           name={<>{'Gas fee'}</>}
-          className={clsx(type !== 'send' && 'mt-12')}
+          className={clsx(showTopMargin && type !== 'send' && 'mt-12')}
         >
+          {fallbackSourceSelector ?? sourceSelector}
           <div>-</div>
         </ListItem>
       ) : (
         <ListItem
           name={<>{'Gas fee'}</>}
-          className={clsx(type !== 'send' && 'mt-12')}
+          className={clsx(showTopMargin && type !== 'send' && 'mt-12')}
         >
+          {fallbackSourceSelector ?? sourceSelector}
           <Skeleton.Input
             active
             className="rounded"
@@ -1217,7 +1326,7 @@ function ListItem({
       )}
     >
       <span>{name}</span>
-      <div className="flex items-center">{children}</div>
+      <div className="flex items-center gap-8">{children}</div>
     </div>
   );
 }

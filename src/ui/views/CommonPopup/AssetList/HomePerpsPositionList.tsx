@@ -1,6 +1,6 @@
 import IconHyperliquid from '@/ui/assets/perps/icon-hyperliquid.svg';
 import { useCurrentAccount } from '@/ui/hooks/backgroundState/useAccount';
-import { MarketData } from '@/ui/models/perps';
+import { MarketData } from '@/ui/state/perps';
 import {
   formatUsdValue,
   splitNumberByStep,
@@ -85,10 +85,6 @@ export const HomePerpsPositionList: React.FC<{
             key={assetPosition.position.coin}
             position={assetPosition.position}
             handleNavigate={() => {
-              dispatch.innerDappFrame.setInnerDappId({
-                type: 'perps',
-                dappId: 'hyperliquid',
-              });
               if (isDesktop) {
                 dispatch.perps.resetProAccountInfo();
                 dispatch.perps.setCurrentPerpsAccount(currentAccount);

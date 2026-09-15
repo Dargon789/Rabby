@@ -24,7 +24,8 @@ import { useAccounts } from '@/ui/hooks/useAccounts';
 import { AddressTypeCard } from '@/ui/component/AddressRiskAlert';
 import { KEYRING_TYPE } from '@/constant';
 import { ellipsisAddress } from '@/ui/utils/address';
-import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
+import { useWhitelistStore } from '@/ui/state/whitelist';
+import { getNormalizedAddressInputAfterPaste } from '@/ui/utils/addressInput';
 
 const StyledInputWrapper = styled.div<{ $hasError?: boolean }>`
   border-radius: 12px;
@@ -85,24 +86,23 @@ export const EnterAddress = ({
   const { t } = useTranslation();
   const wallet = useWallet();
   const { fetchAllAccounts, allSortedAccountList } = useAccounts();
-  const dispatch = useRabbyDispatch();
-
-  const { whitelist } = useRabbySelector((s) => ({
-    whitelist: s.whitelist.whitelist,
-  }));
+  const whitelist = useWhitelistStore((state) => state.whitelists);
 
   const inputRef = useRef<InputRef>(null);
+  const ensRequestIdRef = useRef(0);
 
   const [inputAddress, setInputAddress] = useState('');
   const [ensResult, setEnsResult] = useState<null | {
     addr: string;
     name: string;
+    query: string;
   }>(null);
   const [tags, setTags] = useState<string[]>([]);
+  const currentEnsResult = ensResult?.query === inputAddress ? ensResult : null;
   const isValidAddr = useMemo(() => {
     return isValidAddress(inputAddress);
   }, [inputAddress]);
-  const hasError = !!inputAddress && !isValidAddr && !ensResult?.addr;
+  const hasError = !!inputAddress && !isValidAddr && !currentEnsResult?.addr;
   const disableSubmit = !inputAddress || hasError;
 
   const [isFocusAddress, setIsFocusAddress] = useState(false);
@@ -143,31 +143,98 @@ export const EnterAddress = ({
     fetchAllAccounts();
   }, [fetchAllAccounts]);
 
+  const debouncedResolveEns = useMemo(
+    () =>
+      debounce(
+        async ({
+          address,
+          requestId,
+        }: {
+          address: string;
+          requestId: number;
+        }) => {
+          try {
+            const result = await resolveEnsAddressByName(address, wallet);
+            if (requestId !== ensRequestIdRef.current) {
+              return;
+            }
+            setEnsResult(
+              result?.addr
+                ? {
+                    ...result,
+                    query: address,
+                  }
+                : null
+            );
+          } catch (e) {
+            if (requestId === ensRequestIdRef.current) {
+              setEnsResult(null);
+            }
+          }
+        },
+        300
+      ),
+    [wallet]
+  );
+
   useEffect(() => {
-    dispatch.whitelist.getWhitelist();
-  }, [dispatch.whitelist]);
+    return () => {
+      ensRequestIdRef.current += 1;
+      debouncedResolveEns.cancel();
+    };
+  }, [debouncedResolveEns]);
+
+  const handleInputAddressChange = useCallback(
+    (address: string) => {
+      const requestId = ++ensRequestIdRef.current;
+      debouncedResolveEns.cancel();
+      setInputAddress(address);
+      setTags([]);
+      setEnsResult(null);
+
+      if (address && !isValidAddress(address)) {
+        debouncedResolveEns({ address, requestId });
+      }
+    },
+    [debouncedResolveEns]
+  );
+
+  const handlePasteAddress = useCallback(
+    (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const normalizedValue = getNormalizedAddressInputAfterPaste({
+        value: event.currentTarget.value,
+        pastedText: event.clipboardData.getData('text'),
+        selectionStart: event.currentTarget.selectionStart,
+        selectionEnd: event.currentTarget.selectionEnd,
+      });
+      if (normalizedValue === null) {
+        return;
+      }
+      event.preventDefault();
+      handleInputAddressChange(normalizedValue);
+    },
+    [handleInputAddressChange]
+  );
 
   const handleConfirmENS = useCallback(
     (result: string) => {
-      setInputAddress(result);
-      // setIsValidAddr(true);
-      setTags([`ENS: ${ensResult?.name || ''}`]);
-      setEnsResult(null);
+      handleInputAddressChange(result);
+      setTags([`ENS: ${currentEnsResult?.name || ''}`]);
     },
-    [ensResult?.name]
+    [currentEnsResult?.name, handleInputAddressChange]
   );
 
   const handleKeyDown = useMemo(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === 'enter') {
-        if (ensResult) {
+        if (currentEnsResult) {
           e.preventDefault();
-          handleConfirmENS(ensResult.addr);
+          handleConfirmENS(currentEnsResult.addr);
         }
       }
     };
     return handler;
-  }, [ensResult, handleConfirmENS]);
+  }, [currentEnsResult, handleConfirmENS]);
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
@@ -176,34 +243,8 @@ export const EnterAddress = ({
     };
   }, [handleKeyDown]);
 
-  const handleValuesChange = useMemo(
-    () =>
-      debounce(async ({ address }: { address: string }) => {
-        setTags([]);
-        if (!isValidAddress(address)) {
-          try {
-            const result = await resolveEnsAddressByName(address, wallet);
-            if (result && result.addr) {
-              setEnsResult(result);
-              // setIsValidAddr(true);
-            } else {
-              setEnsResult(null);
-              // setIsValidAddr(!address.length);
-            }
-          } catch (e) {
-            setEnsResult(null);
-            // setIsValidAddr(false);
-          }
-        } else {
-          // setIsValidAddr(true);
-          setEnsResult(null);
-        }
-      }, 300),
-    [wallet]
-  );
-
   const handleNextClick = () => {
-    const address = ensResult?.addr || inputAddress;
+    const address = currentEnsResult?.addr || inputAddress;
     if (address && isValidAddress(address)) {
       onNext(address);
     } else {
@@ -229,7 +270,7 @@ export const EnterAddress = ({
           <StyledInputWrapper
             onClick={(e) => e.stopPropagation()}
             className="relative"
-            $hasError={!isValidAddr && !filteredAccounts.length}
+            $hasError={showSearchError}
           >
             <Input.TextArea
               maxLength={44}
@@ -240,10 +281,8 @@ export const EnterAddress = ({
               onFocus={() => setIsFocusAddress(true)}
               onBlur={() => setIsFocusAddress(false)}
               value={inputAddress}
-              onChange={(e) => {
-                setInputAddress(e.target.value);
-                handleValuesChange({ address: e.target.value });
-              }}
+              onChange={(e) => handleInputAddressChange(e.target.value)}
+              onPaste={handlePasteAddress}
               size="large"
               spellCheck={false}
               rows={4}
@@ -254,8 +293,7 @@ export const EnterAddress = ({
             <div className="absolute w-[20px] h-[20px] right-[16px] bottom-[16px]">
               <IconClearCC
                 onClick={() => {
-                  setInputAddress('');
-                  handleValuesChange({ address: '' });
+                  handleInputAddressChange('');
                   inputRef.current?.focus();
                 }}
                 className={clsx(
@@ -287,13 +325,13 @@ export const EnterAddress = ({
             ))}
           </ul>
         )}
-        {ensResult && (
+        {currentEnsResult && (
           <div
-            className="mt-[12px] p-[12px] bg-r-neutral-card1 rounded-[12px] cursor-pointer"
-            onClick={() => handleConfirmENS(ensResult.addr)}
+            className="mt-[12px] p-[12px] bg-r-neutral-card1 text-r-neutral-title1 rounded-[12px] cursor-pointer"
+            onClick={() => handleConfirmENS(currentEnsResult.addr)}
           >
             <div className="flex items-center gap-[8px] break-all">
-              <span className="flex-1">{ensResult.addr}</span>
+              <span className="flex-1">{currentEnsResult.addr}</span>
             </div>
           </div>
         )}

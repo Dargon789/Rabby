@@ -14,6 +14,7 @@ import BigNumber from 'bignumber.js';
 import React, { useRef } from 'react';
 import pRetry from 'p-retry';
 import { useRabbySelector } from '@/ui/store';
+import { useSwapStore } from '@/ui/state/swap';
 import stats from '@/stats';
 import { verifySdk } from './verify';
 import { findChainByEnum } from '@/utils/chain';
@@ -76,6 +77,7 @@ export const useQuoteMethods = () => {
       // receiveRawAmount,
       slippage,
       dexId,
+      feeRate,
       txId,
       quote,
       tx,
@@ -91,6 +93,7 @@ export const useQuoteMethods = () => {
           slippage: new BigNumber(slippage).div(100).toNumber(),
         },
         dex_id: dexId,
+        fee_rate: Number(feeRate),
         tx_id: txId,
         tx,
       }),
@@ -388,7 +391,6 @@ export const useQuoteMethods = () => {
         recommendNonceTask?: Promise<string>;
       };
     }): Promise<TDexQuoteData> => {
-      const isOpenOcean = dexId === DEX_ENUM.OPENOCEAN;
       const chainInfo = findChainByEnum(chain)!;
       const recommendNonceTask = !inSufficient
         ? sharedTasks?.recommendNonceTask ??
@@ -420,12 +422,9 @@ export const useQuoteMethods = () => {
                 .toFixed(0, 1),
               userAddress,
               slippage: Number(slippage),
-              feeRate:
-                feeAfterDiscount === '0' && isOpenOcean
-                  ? undefined
-                  : Number(feeAfterDiscount) || 0,
+              feeRate: Number(feeAfterDiscount),
               chain,
-              fee: true,
+              fee: Number(feeAfterDiscount) > 0,
               chainServerId: chainInfo.serverId,
               nativeTokenAddress: chainInfo.nativeTokenAddress,
               insufficient: inSufficient,
@@ -598,7 +597,7 @@ export const useQuoteMethods = () => {
     ]
   );
 
-  const supportedDEXList = useRabbySelector((s) => s.swap.supportedDEXList);
+  const supportedDEXList = useSwapStore((s) => s.supportedDEXList);
 
   const _getAllQuotes = React.useCallback(
     async (
@@ -727,6 +726,7 @@ export interface postSwapParams {
   // receiveRawAmount: string;
   slippage: string;
   dexId: string;
+  feeRate: string;
   txId: string;
   quote: QuoteResult;
   tx: Tx;

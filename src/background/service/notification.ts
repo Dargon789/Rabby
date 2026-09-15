@@ -163,15 +163,15 @@ class NotificationService extends Events {
         return;
       }
 
-      if (this.approvals.length < 0) return;
+      if (this.approvals.length <= 0) return;
 
       const approval = this.approvals[0];
       this.currentApproval = approval;
       this.openNotification(approval.winProps, true);
     } catch (e) {
-      Sentry.captureException(
-        new Error('activeFirstApproval failed: ' + JSON.stringify(e))
-      );
+      Sentry.captureException(e, {
+        tags: { function: 'activeFirstApproval' },
+      });
       this.clear();
     }
   };
@@ -190,9 +190,18 @@ class NotificationService extends Events {
   resolveApproval = async (
     data?: any,
     forceReject = false,
-    approvalId?: string
+    approvalId?: string,
+    approvalComponent?: Approval['data']['approvalComponent']
   ) => {
-    if (approvalId && approvalId !== this.currentApproval?.id) return;
+    if (
+      !this.currentApproval ||
+      (approvalId && approvalId !== this.currentApproval.id) ||
+      (approvalComponent &&
+        (!approvalId ||
+          approvalComponent !== this.currentApproval.data.approvalComponent))
+    ) {
+      return false;
+    }
     if (forceReject) {
       this.currentApproval?.reject &&
         this.currentApproval?.reject(
@@ -214,14 +223,27 @@ class NotificationService extends Events {
     }
 
     this.emit('resolve', data);
+    return true;
   };
 
-  rejectApproval = async (err?: string, stay = false, isInternal = false) => {
+  rejectApproval = async (
+    err?: string,
+    stay = false,
+    isInternal = false,
+    approvalId?: string,
+    approvalComponent?: Approval['data']['approvalComponent']
+  ) => {
+    if (
+      !this.currentApproval ||
+      (approvalId && approvalId !== this.currentApproval.id) ||
+      (approvalComponent &&
+        (!approvalId ||
+          approvalComponent !== this.currentApproval.data.approvalComponent))
+    ) {
+      return false;
+    }
     this.addLastRejectDapp();
     const approval = this.currentApproval;
-    if (this.approvals.length <= 1) {
-      await this.clear(stay); // TODO: FIXME
-    }
 
     if (isInternal) {
       approval?.reject && approval?.reject(ethErrors.rpc.internal(err));
@@ -241,9 +263,14 @@ class NotificationService extends Events {
       await this.clear(stay);
     }
     this.emit('reject', err);
+    return true;
   };
 
-  requestApproval = async (data, winProps?): Promise<any> => {
+  requestApproval = async (
+    data,
+    winProps?,
+    options?: { onCurrent?: () => void }
+  ): Promise<any> => {
     const origin = this.getOrigin(data);
     if (origin) {
       const dapp = this.dappManager.get(origin);
@@ -348,6 +375,18 @@ class NotificationService extends Events {
         }
       }
 
+      // TODO: queued approvals currently drop onCurrent, so preparation only
+      // starts for the approval that is current when requestApproval runs.
+      if (this.currentApproval === approval) {
+        try {
+          options?.onCurrent?.();
+        } catch (e) {
+          Sentry.captureException(
+            new Error('onCurrent failed: ' + JSON.stringify(e))
+          );
+        }
+      }
+
       if (
         this.notifiWindowId !== null &&
         QUEUE_APPROVAL_COMPONENTS_WHITELIST.includes(data.approvalComponent)
@@ -405,9 +444,25 @@ class NotificationService extends Events {
       winMgr.remove(this.notifiWindowId);
       this.notifiWindowId = null;
     }
-    winMgr.openNotification(winProps).then((winId) => {
-      this.notifiWindowId = winId!;
-    });
+    winMgr
+      .openNotification(winProps)
+      .then((winId) => {
+        if (winId == null) {
+          if (this.notifiWindowId === null) {
+            this.unLock();
+          }
+          return;
+        }
+        this.notifiWindowId = winId;
+      })
+      .catch((e) => {
+        if (this.notifiWindowId === null) {
+          this.unLock();
+        }
+        Sentry.captureException(e, {
+          tags: { function: 'openNotification' },
+        });
+      });
   };
 
   updateNotificationWinProps = (winProps: Windows.UpdateUpdateInfoType) => {

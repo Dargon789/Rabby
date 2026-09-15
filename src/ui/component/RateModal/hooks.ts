@@ -2,8 +2,11 @@
 import { useCallback, useMemo } from 'react';
 import * as Sentry from '@sentry/browser';
 
-import { getDefaultRateModalState } from '@/ui/models/rateGuidance';
-import { useRabbyDispatch, useRabbyGetter, useRabbySelector } from '@/ui/store';
+import {
+  getDefaultRateModalState,
+  useRateGuidanceStore,
+} from '@/ui/state/rateGuidance';
+import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
 import {
   coerceInteger,
   openTrustedExternalWebsiteInTab,
@@ -15,6 +18,14 @@ import { ensurePrefix } from '@/utils/string';
 import { ga4 } from '@/utils/ga4';
 import { KEYRING_CLASS } from '@/constant';
 import { pick } from 'lodash';
+import {
+  selectCurrentBalanceAboutMap,
+  useAccountStore,
+} from '@/ui/state/account';
+import {
+  selectRateGuideLastExposureTimestamp,
+  selectUserViewedRate,
+} from '@/ui/state/preference';
 
 const TX_COUNT_LIMIT = appIsDev ? 1 : 3; // Minimum number of transactions before showing the rate guide
 const STAR_COUNT = 5;
@@ -55,11 +66,14 @@ export function useExposureRateGuide() {
     shouldForceDisableOnLaunch: !!s.preference.rateGuideLastExposure
       ?.__UI_FORCE_DISABLE_ON_NEXT_LAUNCH_WINDOW__,
   }));
-  const userViewedRate = useRabbyGetter((s) => s.preference.userViewedRate);
-  const lastExposureTimestamp = useRabbyGetter(
-    (s) => s.preference.rateGuideLastExposureTimestamp
+  const userViewedRate = useRabbySelector((state) =>
+    selectUserViewedRate(state.preference)
+  );
+  const lastExposureTimestamp = useRabbySelector((state) =>
+    selectRateGuideLastExposureTimestamp(state.preference)
   );
   const rDispatch = useRabbyDispatch();
+  const setRateModalState = useRateGuidanceStore((state) => state.setField);
 
   // if (__DEV__) {
   //   console.debug('[useExposureRateGuide] txCount: %s', txCount);
@@ -78,11 +92,11 @@ export function useExposureRateGuide() {
       }),
       __UI_FORCE_DISABLE_ON_NEXT_LAUNCH_WINDOW__: false,
     });
-    rDispatch.rateGuidance.setField({
+    setRateModalState({
       ...getDefaultRateModalState(),
       visible: false,
     });
-  }, [rDispatch.preference, rDispatch.rateGuidance]);
+  }, [rDispatch.preference, setRateModalState]);
 
   return {
     shouldShowRateGuideOnHome,
@@ -105,9 +119,7 @@ function makeStarText(count: number, total = 5) {
 export const FEEDBACK_LEN_LIMIT = 300;
 
 export function useTotalBalanceTextForRate() {
-  const cacheAboutData = useRabbyGetter(
-    (s) => s.account.currentBalanceAboutMap
-  );
+  const cacheAboutData = useAccountStore(selectCurrentBalanceAboutMap);
   const accountsList = useRabbySelector((s) => s.accountToDisplay.accountsList);
 
   const { balanceMap } = cacheAboutData;
@@ -154,8 +166,15 @@ export function useTotalBalanceTextForRate() {
 }
 
 export function useRateModal() {
-  const rateModalState = useRabbySelector((s) => s.rateGuidance);
-  const rDispatch = useRabbyDispatch();
+  const visible = useRateGuidanceStore((state) => state.visible);
+  const userStar = useRateGuidanceStore((state) => state.userStar);
+  const userFeedback = useRateGuidanceStore((state) => state.userFeedback);
+  const isSubmitting = useRateGuidanceStore((state) => state.isSubmitting);
+  const setRateModalState = useRateGuidanceStore((state) => state.setField);
+  const rateModalState = useMemo(
+    () => ({ visible, userStar, userFeedback, isSubmitting }),
+    [visible, userStar, userFeedback, isSubmitting]
+  );
   const wallet = useWallet();
   const { disableExposureRateGuide } = useExposureRateGuide();
 
@@ -181,30 +200,30 @@ export function useRateModal() {
       ) {
         nextState.userStar = coerceStar(options?.starCountOnOpen);
       }
-      rDispatch.rateGuidance.setField(nextState);
+      setRateModalState(nextState);
     },
-    [rDispatch.rateGuidance, rateModalState.visible, disableExposureRateGuide]
+    [setRateModalState, rateModalState.visible, disableExposureRateGuide]
   );
 
   const selectStar = useCallback(
     (star: number) => {
-      rDispatch.rateGuidance.setField({
+      setRateModalState({
         ...rateModalState,
         userStar: coerceStar(star),
       });
     },
-    [rateModalState, rDispatch.rateGuidance]
+    [rateModalState, setRateModalState]
   );
 
   const onChangeFeedback = useCallback(
     (feedback: string) => {
-      rDispatch.rateGuidance.setField({
+      setRateModalState({
         ...rateModalState,
         // userFeedback: feedback.slice(0, FEEDBACK_LEN_LIMIT), // Limit feedback to 300 characters
         userFeedback: feedback.slice(0, 9999), // Limit feedback to 300 characters
       });
     },
-    [rDispatch.rateGuidance, rateModalState]
+    [setRateModalState, rateModalState]
   );
 
   const pushRateDetails = useCallback(
@@ -246,7 +265,7 @@ export function useRateModal() {
        **/
 
       try {
-        rDispatch.rateGuidance.setField({ isSubmitting: true });
+        setRateModalState({ isSubmitting: true });
         if (needFeedbackText) {
           await wallet.openapi.submitFeedback({
             text: feedbackContent,
@@ -266,10 +285,10 @@ export function useRateModal() {
         });
         console.error('Failed to submit feedback:', error);
       } finally {
-        rDispatch.rateGuidance.setField({ isSubmitting: false });
+        setRateModalState({ isSubmitting: false });
       }
     },
-    [rateModalState, rDispatch]
+    [rateModalState, setRateModalState, wallet]
   );
 
   const openAppRateUrl = useCallback(() => {

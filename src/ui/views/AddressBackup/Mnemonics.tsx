@@ -39,6 +39,7 @@ const AddressBackupMnemonics: React.FC<{
   const history = useHistory();
   const { state } = useLocation<{
     address?: string;
+    publicKey?: string;
     data?: string;
     goBack?: boolean;
     redirectTo?: string;
@@ -179,7 +180,7 @@ const AddressBackupMnemonics: React.FC<{
         <InfoCircleOutlined className="rotate-180" />
         {t('page.backupSeedPhrase.alert')}
       </div>
-      <div className="mb-[94px]">
+      <div className="mb-[94px] overflow-hidden">
         <div className="relative">
           <div
             onClick={() => setMasked(false)}
@@ -235,19 +236,29 @@ const AddressBackupMnemonics: React.FC<{
           </div>
         </div>
       </div>
-      <div className="footer py-[18px] z-20 border-t-[0.5px] border-rabby-neutral-line bg-transparent">
+      <div
+        className={clsx(
+          'footer py-[18px] z-20  bg-rabby-neutral-bg-2',
+          'border-t-[0.5px] border-rabby-neutral-line'
+        )}
+      >
         <Button
           type="primary"
           className="w-full"
           size="large"
           onClick={async () => {
-            if (!backupAddress) {
+            if (state?.publicKey) {
+              await wallet.backupSeedPhraseConfirmed(
+                state.publicKey,
+                'publickey'
+              );
+            } else if (backupAddress) {
+              await wallet.backupSeedPhraseConfirmed(backupAddress);
+              runCheckBackup().catch(() => undefined);
+            } else {
               message.error('Address is missing');
               return;
             }
-
-            await wallet.backupSeedPhraseConfirmed(backupAddress);
-            runCheckBackup();
 
             if (state?.redirectTo) {
               history.replace(state.redirectTo);

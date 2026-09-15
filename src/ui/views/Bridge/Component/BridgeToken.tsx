@@ -11,7 +11,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TokenRender } from '../../Swap/Component/TokenRender';
 import {
-  formatTokenAmount,
+  formatLargeTokenAmount,
   formatUsdValue,
   isSameAddress,
   useWallet,
@@ -30,6 +30,7 @@ import {
   getGasTokenBalance,
 } from '@/utils/transaction';
 import { isTempoChain } from '@/utils/tempo';
+import { AutoSizeAmountInput } from '@/ui/component/AutoSizeAmountInput';
 
 const StyledInput = styled(Input)`
   color: var(--r-neutral-title1, #192945);
@@ -39,6 +40,7 @@ const StyledInput = styled(Input)`
   line-height: normal;
   background: transparent !important;
   padding-left: 0;
+  padding-right: 0;
   & > .ant-input {
     color: var(--r-neutral-title1, #192945);
     font-size: 24px;
@@ -117,7 +119,7 @@ export const BridgeToken = ({
   const isMaxRef = useRef(false);
   const isReserveMaxRef = useRef(false);
 
-  const inputRef = useRef<InputRef>();
+  const inputRef = useRef<InputRef>(null);
 
   const chainSelectorRef = useRef<ChainSelectorRef>(null);
 
@@ -365,6 +367,10 @@ export const BridgeToken = ({
   }, [isFromToken, disabled, onInputChange, handleSetGasPrice]);
 
   useEffect(() => {
+    isReserveMaxRef.current = false;
+  }, [chain, token?.chain, token?.id]);
+
+  useEffect(() => {
     if (
       isFromToken &&
       isReserveMaxRef.current &&
@@ -384,7 +390,7 @@ export const BridgeToken = ({
   ]);
 
   return (
-    <div className={clsx('h-[156px] bg-r-neutral-card1 rounded-[8px]')}>
+    <div className={clsx('h-[148px] bg-r-neutral-card1 rounded-[8px]')}>
       <div
         className={clsx(
           'flex items-center gap-8',
@@ -410,7 +416,7 @@ export const BridgeToken = ({
         />
       </div>
 
-      <div className={clsx('p-16 pb-[18px]')}>
+      <div className={clsx('p-16')}>
         <div className={clsx('flex justify-between items-center')}>
           {valueLoading && skeletonLoading ? (
             <SkeletonInput
@@ -422,17 +428,30 @@ export const BridgeToken = ({
               }}
             />
           ) : (
-            <StyledInput
-              className={clsx(
-                inSufficient && 'text-rabby-red-default',
-                valueLoading && 'opacity-50'
+            <AutoSizeAmountInput
+              inputRef={inputRef}
+              inputValue={String(value ?? '')}
+              maxFontSize={24}
+              minFontSize={16}
+              fontSizeStep={2}
+              fontWeight={500}
+              className="min-w-0 flex-1"
+            >
+              {(fontSize) => (
+                <StyledInput
+                  className={clsx(
+                    inSufficient && 'text-rabby-red-default',
+                    valueLoading && 'opacity-50'
+                  )}
+                  placeholder={showNoQuote ? t('page.bridge.no-quote') : '0'}
+                  value={value}
+                  onChange={inputChange}
+                  readOnly={disabled || !isFromToken}
+                  ref={inputRef}
+                  style={{ fontSize }}
+                />
               )}
-              placeholder={showNoQuote ? t('page.bridge.no-quote') : '0'}
-              value={value}
-              onChange={inputChange}
-              readOnly={disabled || !isFromToken}
-              ref={inputRef as any}
-            />
+            </AutoSizeAmountInput>
           )}
           {isToToken ? (
             <BridgeToTokenSelect
@@ -469,7 +488,7 @@ export const BridgeToken = ({
         <div
           className={clsx(
             'flex justify-between items-center',
-            'mt-14 text-13 text-r-neutral-foot font-normal'
+            'mt-12 text-13 text-r-neutral-foot font-normal'
           )}
         >
           <div className="flex items-center gap-2">
@@ -501,7 +520,8 @@ export const BridgeToken = ({
               <RcIconWalletCC viewBox="0 0 16 16" className="w-16 h-16" />
               <span className={clsx(valueLoading && 'opacity-50')}>
                 {token
-                  ? formatTokenAmount(tokenAmountBn(token).toString(10)) || '0'
+                  ? formatLargeTokenAmount(tokenAmountBn(token).toString(10)) ||
+                    '0'
                   : 0}
               </span>
             </div>

@@ -1,4 +1,4 @@
-import { PositionAndOpenOrder } from '@/ui/models/perps';
+import { PositionAndOpenOrder } from '@/ui/state/perps';
 import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
 import { formatUsdValue, splitNumberByStep } from '@/ui/utils';
 import { message, Table } from 'antd';
@@ -299,7 +299,7 @@ export const OrderHistory: React.FC = () => {
         },
       },
     ],
-    [marketDataMap]
+    [marketDataMap, t]
   );
   return (
     <TableScrollX>

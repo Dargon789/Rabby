@@ -1,56 +1,62 @@
-import { INITIAL_OPENAPI_URL, INITIAL_TESTNET_OPENAPI_URL } from '@/constant';
-import { OpenApiService } from '@rabby-wallet/rabby-api';
-import { createPersistStore } from 'background/utils';
-export * from '@rabby-wallet/rabby-api/dist/types';
-import { WebSignApiPlugin } from '@rabby-wallet/rabby-api/dist/plugins/web-sign';
-import fetchAdapter from 'background/utils/fetchAdapter';
+import { INITIAL_OPENAPI_URL } from '@/constant';
+import {
+  createOpenapiRuntime,
+  createOpenapiStoreTemplate,
+  OpenapiServiceStore,
+  openapiStoreSchema,
+  pickPublicOpenapiStore,
+  PUBLIC_OPENAPI_KEYS,
+  PublicOpenapiStore,
+} from '@/services/openapi';
+import { createPersistStore, patchPersistStore } from 'background/utils';
 import { v4 as uuidv4 } from 'uuid';
 
-class baseStore {
-  store: {
-    host: string;
-    testnetHost: string;
-    apiKey: string | null;
-    apiTime: number | null;
-  };
+export * from '@/services/openapi';
+
+class OpenapiStore {
+  store: OpenapiServiceStore = createOpenapiStoreTemplate();
+  private initialized = false;
+  private initialization: Promise<void>;
 
   constructor() {
-    this.store = {
-      host: INITIAL_OPENAPI_URL,
-      testnetHost: INITIAL_TESTNET_OPENAPI_URL,
-      apiKey: null,
-      apiTime: null,
-    };
-    createPersistStore({
-      name: 'openapi',
-      template: {
-        host: INITIAL_OPENAPI_URL,
-        testnetHost: INITIAL_TESTNET_OPENAPI_URL,
-        apiKey: null,
-        apiTime: null,
-      },
-    }).then((res) => {
-      this.store = res;
-      if (!this.store.apiKey) {
-        this.generateAPIKey();
-      }
-    });
+    this.initialization = this.initialize();
   }
+
+  private initialize = async () => {
+    this.store = await createPersistStore<OpenapiServiceStore>({
+      name: 'openapi',
+      template: createOpenapiStoreTemplate(),
+      schema: openapiStoreSchema,
+      broadcastKeys: PUBLIC_OPENAPI_KEYS,
+    });
+    // Remove the legacy endpoint after upgrading from builds that persisted a
+    // separate testnet OpenAPI client. Unknown schema keys are otherwise kept
+    // by the generic persistence layer to support downgrades.
+    Reflect.deleteProperty(this.store, 'testnetHost');
+    this.initialized = true;
+    if (!this.store.apiKey) {
+      this.generateAPIKey();
+    }
+  };
+
+  init = () => this.initialization;
+
+  getStore = () => this.store;
+
+  patchStore = (partials: Partial<OpenapiServiceStore>) => {
+    if (!this.initialized) {
+      Object.assign(this.store, partials);
+      return;
+    }
+    patchPersistStore(this.store, partials);
+  };
 
   get host() {
     return this.store.host;
   }
 
   set host(value: string) {
-    this.store.host = value;
-  }
-
-  get testnetHost() {
-    return this.store.testnetHost;
-  }
-
-  set testnetHost(value: string) {
-    this.store.testnetHost = value;
+    this.patchStore({ host: value });
   }
 
   get apiKey() {
@@ -58,7 +64,7 @@ class baseStore {
   }
 
   set apiKey(value: string | null) {
-    this.store.apiKey = value;
+    this.patchStore({ apiKey: value });
   }
 
   get apiTime() {
@@ -66,51 +72,52 @@ class baseStore {
   }
 
   set apiTime(value: number | null) {
-    this.store.apiTime = value;
+    this.patchStore({ apiTime: value });
   }
 
   generateAPIKey = () => {
-    const uuid = uuidv4();
-    this.store.apiKey = uuid;
-    this.store.apiTime = Math.floor(Date.now() / 1000);
+    this.patchStore({
+      apiKey: uuidv4(),
+      apiTime: Math.floor(Date.now() / 1000),
+    });
   };
 }
 
-const testnetStore = new (class TestnetStore extends baseStore {
-  constructor() {
-    super();
-  }
-  get host() {
-    return this.store.testnetHost;
-  }
-  set host(value: string) {
-    this.store.testnetHost = value;
-  }
-})();
-
-const proxyStore = new baseStore();
+const proxyStore = new OpenapiStore();
 
 if (!process.env.DEBUG) {
   proxyStore.host = INITIAL_OPENAPI_URL;
-  proxyStore.testnetHost = INITIAL_TESTNET_OPENAPI_URL;
-  testnetStore.host = INITIAL_TESTNET_OPENAPI_URL;
-  testnetStore.testnetHost = INITIAL_TESTNET_OPENAPI_URL;
 }
 
-const service = new OpenApiService({
-  plugin: WebSignApiPlugin,
-  adapter: fetchAdapter,
+const openapiRuntime = createOpenapiRuntime({
+  kind: 'background',
   store: proxyStore,
+  initializeStore: proxyStore.init,
 });
+const service = openapiRuntime.openapi;
 
-if (typeof window !== 'undefined') {
-  service.initSync();
-}
+export const initializeOpenapiStore = () => proxyStore.init();
+export const initializeOpenapiRuntime = () => openapiRuntime.ready;
 
-export const testnetOpenapiService = new OpenApiService({
-  plugin: WebSignApiPlugin,
-  adapter: fetchAdapter,
-  store: testnetStore,
-});
+export const getOpenapiStore = (): PublicOpenapiStore =>
+  pickPublicOpenapiStore(proxyStore.getStore());
+
+export const patchOpenapiStore = async (
+  partials: Partial<PublicOpenapiStore>
+) => {
+  // Reachable from the UI through `setStorageItem`, so drop anything outside
+  // the public half instead of trusting the caller's typing.
+  proxyStore.patchStore(pickPublicOpenapiStore(partials));
+
+  // Keep the background request headers aligned with identity changes coming
+  // from any UI runtime.
+  if (
+    PUBLIC_OPENAPI_KEYS.some((key) =>
+      Object.prototype.hasOwnProperty.call(partials, key)
+    )
+  ) {
+    await openapiRuntime.reconfigure();
+  }
+};
 
 export default service;

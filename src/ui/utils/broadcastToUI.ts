@@ -4,6 +4,7 @@ import {
   BROADCAST_TO_UI_EVENTS_PAYLOAD,
   IDisposeFunc,
 } from '@/utils/broadcastToUI';
+import type { PersistedStoreMap } from '@/types/persistedStore';
 
 export function onBroadcastToUI<T extends BROADCAST_TO_UI_EVENTS>(
   event: T,
@@ -16,15 +17,11 @@ export function onBroadcastToUI<T extends BROADCAST_TO_UI_EVENTS>(
   };
 }
 
-type AllBackgroundStores = {
-  contactBook: import('@/background/service/contactBook').ContactBookStore;
+type AllBackgroundStores = PersistedStoreMap & {
   preference: import('@/background/service/preference').PreferenceStore;
-  currency: import('@/background/service/currency').CurrencyStore;
-  whitelist: import('@/background/service/whitelist').WhitelistStore;
   feedback: import('@/background/service/feedback').FeedbackServiceStore;
 };
 
-// type StoreRootModel = import('@/ui/models').RootModel;
 export function onBackgroundStoreChanged<S extends keyof AllBackgroundStores>(
   bgStoreName: S,
   listener: (

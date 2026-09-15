@@ -1,7 +1,6 @@
 const webpack = require('webpack');
 const path = require('path');
 const SecSDK = require('warden-for-js').WardenPlugin;
-// const BundleAnalyzerPlugin = require('webpack-bundle-analyzer').BundleAnalyzerPlugin;
 
 const config = {
   mode: 'production',
@@ -11,14 +10,14 @@ const config = {
     maxAssetSize: 2500000,
   },
   plugins: [
-    // new BundleAnalyzerPlugin(),
     new webpack.DefinePlugin({
       'process.env.BUILD_ENV': JSON.stringify('PRO'),
       'process.env.DEBUG': true,
     }),
     true &&
       new SecSDK({
-        dev: true,
+        dev: false,
+        forceCheck: false,
       }),
   ].filter(Boolean),
 };

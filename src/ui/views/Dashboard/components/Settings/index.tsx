@@ -5,7 +5,7 @@ import { Button, DrawerProps, Form, Input, message, Modal, Switch } from 'antd';
 import clsx from 'clsx';
 import {
   INITIAL_OPENAPI_URL,
-  INITIAL_TESTNET_OPENAPI_URL,
+  CUSTOM_RPC_ENABLED,
   LANGS,
   ThemeIconType,
   ThemeModes,
@@ -88,10 +88,13 @@ import {
   isBiometricUnlockSupported,
 } from '@/ui/utils/biometric';
 import { PERPS_TEST_INCLUDE_WATCH_KEY } from '@/ui/views/Perps/components/SelectAddressList';
+import { useOpenapiStore } from '@/ui/state/openapi';
+import { appIsDebugPkg, appIsDev } from '@/utils/env';
 
 const useAutoLockOptions = () => {
   const { t } = useTranslation();
-  return [
+
+  const options = [
     {
       value: 0,
       label: t('page.dashboard.settings.lock.never'),
@@ -117,6 +120,13 @@ const useAutoLockOptions = () => {
       label: t('page.dashboard.settings.10Minutes'),
     },
   ];
+  if (appIsDebugPkg || appIsDev) {
+    options.push({
+      value: 1,
+      label: '1 minute',
+    });
+  }
+  return options;
 };
 
 interface SettingsProps {
@@ -399,7 +409,7 @@ const ResetAccountModal = ({
               onChange={setClearNonce}
             >
               <span className="text-13 text-r-neutral-body">
-                Also reset my local nonce data and signature record
+                {t('page.dashboard.settings.clearPendingCheckbox')}
               </span>
             </Checkbox>
           </div>
@@ -613,7 +623,6 @@ const SettingsInner = ({
   const history = useHistory();
   const { t } = useTranslation();
   const [showOpenApiModal, setShowOpenApiModal] = useState(false);
-  const [showTestnetOpenApiModal, setShowTestnetOpenApiModal] = useState(false);
   const [showResetAccountModal, setShowResetAccountModal] = useState(false);
   const [isShowAutoLockModal, setIsShowAutoLockModal] = useState(false);
   const [isShowLangModal, setIsShowLangModal] = useState(false);
@@ -664,7 +673,7 @@ const SettingsInner = ({
   );
   const themeMode = useRabbySelector((state) => state.preference.themeMode);
 
-  const openapiStore = useRabbySelector((state) => state.openapi);
+  const openapiStore = useOpenapiStore();
 
   const dispatch = useRabbyDispatch();
   const { currency, syncCurrencyList } = useCurrency();
@@ -1103,24 +1112,28 @@ const SettingsInner = ({
             reportSettings('Custom Testnet');
           },
         },
-        {
-          leftIcon: RcIconCustomRPC,
-          content: t('page.dashboard.settings.settings.customRpc'),
-          onClick: () => {
-            history.push('/custom-rpc');
-            matomoRequestEvent({
-              category: 'Setting',
-              action: 'clickToUse',
-              label: 'Custom RPC',
-            });
+        ...(CUSTOM_RPC_ENABLED
+          ? [
+              {
+                leftIcon: RcIconCustomRPC,
+                content: t('page.dashboard.settings.settings.customRpc'),
+                onClick: () => {
+                  history.push('/custom-rpc');
+                  matomoRequestEvent({
+                    category: 'Setting',
+                    action: 'clickToUse',
+                    label: 'Custom RPC',
+                  });
 
-            ga4.fireEvent('More_CustomRPC', {
-              event_category: 'Click More',
-            });
+                  ga4.fireEvent('More_CustomRPC', {
+                    event_category: 'Click More',
+                  });
 
-            reportSettings('Custom RPC');
-          },
-        },
+                  reportSettings('Custom RPC');
+                },
+              },
+            ]
+          : []),
         {
           leftIcon: RcIconI18n,
           content: t('page.dashboard.settings.settings.currentLanguage'),
@@ -1297,19 +1310,6 @@ const SettingsInner = ({
             <span>{t('page.dashboard.settings.backendServiceUrl')}</span>
           ),
           onClick: () => setShowOpenApiModal(true),
-          rightIcon: (
-            <ThemeIcon
-              src={RcIconArrowRight}
-              className="icon icon-arrow-right"
-            />
-          ),
-        },
-        {
-          leftIcon: RcIconServerCC,
-          content: (
-            <span>{t('page.dashboard.settings.testnetBackendServiceUrl')}</span>
-          ),
-          onClick: () => setShowTestnetOpenApiModal(true),
           rightIcon: (
             <ThemeIcon
               src={RcIconArrowRight}
@@ -1642,11 +1642,6 @@ const SettingsInner = ({
     onClose && onClose(e);
   };
 
-  useEffect(() => {
-    dispatch.openapi.getHost();
-    dispatch.openapi.getTestnetHost();
-  }, [dispatch.openapi]);
-
   const [isShowEcology, setIsShowEcologyModal] = React.useState(false);
 
   return (
@@ -1737,21 +1732,10 @@ const SettingsInner = ({
         value={openapiStore.host}
         defaultValue={INITIAL_OPENAPI_URL}
         onFinish={(host) => {
-          dispatch.openapi.setHost(host);
+          openapiStore.setHost(host);
           setShowOpenApiModal(false);
         }}
         onCancel={() => setShowOpenApiModal(false)}
-      />
-      <OpenApiModal
-        visible={showTestnetOpenApiModal}
-        value={openapiStore.testnetHost}
-        defaultValue={INITIAL_TESTNET_OPENAPI_URL}
-        title={t('page.dashboard.settings.testnetBackendServiceUrl')}
-        onFinish={(host) => {
-          dispatch.openapi.setTestnetHost(host);
-          setShowTestnetOpenApiModal(false);
-        }}
-        onCancel={() => setShowTestnetOpenApiModal(false)}
       />
       <ResetAccountModal
         visible={showResetAccountModal}

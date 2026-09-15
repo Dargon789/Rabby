@@ -1,4 +1,4 @@
-import { MarketData, PositionAndOpenOrder } from '@/ui/models/perps';
+import { MarketData, PositionAndOpenOrder } from '@/ui/state/perps';
 import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
 import { formatUsdValue, sleep, splitNumberByStep } from '@/ui/utils';
 import { Button, message, Modal, Table, Tooltip } from 'antd';
@@ -728,7 +728,7 @@ export const PositionsInfo: React.FC = () => {
         },
       },
     ],
-    [marketDataMap, isSmallScreen]
+    [marketDataMap, isSmallScreen, t]
   );
 
   return (

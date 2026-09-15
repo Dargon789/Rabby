@@ -112,18 +112,6 @@ export function ChainFilterV2Line({
   //   };
   // }, [chainList, selectedChain]);
 
-  // const { customRPC } = useRabbySelector((s) => ({
-  //   customRPC: s.customRPC.customRPC,
-  //   // cachedChainBalances: {
-  //   //   mainnet: s.account.matteredChainBalances,
-  //   //   testnet: s.account.testnetMatteredChainBalances,
-  //   // },
-  // }));
-  // const dispatch = useRabbyDispatch();
-  // useEffect(() => {
-  //   dispatch.customRPC.getAllRPC();
-  // }, []);
-
   return (
     <div
       className={clsx(
@@ -141,7 +129,7 @@ export function ChainFilterV2Line({
             'hover:border-rabby-blue-default hover:bg-r-blue-light1'
           )}
           onClick={() => {
-            onClearFilterChain?.();
+            onStartSelectChain?.();
           }}
         >
           <div>
@@ -173,7 +161,15 @@ export function ChainFilterV2Line({
             </span>
           </div>
 
-          <RcIconChainFilterCloseCC className="ml-[4px] text-r-neutral-foot w-[16px] h-[16px]" />
+          <span
+            className="flex p-[4px] -my-[4px] -mr-[4px]"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClearFilterChain?.();
+            }}
+          >
+            <RcIconChainFilterCloseCC className="text-r-neutral-foot w-[16px] h-[16px]" />
+          </span>
         </div>
       ) : (
         <div

@@ -317,6 +317,9 @@ const config = {
       'process.env.release': JSON.stringify(APP_VERSION),
       'process.env.RABBY_BUILD_GIT_HASH': JSON.stringify(BUILD_GIT_HASH),
       'process.env.ETHERSCAN_KEY': JSON.stringify(process.env.ETHERSCAN_KEY),
+      'process.env.RABBY_SENTRY_DSN': JSON.stringify(
+        process.env.RABBY_SENTRY_DSN
+      ),
     }),
     new CopyPlugin({
       patterns: [
@@ -346,25 +349,28 @@ const config = {
                 './vendor/trezor/trezor-content-script.js'
               ),
             },
-        IS_MANIFEST_MV3
-          ? {
-              from: require.resolve(
-                '@trezor/connect-webextension/build/trezor-connect-webextension.js'
-              ),
-              to: path.resolve(
-                FINAL_DIST,
-                './vendor/trezor/trezor-connect-webextension.js'
-              ),
-            }
-          : {
-              from: require.resolve(
-                '@trezor/connect-web/lib/webextension/trezor-usb-permissions.js'
-              ),
-              to: path.resolve(
-                FINAL_DIST,
-                './vendor/trezor/trezor-usb-permissions.js'
-              ),
-            },
+        {
+          from: require.resolve(
+            '@trezor/connect-web/lib/webextension/trezor-usb-permissions.js'
+          ),
+          to: path.resolve(
+            FINAL_DIST,
+            './vendor/trezor-usb-permissions.js'
+          ),
+        },
+        ...(IS_MANIFEST_MV3
+          ? [
+              {
+                from: require.resolve(
+                  '@trezor/connect-web/lib/webextension/trezor-usb-permissions.html'
+                ),
+                to: path.resolve(
+                  FINAL_DIST,
+                  './trezor-usb-permissions.html'
+                ),
+              },
+            ]
+          : []),
       ],
     }),
     tsStyledComponentPlugin,

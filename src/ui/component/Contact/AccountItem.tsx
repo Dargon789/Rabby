@@ -3,11 +3,11 @@ import styled from 'styled-components';
 import clsx from 'clsx';
 import { message, Tooltip } from 'antd';
 import { ellipsis } from 'ui/utils/address';
-import { IDisplayedAccountWithBalance } from 'ui/models/accountToDisplay';
+import { IDisplayedAccountWithBalance } from '@/ui/state/accountToDisplay';
 import { splitNumberByStep } from 'ui/utils/number';
 import { WALLET_BRAND_CONTENT, KEYRING_ICONS } from 'consts';
 import { ReactComponent as RcIconWhitelist } from 'ui/assets/address/whitelist.svg';
-import { useRabbySelector } from '@/ui/store';
+import { useWhitelistStore } from '@/ui/state/whitelist';
 import { isSameAddress } from '@/ui/utils';
 import { copyAddress } from '@/ui/utils/clipboard';
 import { CopyChecked } from '../CopyChecked';
@@ -85,10 +85,8 @@ const AccountItem = ({
   disabled?: boolean;
   onClick?(account: IDisplayedAccountWithBalance): void;
 }) => {
-  const { whitelistEnable, whiteList } = useRabbySelector((s) => ({
-    whitelistEnable: s.whitelist.enabled,
-    whiteList: s.whitelist.whitelist,
-  }));
+  const whitelistEnable = useWhitelistStore((state) => state.enabled);
+  const whiteList = useWhitelistStore((state) => state.whitelists);
 
   const { t } = useTranslation();
 

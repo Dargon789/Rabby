@@ -1,10 +1,10 @@
 import React, { useMemo } from 'react';
 import { useHistory } from 'react-router-dom';
 import { ReactComponent as RcIconHistory } from '@/ui/assets/swap/history-cc.svg';
-import { ReactComponent as RcIconFullscreen } from '@/ui/assets/fullscreen-cc.svg';
+import { RcIconJumpBoldCC } from '@/ui/assets/dashboard';
 import { ReactComponent as RcIconPending } from '@/ui/assets/perps/IconSpin.svg';
 import { ReactComponent as RcIconArrowRight } from '@/ui/assets/perps/IconYellowArrow.svg';
-import { AccountHistoryItem } from '@/ui/models/perps';
+import { AccountHistoryItem } from '@/ui/state/perps';
 import { useWallet } from '@/ui/utils';
 
 interface PerpsHeaderRightProps {
@@ -33,7 +33,7 @@ export const PerpsHeaderRight: React.FC<PerpsHeaderRightProps> = ({
           wallet.openInDesktop('/desktop/perps');
         }}
       >
-        <RcIconFullscreen />
+        <RcIconJumpBoldCC />
       </div>
       <div className="flex items-center">
         {loadingNumber > 0 ? (

@@ -4,6 +4,7 @@ import { Approval } from 'background/service/notification';
 import { useWallet, useApproval } from 'ui/utils';
 import { IExtractFromPromise } from '@/ui/utils/type';
 import { ApprovalUtilsProvider } from './hooks/useApprovalUtils';
+import { useSecurityEngineStore } from '@/ui/state/securityEngine';
 import * as ApprovalComponent from './components';
 
 import './style.less';
@@ -23,6 +24,9 @@ const Approval: React.FC<{
     void
   >;
   const [approval, setApproval] = useState<IApproval | null>(null);
+  const resetCurrentTx = useSecurityEngineStore(
+    (state) => state.resetCurrentTx
+  );
 
   const init = async () => {
     const approval = await getApproval();
@@ -30,11 +34,20 @@ const Approval: React.FC<{
       history.replace('/');
       return null;
     }
+
+    // "忽略所有" 只允许作用于当前审批, 不能在同窗口排队切换时残留到下一笔
+    resetCurrentTx();
     setApproval(approval);
     document.title = 'Rabby Wallet Notification';
     const account = approval.data.account || (await wallet.getCurrentAccount());
     if (!account) {
-      rejectApproval();
+      rejectApproval(
+        undefined,
+        false,
+        false,
+        approval.id,
+        approval.data.approvalComponent
+      );
       return;
     }
   };
@@ -55,6 +68,8 @@ const Approval: React.FC<{
       {approval && (
         <ApprovalUtilsProvider>
           <CurrentApprovalComponent
+            key={approval.id}
+            approvalId={approval.id}
             params={params}
             origin={origin}
             account={account}

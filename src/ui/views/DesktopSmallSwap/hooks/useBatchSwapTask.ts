@@ -2,6 +2,7 @@ import { Account } from '@/background/service/preference';
 import { DEX, KEYRING_TYPE } from '@/constant';
 import { useMiniSigner } from '@/ui/hooks/useSigner';
 import { useRabbySelector } from '@/ui/store';
+import { useSwapStore } from '@/ui/state/swap';
 import { formatAmount, useWallet, WalletControllerType } from '@/ui/utils';
 import { waitForTxCompleted } from '@/ui/utils/transaction';
 import { useGasAccountSign } from '@/ui/views/GasAccount/hooks';
@@ -20,6 +21,7 @@ import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   isSwapWrapToken,
+  getRabbyFeeRate,
   QuoteProvider,
   TDexQuoteData,
   useQuoteMethods,
@@ -80,6 +82,15 @@ export const getActiveProvider = async ({
     return null;
   }
 
+  const isWrapToken = isSwapWrapToken(payToken.id, receiveToken.id, chain.enum);
+  const feeRate = getRabbyFeeRate({
+    payAmount,
+    payTokenPrice: payToken.price || 0,
+    payToken,
+    receiveToken,
+    isWrapToken,
+  });
+
   const quoteResult = await getSingleQuote({
     dexId,
     userAddress: currentAddress,
@@ -88,9 +99,7 @@ export const getActiveProvider = async ({
     slippage,
     chain: chain.enum,
     payAmount,
-    fee: isSwapWrapToken(payToken.id, receiveToken.id, chain.enum)
-      ? '0'
-      : '0.25',
+    fee: feeRate,
     inSufficient: false,
   });
 
@@ -152,6 +161,13 @@ export const buildSwapTxs = async ({
   }
 
   try {
+    const feeRate = getRabbyFeeRate({
+      payAmount: inputAmount,
+      payTokenPrice: payToken.price || 0,
+      payToken,
+      receiveToken,
+      isWrapToken: isSwapWrapToken(payToken.id, receiveToken.id, chain),
+    });
     const toAmount = new BigNumber(quoteResult.toTokenAmount)
       .div(10 ** (quoteResult.toTokenDecimals || receiveToken.decimals))
       .toNumber();
@@ -179,6 +195,7 @@ export const buildSwapTxs = async ({
             slippage: new BigNumber(slippage).div(100).toNumber(),
           },
           dex_id: activeProvider.name || 'WrapToken',
+          fee_rate: Number(feeRate),
         },
         addHistoryData: {
           address: userAddress,
@@ -287,9 +304,10 @@ export const useBatchSwapTask = (options: {
     autoResetGasStoreOnChainChange: true,
   });
 
-  const dexList = useRabbySelector((s) => {
-    return s.swap.supportedDEXList.filter((e) => DEX[e]);
-  });
+  const supportedDEXList = useSwapStore((s) => s.supportedDEXList);
+  const dexList = useMemo(() => supportedDEXList.filter((e) => DEX[e]), [
+    supportedDEXList,
+  ]);
 
   const getDexId = useMemoizedFn(() => {
     const randomIndex = random(0, dexList.length - 1);
