@@ -3,11 +3,10 @@ import React, { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { SwapSlider } from './Slider';
 import { useTranslation } from 'react-i18next';
 import TokenSelect from '@/ui/component/TokenSelect';
-import { SWAP_SUPPORT_CHAINS } from '@/constant';
 import { TokenRender } from './TokenRender';
 import { DrawerProps, Input, InputRef } from 'antd';
 import styled from 'styled-components';
-import { formatTokenAmount, formatUsdValue } from '@/ui/utils';
+import { formatLargeTokenAmount, formatUsdValue } from '@/ui/utils';
 import BigNumber from 'bignumber.js';
 import { ReactComponent as RcIconWalletCC } from '@/ui/assets/swap/wallet-cc.svg';
 import { tokenAmountBn } from '@/ui/utils/token';
@@ -21,7 +20,7 @@ import { AutoSizeAmountInput } from '@/ui/component/AutoSizeAmountInput';
 const StyledInput = styled(Input)`
   &,
   & > .ant-input {
-    height: 46px;
+    height: 40px;
     font-weight: 500;
     box-shadow: none;
     border-radius: 4px;
@@ -120,7 +119,7 @@ export const SwapTokenItem = (props: SwapTokenItemProps) => {
     if (token) {
       const amount = tokenAmountBn(token);
       return [
-        formatTokenAmount(amount.toString(10)),
+        formatLargeTokenAmount(amount.toString(10)) || '0',
         valueLoading
           ? formatUsdValue(0)
           : formatUsdValue(
@@ -181,7 +180,7 @@ export const SwapTokenItem = (props: SwapTokenItemProps) => {
   }, [token?.id, disabled]);
 
   return (
-    <div className="p-16 pb-20 h-[132px]">
+    <div className="h-[124px] p-16">
       <div
         className={clsx(
           'flex items-center justify-between',
@@ -189,7 +188,7 @@ export const SwapTokenItem = (props: SwapTokenItemProps) => {
         )}
         onClick={handleTokenModalOpen}
       >
-        <span className="block w-[150px] text-rabby-neutral-foot">
+        <span className="block w-[150px] text-13 font-normal leading-normal text-rabby-neutral-foot">
           {isFrom ? t('page.swap.from') : t('page.swap.to')}
         </span>
         {isFrom && (

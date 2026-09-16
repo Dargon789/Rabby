@@ -16,7 +16,7 @@ import {
 } from '@/utils/sentry';
 import Safe from '@rabby-wallet/gnosis-sdk';
 import * as Sentry from '@sentry/browser';
-import fetchAdapter from 'background/utils/fetchAdapter';
+import fetchAdapter from '@/services/openapi/fetchAdapter';
 import { WalletController } from 'background/controller/wallet';
 import {
   APPCHAIN_SYNC_SCENE,
@@ -73,13 +73,9 @@ import {
 } from './service';
 import { customTestnetService } from './service/customTestnet';
 import { GasAccountServiceStore } from './service/gasAccount';
-import {
-  initializeOpenapiStore,
-  testnetOpenapiService,
-} from './service/openapi';
+import { initializeOpenapiRuntime } from './service/openapi';
 import { syncChainService } from './service/syncChain';
 import { userGuideService } from './service/userGuide';
-import lendingService from './service/lending';
 import perpsLive from './service/perpsLive';
 import { PERPS_LIVE_PORT_NAME } from '@/utils/message/perpsLive';
 import {
@@ -164,9 +160,7 @@ async function restoreAppState() {
   keyringService.loadStore(keyringState);
   keyringService.store.subscribe((value) => storage.set('keyringState', value));
   keyringService.sanitizeUnencryptedKeyringDataInStore();
-  await initializeOpenapiStore();
-  await openapiService.init();
-  await testnetOpenapiService.init();
+  await initializeOpenapiRuntime();
 
   // Init keyring and openapi before migrations that depend on them.
   await migrateData();
@@ -195,7 +189,6 @@ async function restoreAppState() {
   await syncChainService.init();
   await perpsService.init();
   await transactionsService.init();
-  await lendingService.init();
   await feedbackService.init();
 
   // WS is lazy — subscribes only after the first content-script port attaches
@@ -470,14 +463,6 @@ browser.runtime.onConnect.addListener((port) => {
               );
             }
             break;
-          case 'testnetOpenapi':
-            if (walletController.testnetOpenapi[data.method]) {
-              return walletController.testnetOpenapi[data.method].apply(
-                null,
-                data.params
-              );
-            }
-            break;
           case 'fakeTestnetOpenapi':
             if (walletController.fakeTestnetOpenapi[data.method]) {
               return walletController.fakeTestnetOpenapi[data.method].apply(
@@ -611,6 +596,7 @@ browser.runtime.onConnect.addListener((port) => {
       data,
       session,
       origin,
+      sourceFrameId: port.sender.frameId,
     };
     if (!session?.origin) {
       const tabInfo = await browser.tabs.get(sessionId);
