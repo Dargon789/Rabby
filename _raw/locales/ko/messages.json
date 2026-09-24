@@ -969,7 +969,16 @@
         "rate": "수수료 비율",
         "wallet": "지갑",
         "swapDesc": "Rabby Wallet은 항상 주요 애그리게이터에서 가능한 최적의 환율을 찾고, 해당 오퍼의 신뢰성을 검증합니다. Rabby는 0.25% 수수료를 부과하며(Wrap은 0%), 이 수수료는 견적에 자동으로 포함됩니다.",
-        "bridgeDesc": "Rabby Wallet은 항상 최고의 집계기에서 가장 좋은 환율을 찾고, 그들의 제안의 신뢰성을 검증합니다. Rabby는 0.25%의 수수료를 부과하며, 이는 자동으로 견적에 포함됩니다."
+        "bridgeDesc": "Rabby Wallet은 항상 최고의 집계기에서 가장 좋은 환율을 찾고, 그들의 제안의 신뢰성을 검증합니다. Rabby는 0.25%의 수수료를 부과하며, 이는 자동으로 견적에 포함됩니다.",
+        "discountTitle": "Rabby 수수료 할인",
+        "free": "무료",
+        "cases": {
+          "wrap": "네이티브 토큰 래핑/언래핑",
+          "stablecoins": "스테이블코인",
+          "lstLrt": "LST/LRT 토큰",
+          "million": "거래량 $1M+",
+          "hundredThousand": "거래량 $100k - $1M"
+        }
       },
       "lowCreditModal": {
         "title": "이 토큰은 낮은 신용 가치를 가지고 있습니다.",
@@ -1009,7 +1018,8 @@
       "this-exchange-is-not-enabled-to-trade-by-you": "이 거래소에서는 거래할 수 없습니다.",
       "there-is-no-fee-and-slippage-for-this-trade": "이 거래에는 슬리피지가 없습니다.",
       "minimum-received": "최소 수신",
-      "preferMEV": "MEV Guarded를 선호하세요",
+      "preferMEV": "MEV 보호",
+      "preferMEVTip": "Ethereum 및 BNB Chain 스왑에서 \"MEV 보호\"를 활성화하여 샌드위치 공격 위험을 줄이세요. 사용자 지정 RPC 또는 WalletConnect 주소를 사용하는 경우 이 기능은 지원되지 않습니다.",
       "no-fee-for-wrap": "Wrap에는 Rabby 수수료가 없습니다",
       "enable-it": "사용 가능하게 하세요",
       "rates-from-cex": "CEX에서의 요금",
@@ -1018,6 +1028,7 @@
       "no-slippage-for-wrap": "Wrap에는 슬리피지가 없습니다",
       "est-payment": "예상 결제:",
       "the-following-swap-rates-are-found": "다음 요금이 발견되었습니다",
+      "quotes": "견적",
       "tradingSettingTips": "{{viewCount}} 개의 거래소가 견적을 제공하며, {{tradeCount}} 개의 거래소에서 거래가 가능합니다.",
       "Gas-fee-too-high": "가스 요금이 너무 비쌉니다",
       "this-token-pair-is-not-supported": "토큰 쌍은 지원되지 않습니다",
@@ -1034,7 +1045,6 @@
       "process-with-two-step-approve": "두 단계 승인을 진행하세요",
       "estimate": "추정:",
       "cex": "CEX",
-      "preferMEVTip": "Ethereum 스왑에서 \"MEV Guarded\" 기능을 활성화해 샌드위치 공격 위험을 줄이세요. 사용자 지정 RPC 또는 WalletConnect 주소를 사용할 때는 지원되지 않습니다.",
       "est-difference": "추정 차이:",
       "trade": "거래",
       "usd-after-fees": "≈ {{usd}} ",
@@ -1243,7 +1253,6 @@
           "settings": "설정",
           "perpsPositions_one": "{{count}} 포지션",
           "perpsPositions_other": "{{count}} 포지션",
-          "lending": "대출",
           "dragTip": "길게 눌러서 재배치하기",
           "convertDust": "더스트 변환",
           "staking": "스테이킹"
@@ -1267,12 +1276,24 @@
         "pendingCountPlural": "{{countStr}} 대기 중",
         "metamaskIsInUseAndRabbyIsBanned": "MetaMask가 사용 중이며 Rabby는 금지되었습니다.",
         "whatsNew": "새로운 내용",
+        "firstNotice": {
+          "title": "새 버전 준비 완료",
+          "gotIt": "확인"
+        },
         "chainEnd": " 체인",
         "chain": " 체인, ",
         "missingDataTooltip": "현재 {{text}}의 네트워크 문제로 인해 잔액이 업데이트되지 않을 수 있습니다.",
         "importType": "{{type}}에 의해 가져왔습니다.",
         "appChainTips": "Hyperliquid 및 Polymarket 계정은 포함되지 않음",
-        "slotAppChainTips": "{{appChainNames}} 계좌가 포함되지 않았습니다."
+        "slotAppChainTips": "{{appChainNames}} 계좌가 포함되지 않았습니다.",
+        "stablecoinSwapPopup": {
+          "title": "스왑 수수료 0%",
+          "supportPrefix": "지원:",
+          "supportCount": "30+",
+          "supportSuffix": "개 스테이블코인 · 40개 이상의 체인",
+          "goToSwap": "스왑 하러 가기",
+          "close": "닫기"
+        }
       },
       "recentConnection": {
         "disconnectRecentlyUsed": {
@@ -1365,6 +1386,15 @@
       "settings": {
         "lock": {
           "never": "절대"
+        },
+        "updateCard": {
+          "check": "확인",
+          "title": "새 버전을 사용할 수 있습니다",
+          "update": "업데이트",
+          "dismiss": "업데이트 알림 닫기",
+          "error": "확장 프로그램 업데이트 실패",
+          "perps": "무기한 선물 거래 경험을 개선했습니다.",
+          "screenshots": "마우스 오른쪽 버튼으로 스크린샷을 찍어 버그를 간편하게 신고하세요."
         },
         "updateVersion": {
           "okText": "튜토리얼 보기",
@@ -1586,12 +1616,12 @@
         "amount": "금액",
         "usdValue": "USD 가치",
         "noAssets": "자산이 없습니다",
+        "unfoldChain": "체인 1개 더",
+        "unfoldChainPlural": "체인 {{moreLen}}개 더",
         "comingSoon": "곧 출시됩니다...",
         "blockDescription": "여기에는 당신이 차단한 토큰이 표시됩니다.",
         "blockLinkText": "주소 검색하여 토큰 차단",
         "customDescription": "귀하가 추가한 커스텀 토큰은 여기에서 표시됩니다.",
-        "unfoldChainPlural": "{{moreLen}} 체인을 펼치기",
-        "unfoldChain": "1 체인을 펼치세요",
         "customButtonText": "사용자 정의 토큰 추가",
         "addTokenEntryText": "토큰",
         "noTestnetAssets": "사용자 지정 네트워크 자산이 없습니다.",
@@ -3380,6 +3410,27 @@
         "oneMonth": "1개월",
         "ytd": "올해 누적"
       },
+      "PerpsCard": {
+        "portfolioValue": "포트폴리오 가치",
+        "available": "사용 가능",
+        "unifiedAccount": "통합 계정",
+        "unifiedAccountDesc": "계정은 담보 자산별로 단일 잔액을 사용하며, 동일한 담보를 사용하는 현물과 교차 마진 무기한 선물이 이를 공유합니다.",
+        "manualAccount": "일반 계정",
+        "manualAccountDesc": "현물과 각 무기한 선물 DEX의 잔액을 별도로 관리하며, 교차 마진은 DEX별로 독립적으로 운영됩니다.",
+        "portfolioMarginAccount": "포트폴리오 마진",
+        "portfolioMarginAccountDesc": "계정은 적격 현물 자산과 무기한 선물 포지션을 하나의 포트폴리오로 통합하여 자본 효율성을 높입니다.",
+        "breakdownPerps": "무기한 선물",
+        "breakdownSpot": "현물",
+        "breakdownOtherAssets": "기타 자산",
+        "breakdownNetOtherAssets": "기타 자산 순액",
+        "breakdownStaking": "스테이킹",
+        "period": {
+          "day": "1D",
+          "week": "1W",
+          "month": "1M",
+          "all": "전체"
+        }
+      },
       "newUserProcess": {
         "fourthTitle": "레버리지 조정",
         "gotIt": "알겠습니다",
@@ -4274,14 +4325,14 @@
         "perpsBalance": "Perps 잔액"
       },
       "PerpsClosePositionPopup": {
-        "title": "포지션 청산",
+        "title": "{{coin}} 포지션 청산",
         "amount": "수량",
         "total": "합계",
         "confirm": "확인",
         "fee": "수수료",
         "minimumWarning": "최소 청산 금액은 {{percent}}%",
-        "receive": "받기",
-        "closedPnl": "실현 손익"
+        "receive": "예상 수령액",
+        "closedPnl": "예상 실현 PNL"
       },
       "PerpsAutoCloseModal": {
         "stopLoss": "손절매",
@@ -4314,339 +4365,6 @@
         "takeProfitTipsLong": "익절가가 현재가보다 높아야 합니다."
       },
       "needDepositFirst": "먼저 자금을 예치해야 합니다."
-    },
-    "lending": {
-      "availableCard": {
-        "needSupply": "자산을 담보로 제공해야 대출이 가능합니다.",
-        "singleAssetUnavailableForEmode": "대출할 수 없습니다. 접근하려면 E-Mode를 종료하세요.",
-        "canBorrow": "제공한 담보에 따라 대출 한도까지 대출할 수 있습니다.",
-        "emodeNoAssets": "귀하의 검색과 관련된 자산을 찾을 수 없습니다. 다른 카테고리로 다시 시도해 보세요.",
-        "emode": "일부 자산은 E-Mode에서 빌릴 수 없습니다. 모든 자산에 접근하려면 E-Mode를 종료하세요.",
-        "isolated": "격리 모드로 인해 차입 한도와 자산이 제한됩니다."
-      },
-      "list": {
-        "headers": {
-          "mySupplies": "내 자산",
-          "my_assets": "내 자산",
-          "totalBorrowed": "총 차입금",
-          "my_balance": "내 잔액",
-          "token_balance": "토큰/잔액",
-          "token": "토큰",
-          "token_tvl": "토큰/총 잠금 가치",
-          "myBorrows": "내 대출"
-        },
-        "item": {
-          "wrapperToken": "{{name}}의 래핑 토큰"
-        }
-      },
-      "repayDetail": {
-        "tabs": {
-          "wallet": "지갑 잔액",
-          "collateral": "담보"
-        },
-        "amountTitle": "잔액: ",
-        "repayWith": "상환하기 위해",
-        "approveAndRepay": "승인 및 상환",
-        "actions": "상환"
-      },
-      "supplyDetail": {
-        "amountTitle": "사용 가능: ",
-        "supplied": "공급됨",
-        "actions": "공급",
-        "supplyBalance": "공급 잔액",
-        "supplyAPY": "공급 APY",
-        "approveAndSupply": "승인 및 공급",
-        "enabled": "활성화됨",
-        "collateralization": "담보화",
-        "availableToBorrow": "빌릴 수 있음",
-        "unavailable": "사용 불가",
-        "isolatedTips": "귀하의 기존 대출/차입 자산은 지원되지 않습니다."
-      },
-      "withdrawDetail": {
-        "amountTitle": "잔액: ",
-        "actions": "출금",
-        "remainingSupply": "남은 공급량"
-      },
-      "toggleCollateralDetail": {
-        "actions": "토글 {{asset}} 담보",
-        "enable": "{{asset}}를 담보로 활성화하십시오.",
-        "disable": "{{asset}}를 담보로 사용 중지",
-        "error": "AAVE 서비스에 오류가 발생했습니다. 나중에 다시 시도해 주세요."
-      },
-      "toggleCollateralModal": {
-        "toggleRiskTexts": {
-          "canNotUseThisCurrencyAsCollateral": "이 통화를 담보로 사용할 수 없습니다.",
-          "doNotHaveSuppliesInThisCurrency": "이 자산에 예치한 잔액이 없습니다.",
-          "zeroLTVWithdrawBlocked": "LTV가 0인 자산 ({{assets}})은 이 작업을 수행하기 위해 인출하거나 담보로 비활성화해야 합니다.",
-          "canNotSwitchUsageAsCollateralMode": "청산 위험이 발생하므로 이 자산을 담보로 전환할 수 없습니다."
-        },
-        "openTitle": "검토 활성화",
-        "exitIsolationModeTitle": "격리 모드 종료",
-        "closeTitle": "리뷰 비활성화",
-        "enableIsolationModeTitle": "격리 모드 활성화",
-        "exitIsolationModeDesc": "격리 모드를 종료하면 다른 토큰을 담보로 사용할 수 있습니다.",
-        "openDesc": "이 자산을 담보로 활성화하면 차입 가능액과 건강 지수가 높아집니다. 단, 건강 지수가 1 미만으로 떨어지면 청산될 수 있습니다.",
-        "riskToLiquidationText": "청산 위험이 발생하므로 이 자산을 담보로 전환할 수 없습니다.",
-        "closeDesc": "이 자산을 담보에서 제외하면 차입 가능액과 건강 지수에 영향을 줍니다.",
-        "enableIsolationModeDesc": "격리 모드에서는 다른 자산을 담보로 제공할 수 없습니다. 전체 부채 한도에 따라 격리 자산의 차입 가능액이 제한됩니다. 격리 모드를 종료하려면 다른 자산을 빌리기 전에 CRV를 담보에서 제외하세요."
-      },
-      "borrowDetail": {
-        "actions": "빌리기",
-        "swapDebt": "스왑",
-        "borrowed": "빌린",
-        "amountTitle": "사용 가능: ",
-        "approveAndBorrow": "승인 및 대출",
-        "almostReachedError": "대출 가능한 최대 금액은 프로토콜 대출 한도가 거의 도달했기 때문에 제한됩니다.",
-        "almostReachedWarning": "이 자산에 대한 프로토콜 대출 한도가 100%입니다. 추가 대출이 불가능합니다."
-      },
-      "popup": {
-        "amount": "금액",
-        "remainingDebt": "남은 부채",
-        "available": "사용 가능",
-        "title": "거래 개요",
-        "liquidationAt": "1.0 미만의 청산"
-      },
-      "borrowOverview": {
-        "title": "대출 세부정보",
-        "totalBorrowed": "총 차입",
-        "reachCapTip": "이 자산은 대출 한도에 도달했습니다. ",
-        "availableToBorrow": "빌릴 수 있음",
-        "borrowCap": "차입 한도",
-        "myBorrow": "내 대출",
-        "liquidityPenalty": "청산 패널티"
-      },
-      "supplyOverview": {
-        "totalSupplied": "총 공급량",
-        "collateral": "담보",
-        "noBalance": "잔액 없음",
-        "mySupply": "내 공급량",
-        "availableToSupply": "제공 가능",
-        "title": "공급 세부정보",
-        "walletBalance": "지갑 잔고",
-        "reachCap": "이 자산은 공급 한도에 도달했습니다. 이 시장에서 공급될 수 있는 것은 없습니다.",
-        "useAsCollateral": "담보로 사용하기",
-        "almostCap": "이 자산은 거의 대출 한도에 도달했습니다. 이 시장에서 대출할 수 있는 금액은 {{available}}뿐입니다."
-      },
-      "risk": {
-        "toggleCollateralWarning": "이 자산을 담보에서 제외하면 건강 지수가 청산 위험 수준으로 낮아집니다.",
-        "warning": "이 금액을 빌리면 건강 지수가 청산 위험 수준으로 낮아집니다.",
-        "withdrawWarning": "이 금액을 인출하면 건강 지수가 청산 위험 수준으로 낮아집니다.",
-        "checkbox": "알림을 이해했으며 계속 진행하고 싶습니다.",
-        "emodeBlockWarning": "E-Mode를 비활성화하면 건강 지수가 청산 위험 수준으로 낮아집니다.",
-        "blockEmodeWarning": "E-모드를 비활성화할 수 없습니다. 그렇게 하면 청산이 발생할 수 있습니다. E-모드를 종료하려면 공급하거나 빌린 포지션을 상환하십시오."
-      },
-      "lqDescription": {
-        "risky": "위험한",
-        "liquidationTitle": "청산:",
-        "over3title": "건강 지수 > 3.0:",
-        "over3desc": "귀하의 포지션은 안전합니다.",
-        "desc": "청산 가치",
-        "below1title": "건강 지수 ≤ 1.0:",
-        "liquidation": "건강 지수가 1.0 미만으로 떨어지면 부채 상환을 위해 담보의 일부가 자동으로 매도될 수 있습니다. 청산 페널티가 적용되어 담보의 일부를 잃게 됩니다.",
-        "introText": " 건강 지수는 차입 포지션의 안전성을 나타냅니다. 너무 낮아지면 담보가 청산될 수 있습니다.",
-        "below1desc": "귀하의 포지션이 청산 위험에 처해 있습니다.",
-        "warningText": "귀하의 건강 지수가 너무 낮습니다. 청산을 피하려면:\n1. 대출의 일부 또는 전부를 상환하십시오.\n2. 더 많은 담보를 추가하십시오."
-      },
-      "modalDesc": {
-        "availableToBorrow": "빌릴 수 있음",
-        "isolatedTitle": "자산은 담보로 사용될 수 없습니다.",
-        "isolatedSupplyDesc": "담보 사용은 격리 모드 때문에 제한됩니다.",
-        "isolatedDesc": "이 자산은 격리 모드에서만 담보로 사용될 수 있으며, 이 모드에서는 대출을 위한 다른 자산 담보를 제공할 수 없습니다. 격리 모드에서 담보로 사용되는 자산은 특정 부채 한도 내에서만 대출될 수 있습니다.",
-        "availableToBorrowDesc": "담보로 제공한 내용을 기준으로 대출할 수 있으며, 대출 한도에 도달할 때까지 가능합니다.",
-        "lqDesc": "청산이 발생할 때, 청산자는 차용인을 대신하여 미지급 대출 금액의 최대 50%를 상환합니다. 그 대가로 저렴한 가격으로 담보를 구매할 수 있으며, 차액(청산 페널티)을 보너스로 받을 수 있습니다.",
-        "maxAmount": "제공한 담보를 기준으로 빌릴 수 있는 최대 금액입니다. 총 차입 가능액은 각 담보 자산의 시장 가치에 최대 LTV를 곱한 값을 합산해 계산합니다.",
-        "maxLTV": "최대 LTV는 특정 담보로 빌릴 수 있는 최대 비율입니다. 예를 들어 LTV가 75%라면, 1 ETH 상당의 담보마다 기준 통화로 0.75 ETH 상당까지 빌릴 수 있습니다.",
-        "globalIsolatedDesc": "격리 모드에서는 다른 자산을 담보로 제공할 수 없습니다. 전체 부채 한도에 따라 격리 자산의 차입 가능액이 제한됩니다. 격리 모드를 종료하려면 다른 자산을 빌리기 전에 UNI를 담보에서 제외하세요. "
-      },
-      "repayWithAToken": {
-        "header": {
-          "assets": "토큰",
-          "balance": "잔액"
-        },
-        "title": "토큰 상환 선택",
-        "zeroLtvCollateralTips": "LTV가 0인 다음 담보가 있으므로, 담보 상환 규칙에 따라 먼저 이 담보로 상환해야 합니다. "
-      },
-      "manageEmode": {
-        "actions": {
-          "enable": "E-모드 활성화",
-          "disable": "E-모드 비활성화"
-        },
-        "guide": {
-          "buttonTitle": "E-모드 관리",
-          "title": "효율 모드 (E-Mode)",
-          "description": "E-모드는 선택한 자산 카테고리에 대한 LTV를 증가시킵니다."
-        },
-        "categorySelector": {
-          "header": {
-            "asset": "자산"
-          },
-          "label": "자산 범주",
-          "placeholder": "선택",
-          "desc": "이 카테고리를 활성화하려면 이 카테고리 외부의 모든 차입 포지션을 종료해야 합니다."
-        },
-        "debtSwapSelector": {
-          "header": {
-            "borrow": "내 대출",
-            "assets": "토큰/잔고",
-            "apy": "APY"
-          },
-          "title": "대출 토큰 선택"
-        },
-        "collateralSwapSelector": {
-          "header": {
-            "assets": "토큰",
-            "collateral": "내 담보"
-          },
-          "title": "담보 토큰 선택"
-        },
-        "overview": {
-          "row": {
-            "collateral": "담보",
-            "borrowable": "빌리기 가능",
-            "asset": "자산"
-          },
-          "title": "자산 분류"
-        },
-        "title": "E-모드 관리",
-        "disableTitle": "비활성화",
-        "unavailable": "• 사용 불가",
-        "enabled": "• 활성화됨",
-        "unavailableTips": "귀하의 기존 대출/차입 자산은 지원되지 않습니다.",
-        "description": "E-모드를 활성화하면 차입 가능액을 극대화할 수 있습니다. 단, 선택한 카테고리의 자산만 차입할 수 있습니다."
-      },
-      "debtSwap": {
-        "actions": {
-          "borrowed": "빌린",
-          "select": "선택하세요",
-          "title": "부채 스왑",
-          "swapTo": "스왑하기",
-          "amount": "금액"
-        },
-        "overview": {
-          "borrowAPY": "대출 APY",
-          "title": "거래 개요",
-          "borrowValueAfter": "스왑 후 대출 잔액"
-        },
-        "button": {
-          "swap": "스왑"
-        },
-        "title": "스왑 차입 포지션",
-        "borrowBalance": "차입 잔액",
-        "entryTips": "한 번의 클릭으로 차입한 자산을 스왑해 단계와 수수료를 줄입니다.",
-        "lpRiskWarning": "스왑 후 건강 지수가 낮아 포지션의 청산 위험이 높아집니다.",
-        "priceImpactTips": "높은 가격 영향 ({{lostValue}}). 이 경로는 유동성이 낮거나 주문 크기가 작아 더 많은 반환을 가져올 수 있습니다.",
-        "lpDangerWarning": "이 스왑 후 건강 지수가 매우 낮아져 청산될 수 있습니다. 다른 자산을 선택하거나 스왑 금액을 줄여 주세요.",
-        "maxLtvWarning": "새로운 차입 포지션을 커버할 충분한 담보가 없습니다. 지갑에는 부채 전환을 수행하기 위해 남아 있는 차입력이 반드시 필요합니다."
-      },
-      "repayWithCollateral": {
-        "action": {
-          "title": "{{collateral}}로 상환하기"
-        },
-        "overview": {
-          "collateralValueAfter": "상환 후 담보 잔액",
-          "title": "거래 개요",
-          "borrowValueAfter": "상환 후 대출 잔액"
-        },
-        "button": {
-          "repay": "상환"
-        },
-        "toRepay": "상환할 예상 금액",
-        "repayWith": "상환할 담보",
-        "collateralNotEnough": "담보 잔액이 선택한 금액보다 적습니다."
-      },
-      "hfTips": {
-        "more": "더 보기",
-        "desc": "1.0 미만으로 떨어지면 담보가 청산될 수 있습니다."
-      },
-      "disableBorrowTip": {
-        "desc": "공급 없음: 자산을 담보로 제공해야 대출할 수 있습니다.",
-        "noSupply": "자산을 먼저 공급하여 대출을 가능하게 하세요."
-      },
-      "type": {
-        "supplied": "공급됨",
-        "borrowed": "빌린"
-      },
-      "actions": {
-        "supply": "공급",
-        "withdraw": "출금",
-        "swap": "스왑",
-        "repay": "상환",
-        "borrow": "빌리기"
-      },
-      "summary": {
-        "empty": {
-          "title": "자산으로 이자 얻기",
-          "description": "AAVE에 의해 지원됩니다. 안전하고 수수료가 없습니다.",
-          "endDesc": "아직 예치금이 없습니다. 아래 추천 자산을 확인하여 이자를 받을 수 시작하세요."
-        },
-        "healthFactor": "건강 지수",
-        "netWorth": "순자산",
-        "totalSupplied": "총 공급량",
-        "totalBorrowed": "총 빌린 금액",
-        "eMode": "E-모드",
-        "healthFactorTip": "건강 지수는 귀하의 포지션의 안전성을 나타냅니다.",
-        "healthy": "건강한",
-        "risky": "위험한",
-        "ethCorrelatedTip": "ETH 상관 자산",
-        "more": "더 보기",
-        "lq": "건강 지수가 1 이하로 떨어지면 청산이 발생할 수 있습니다.",
-        "estDailyEarnings": "예상 일일 수익",
-        "netApy": "순수 APY"
-      },
-      "market": {
-        "core": "코어 마켓"
-      },
-      "accountActions": {
-        "both": "둘 다",
-        "borrow": "빌리기",
-        "supply": "공급"
-      },
-      "table": {
-        "collateral": "담보",
-        "myAssets": "내 자산",
-        "type": "유형",
-        "actions": "작업",
-        "token": "토큰",
-        "apy": "APY"
-      },
-      "supplyList": {
-        "collapse": "접기",
-        "more": "더 많은 토큰 공급"
-      },
-      "borrowList": {
-        "more": "더 많은 토큰을 빌릴 수 있습니다.",
-        "collapse": "접기"
-      },
-      "borrowed": "차입된",
-      "noData": "데이터 없음",
-      "totalBorrow": "총 대출",
-      "borrowApy": "차입 APY",
-      "borrowBalance": "대출 잔고",
-      "estDailyEarning": "예상 일일 수익",
-      "title": "대출",
-      "totalBorrowed": "총 차입량",
-      "isolate": "격리형",
-      "submitted": "제출됨",
-      "netApy": "순수 APY",
-      "supplied": "공급됨",
-      "totalSupplied": "총 공급량",
-      "netWorth": "순자산",
-      "gotIt": "알겠습니다",
-      "supplyBalance": "공급 잔액",
-      "supplyApy": "공급 APY",
-      "isolateTip": "격리 시장입니다.",
-      "estNetApy": "추정 순 연간 수익률",
-      "searchMarket": "시장 검색",
-      "enterAmount": "금액 입력",
-      "hf": "건강 지표",
-      "hfTitle": "건강 지수",
-      "totalSupply": "총 공급량",
-      "selectChain": "체인 선택",
-      "selectMarket": "시장 선택",
-      "disabled": "비활성화됨",
-      "signFallback": {
-        "preExecFailedUseFullSign": "시뮬레이션 실패. 이 거래는 AAVE 오류로 인해 실패할 가능성이 매우 높습니다."
-      }
     },
     "desktopSmallSwap": {
       "failReason": {
@@ -5090,7 +4808,6 @@
       "allChains": "모든 체인"
     },
     "DesktopNav": {
-      "lending": "대출",
       "perps": "Perps",
       "comingSoon": "곧 출시됩니다",
       "portfolio": "포트폴리오"

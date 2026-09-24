@@ -9,6 +9,7 @@ const IGNORE_MODULES = [
   'nanoid',
   'uuid',
   '@ethereumjs',
+  'dom-align',
 ].join('|');
 /*
  * For a detailed explanation regarding each configuration property and type check, visit:
@@ -46,6 +47,7 @@ module.exports = {
 
   // A map from regular expressions to paths to transformers
   transform: {
+    '^.+\\.tsx$': ['ts-jest', { tsconfig: { jsx: 'react' }, useESM: true }],
     '^.+\\.[tj]s$': [
       'ts-jest',
       {

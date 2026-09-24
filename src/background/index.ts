@@ -16,7 +16,7 @@ import {
 } from '@/utils/sentry';
 import Safe from '@rabby-wallet/gnosis-sdk';
 import * as Sentry from '@sentry/browser';
-import fetchAdapter from 'background/utils/fetchAdapter';
+import fetchAdapter from '@/services/openapi/fetchAdapter';
 import { WalletController } from 'background/controller/wallet';
 import {
   APPCHAIN_SYNC_SCENE,
@@ -73,13 +73,9 @@ import {
 } from './service';
 import { customTestnetService } from './service/customTestnet';
 import { GasAccountServiceStore } from './service/gasAccount';
-import {
-  initializeOpenapiStore,
-  testnetOpenapiService,
-} from './service/openapi';
+import { initializeOpenapiRuntime } from './service/openapi';
 import { syncChainService } from './service/syncChain';
 import { userGuideService } from './service/userGuide';
-import lendingService from './service/lending';
 import perpsLive from './service/perpsLive';
 import { PERPS_LIVE_PORT_NAME } from '@/utils/message/perpsLive';
 import {
@@ -103,6 +99,12 @@ import { metamaskModeService } from './service/metamaskModeService';
 import { ga4 } from '@/utils/ga4';
 import { ALARMS_SYNC_DEFAULT_RPC, ALARMS_USER_ENABLE } from './utils/alarms';
 import { subscribeTxCompleted } from './subscriptions/rateGuidance';
+import extensionUpdateService from './service/extensionUpdate';
+
+// Register synchronously so update events can wake the MV3 service worker.
+void extensionUpdateService.init().catch((error) => {
+  console.error('[extensionUpdate] failed to initialize store', error);
+});
 
 BigNumber.config({ EXPONENTIAL_AT: [-20, 100] });
 
@@ -164,9 +166,7 @@ async function restoreAppState() {
   keyringService.loadStore(keyringState);
   keyringService.store.subscribe((value) => storage.set('keyringState', value));
   keyringService.sanitizeUnencryptedKeyringDataInStore();
-  await initializeOpenapiStore();
-  await openapiService.init();
-  await testnetOpenapiService.init();
+  await initializeOpenapiRuntime();
 
   // Init keyring and openapi before migrations that depend on them.
   await migrateData();
@@ -175,6 +175,7 @@ async function restoreAppState() {
   await permissionService.init();
   await preferenceService.init();
   await currencyService.init();
+  await extensionUpdateService.init();
   await transactionWatchService.init();
   await transactionBroadcastWatchService.init();
   await pageStateCacheService.init();
@@ -195,7 +196,6 @@ async function restoreAppState() {
   await syncChainService.init();
   await perpsService.init();
   await transactionsService.init();
-  await lendingService.init();
   await feedbackService.init();
 
   // WS is lazy — subscribes only after the first content-script port attaches
@@ -315,7 +315,14 @@ async function restoreAppState() {
   uninstalledService.setUninstalled();
 }
 
-restoreAppState();
+restoreAppState().catch((e) => {
+  // A throw here leaves `appStoreLoaded` false and `getBackgroundReady`
+  // unregistered, so every UI page waits until its bootstrap timeout.
+  console.error('[restoreAppState] failed', e);
+  Sentry.captureException(e, {
+    tags: { bootstrap_stage: 'restoreAppState' },
+  });
+});
 {
   let interval: NodeJS.Timeout | null;
   keyringService.on('unlock', () => {
@@ -470,14 +477,6 @@ browser.runtime.onConnect.addListener((port) => {
               );
             }
             break;
-          case 'testnetOpenapi':
-            if (walletController.testnetOpenapi[data.method]) {
-              return walletController.testnetOpenapi[data.method].apply(
-                null,
-                data.params
-              );
-            }
-            break;
           case 'fakeTestnetOpenapi':
             if (walletController.fakeTestnetOpenapi[data.method]) {
               return walletController.fakeTestnetOpenapi[data.method].apply(
@@ -611,6 +610,7 @@ browser.runtime.onConnect.addListener((port) => {
       data,
       session,
       origin,
+      sourceFrameId: port.sender.frameId,
     };
     if (!session?.origin) {
       const tabInfo = await browser.tabs.get(sessionId);

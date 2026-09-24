@@ -63,6 +63,8 @@ const ActionBtnWrapper = styled.div<{ isDark?: boolean }>`
 `;
 
 const StyledTRow = styled(TRow)`
+  background-color: var(--r-neutral-card1, #ffffff);
+
   &:hover {
     box-shadow: 0px 4px 16px 0px rgba(0, 0, 0, 0.04);
   }
@@ -193,7 +195,7 @@ const TokenItemAsset: React.FC<TokenItemAssetProps> = ({
               </span>
             )}
           </LpContainer>
-          <span className="text-r-neutral-foot text-13 leading-[16px] truncate whitespace-nowrap text-ellipsis overflow-hidden">
+          <span className="text-r-neutral-foot text-13 leading-[16px] truncate whitespace-nowrap text-ellipsis overflow-hidden max-w-[180px]">
             {item._amountStr}
           </span>
         </div>
@@ -310,8 +312,8 @@ export const TokenItem: React.FC<Props> = ({ item, style, onClick }) => {
       className={clsx(
         'group cursor-pointer',
         'h-[60px] mt-8 px-12 justify-between',
-        'rounded-[8px] border border-transparent bg-r-neutral-card1',
-        'hover:border-blue-light active:bg-r-neutral-card1/10'
+        'rounded-[8px] border border-transparent',
+        'hover:border-blue-light'
       )}
     >
       <TokenItemAsset item={item} showButtons={showButtons} />
