@@ -6,7 +6,6 @@ import openapiService, {
   Tx,
   ExplainTxResponse,
   TxPushType,
-  testnetOpenapiService,
   TxRequest,
   TokenItem,
   NFTItem,
@@ -18,6 +17,7 @@ import permissionService, { ConnectedSite } from './permission';
 import { nanoid } from 'nanoid';
 import { findChain, findChainByID } from '@/utils/chain';
 import { makeTransactionId } from '@/utils/transaction';
+import { getGasDepositTxKey } from '@/utils/history';
 import { sortBy, groupBy } from 'lodash';
 import {
   checkIsPendingTxGroup,
@@ -878,12 +878,7 @@ class TxHistory {
     );
   };
 
-  checkIsGasDepositTxs = (
-    txs: Array<{
-      chainId?: number;
-      hash: string;
-    }>
-  ) => {
+  getGasDepositTxKeys = () => {
     const gasDepositTxKeys = new Set<string>();
 
     Object.values(this.store?.transactions || {}).forEach((addressTxMap) => {
@@ -893,17 +888,28 @@ class TxHistory {
             return;
           }
 
-          gasDepositTxKeys.add(`${txGroup.chainId}:${tx.hash.toLowerCase()}`);
+          gasDepositTxKeys.add(getGasDepositTxKey(txGroup.chainId, tx.hash));
         });
       });
     });
+
+    return Array.from(gasDepositTxKeys);
+  };
+
+  checkIsGasDepositTxs = (
+    txs: Array<{
+      chainId?: number;
+      hash: string;
+    }>
+  ) => {
+    const gasDepositTxKeys = new Set(this.getGasDepositTxKeys());
 
     return txs.map((tx) => {
       if (!tx.chainId || !tx.hash) {
         return false;
       }
 
-      return gasDepositTxKeys.has(`${tx.chainId}:${tx.hash.toLowerCase()}`);
+      return gasDepositTxKeys.has(getGasDepositTxKey(tx.chainId, tx.hash));
     });
   };
 
@@ -1576,11 +1582,9 @@ class TxHistory {
     nonce: number;
     reqId: string;
   }) => {
-    const chain = findChainByID(chainId);
-    const service = chain?.isTestnet ? testnetOpenapiService : openapiService;
     let error: any = null;
     try {
-      await service.withdrawTx(reqId);
+      await openapiService.withdrawTx(reqId);
     } catch (e) {
       error = e;
     }
@@ -1601,10 +1605,8 @@ class TxHistory {
     nonce: number;
     reqId: string;
   }) => {
-    const chain = findChainByID(chainId);
-    const service = chain?.isTestnet ? testnetOpenapiService : openapiService;
     try {
-      await service.retryPushTx(reqId);
+      await openapiService.retryPushTx(reqId);
       this.reloadTxRequest({ address, chainId, nonce });
     } catch (e) {
       this.reloadTxRequest({ address, chainId, nonce });

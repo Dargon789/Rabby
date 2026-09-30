@@ -110,7 +110,7 @@ const TokenDetail = ({
   }, [currentAccount, getTokenAmount]);
 
   const fetchData = async (startTime = 0) => {
-    const res = await wallet.openapi.listTxHisotry({
+    const res = await wallet.openapi.listTxHistory({
       id: currentAccount!.address,
       chain_id: token.chain,
       start_time: startTime,
@@ -442,7 +442,7 @@ const TokenDetail = ({
                     title={(tokenWithAmount.amount || 0).toString()}
                     placement="bottom"
                   >
-                    <div className="balance-value truncate">
+                    <div className="balance-value truncate max-w-[200px]">
                       {splitNumberByStep(
                         (tokenWithAmount.amount || 0)?.toFixed(8)
                       )}{' '}

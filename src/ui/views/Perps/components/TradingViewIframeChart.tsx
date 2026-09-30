@@ -1,15 +1,29 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import browser from 'webextension-polyfill';
 import type { Candle, CandleSnapshot } from '@rabby-wallet/hyperliquid-sdk';
 import { getPerpsSDK } from '../sdkManager';
+import { CandleSubscriptionRegistry } from '../candleSubscriptions';
+import type { CandleBar as TVBar, WeeklyHistoryState } from '../weeklyCandles';
 import {
-  closeAllCandleSubscriptions,
-  closeCandleSubscription,
-  isCandleForChannel,
-  openCandleSubscription,
-} from '../candleSubscriptions';
+  aggregateDailyToWeeklyBars,
+  getLatestWeeklyHistoryState,
+  getMondayUtc,
+  seedWeeklyCandleStateFromHistory,
+  shouldReplaceWeeklyHistoryState,
+  updateWeeklyCandle,
+} from '../weeklyCandles';
 
 const BRIDGE_CHANNEL = 'rabby-tradingview-bridge-v1';
+// Upper bound on how long resolveSymbol waits for a price-derived pxDecimals.
+// Past it the chart boots on the fallback precision and the late minTick
+// override corrects it, as before.
+const PX_DECIMALS_WAIT_MS = 3000;
 const DEFAULT_TRADINGVIEW_URL = process.env.DEBUG
   ? 'https://tradingview-test.vercel.app/'
   : 'https://tradingview.rabby.io/';
@@ -52,15 +66,6 @@ type PerpsInterval =
   | '1d'
   | '1w';
 
-type TVBar = {
-  time: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-};
-
 type BridgeMessage =
   | {
       channel: typeof BRIDGE_CHANNEL;
@@ -94,15 +99,11 @@ type BarSubscription = {
   symbol: string;
   resolution: string;
   subscribeInterval: PerpsInterval;
-  unsubscribe: () => void;
+  onCandle: (snapshot: Candle) => void;
   currentWeekBar: TVBar | null;
   lastDailyVolume: { time: number; value: number } | null;
   isWeekly: boolean;
-};
-
-type WeeklyHistoryState = {
-  currentWeekBar: TVBar;
-  lastDailyVolume: { time: number; value: number } | null;
+  hasWeeklyHistorySeed: boolean;
 };
 
 export interface TradingViewHoverData {
@@ -161,6 +162,10 @@ interface TradingViewIframeChartProps {
   coin: string;
   interval: PerpsInterval;
   pxDecimals: number;
+  // false while pxDecimals is still the price-less fallback; resolveSymbol
+  // holds its answer until it turns true so the axis never boots on a
+  // precision that is about to change
+  pxDecimalsReady?: boolean;
   isDarkTheme: boolean;
   locale: string;
   timezone: string;
@@ -279,15 +284,6 @@ const getTimeRange = (interval: PerpsInterval) => {
   return { start, end };
 };
 
-const getMondayUtc = (utcMs: number): number => {
-  const date = new Date(utcMs);
-  const day = date.getUTCDay();
-  const diffDays = day === 0 ? -6 : 1 - day;
-  date.setUTCDate(date.getUTCDate() + diffDays);
-  date.setUTCHours(0, 0, 0, 0);
-  return date.getTime();
-};
-
 const parseBars = (data: CandleSnapshot): TVBar[] => {
   if (!data?.length) {
     return [];
@@ -303,72 +299,8 @@ const parseBars = (data: CandleSnapshot): TVBar[] => {
   }));
 };
 
-const aggregateDailyToWeeklyBars = (dailyBars: TVBar[]): TVBar[] => {
-  if (!dailyBars.length) return [];
-
-  const weeks = new Map<number, TVBar>();
-
-  for (const bar of dailyBars) {
-    const mondayTs = getMondayUtc(bar.time);
-    const existing = weeks.get(mondayTs);
-    if (existing) {
-      existing.high = Math.max(existing.high, bar.high);
-      existing.low = Math.min(existing.low, bar.low);
-      existing.close = bar.close;
-      existing.volume += bar.volume;
-    } else {
-      weeks.set(mondayTs, {
-        time: mondayTs,
-        open: bar.open,
-        high: bar.high,
-        low: bar.low,
-        close: bar.close,
-        volume: bar.volume,
-      });
-    }
-  }
-
-  return Array.from(weeks.values()).sort((a, b) => a.time - b.time);
-};
-
 const getWeeklyHistoryKey = (symbol: string, resolution: string) =>
   `${symbol.toLowerCase()}:${resolution}`;
-
-const getLatestWeeklyHistoryState = (
-  weeklyBars: TVBar[],
-  dailyBars: TVBar[]
-): WeeklyHistoryState | null => {
-  const currentWeekBar = weeklyBars[weeklyBars.length - 1];
-  if (!currentWeekBar) return null;
-
-  const lastDailyBar = dailyBars
-    .slice()
-    .reverse()
-    .find((bar) => getMondayUtc(bar.time) === currentWeekBar.time);
-
-  return {
-    currentWeekBar: { ...currentWeekBar },
-    lastDailyVolume: lastDailyBar
-      ? {
-          time: lastDailyBar.time,
-          value: lastDailyBar.volume,
-        }
-      : null,
-  };
-};
-
-const cloneWeeklyHistoryState = (
-  historyState: WeeklyHistoryState | null | undefined
-): WeeklyHistoryState | null => {
-  if (!historyState) return null;
-
-  return {
-    currentWeekBar: { ...historyState.currentWeekBar },
-    lastDailyVolume: historyState.lastDailyVolume
-      ? { ...historyState.lastDailyVolume }
-      : null,
-  };
-};
 
 const toHoverData = (bar: TVBar): TradingViewHoverData => {
   const delta = bar.close - bar.open;
@@ -429,6 +361,7 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
   coin,
   interval,
   pxDecimals,
+  pxDecimalsReady = true,
   isDarkTheme,
   locale,
   timezone,
@@ -440,7 +373,17 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
   onIntervalChange,
 }) => {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const subscriptionsRef = useRef<Map<string, BarSubscription>>(new Map());
+  const chartGenerationRef = useRef(0);
+  const iframeGenerationRef = useRef(-1);
+  const setIframeRef = useCallback((iframe: HTMLIFrameElement | null) => {
+    iframeRef.current = iframe;
+    if (iframe) {
+      iframeGenerationRef.current = chartGenerationRef.current;
+    }
+  }, []);
+  const subscriptionsRef = useRef(
+    new CandleSubscriptionRegistry<Candle, BarSubscription>()
+  );
   const weeklyHistoryRef = useRef<Map<string, WeeklyHistoryState>>(new Map());
   // Bumped to remount the iframe when the chart never came up at all
   const [chartReloadKey, setChartReloadKey] = useState(0);
@@ -493,6 +436,7 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
     coin,
     interval,
     pxDecimals,
+    pxDecimalsReady,
     isDarkTheme,
     locale,
     timezone,
@@ -508,6 +452,7 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
       coin,
       interval,
       pxDecimals,
+      pxDecimalsReady,
       isDarkTheme,
       locale,
       timezone,
@@ -521,6 +466,7 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
     coin,
     interval,
     pxDecimals,
+    pxDecimalsReady,
     isDarkTheme,
     locale,
     timezone,
@@ -530,6 +476,13 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
     onLatestBar,
     onIntervalChange,
   ]);
+
+  // Declared after the stateRef sync so a woken resolveSymbol reads the
+  // current coin/pxDecimals. Each waiter settles itself once it is done.
+  const pxDecimalsWaitersRef = useRef(new Set<(force?: boolean) => boolean>());
+  useEffect(() => {
+    pxDecimalsWaitersRef.current.forEach((settle) => settle());
+  }, [coin, pxDecimals, pxDecimalsReady]);
 
   useEffect(() => {
     const sdk = getPerpsSDK();
@@ -542,7 +495,7 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
     let barsLoaded = false;
 
     const cleanupSubscriptions = () => {
-      closeAllCandleSubscriptions(subscriptionsRef.current);
+      subscriptionsRef.current.clear();
     };
 
     const recoverChart = () => {
@@ -554,6 +507,10 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
       // Remounting the iframe is the only way back for both; the host re-reads
       // symbol/interval/theme through its getState handshake.
       if (!bridgeAlive || !barsLoaded) {
+        // Invalidate the old document synchronously. React commits the keyed
+        // iframe replacement later, so source===contentWindow alone leaves a
+        // window in which old messages can revive the liveness flags.
+        chartGenerationRef.current += 1;
         bridgeAlive = false;
         barsLoaded = false;
         cleanupSubscriptions();
@@ -591,21 +548,42 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
     sdk.ws.on('open', handleNetworkRestored);
     window.addEventListener('online', handleNetworkRestored);
 
-    const handleGetBars = async (params: {
-      symbol: string;
-      resolution: string;
-      periodParams?: {
-        from?: number;
-        to?: number;
-      };
-    }) => {
+    const emitLatestBar = (symbol: string, resolution: string, bar: TVBar) => {
+      const current = stateRef.current;
+      if (
+        symbol !== current.coin ||
+        resolutionToInterval(resolution) !== current.interval
+      ) {
+        return;
+      }
+
+      current.onLatestBar?.(toHoverData(bar));
+    };
+
+    const handleGetBars = async (
+      params: {
+        symbol: string;
+        resolution: string;
+        periodParams?: {
+          from?: number;
+          to?: number;
+        };
+      },
+      requestSource: MessageEventSource | null,
+      requestGeneration: number
+    ) => {
       const targetInterval = resolutionToInterval(params.resolution);
       const isWeekly = targetInterval === '1w';
       const fetchInterval: PerpsInterval = isWeekly ? '1d' : targetInterval;
       const fallbackRange = getTimeRange(targetInterval);
-      const start = params.periodParams?.from
+      const requestedStart = params.periodParams?.from
         ? params.periodParams.from * 1000
         : fallbackRange.start;
+      // A TradingView range can start mid-week. Fetch from that week's Monday
+      // so the first weekly candle is never cached with a mid-week open/volume.
+      const start = isWeekly
+        ? Math.max(0, getMondayUtc(requestedStart))
+        : requestedStart;
       const end = params.periodParams?.to
         ? params.periodParams.to * 1000
         : fallbackRange.end;
@@ -616,6 +594,18 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
         start,
         end
       );
+      // chartReloadKey replaces the iframe without replacing this effect. An
+      // HTTP request from the detached document can therefore finish after the
+      // new bridge has started and reuse one of its request ids. Do not let the
+      // old request mutate weekly state or answer the new document.
+      if (
+        requestGeneration !== chartGenerationRef.current ||
+        requestGeneration !== iframeGenerationRef.current ||
+        requestSource !== iframeRef.current?.contentWindow
+      ) {
+        return null;
+      }
+
       const dailyBars = parseBars(snapshot);
       const bars = isWeekly ? aggregateDailyToWeeklyBars(dailyBars) : dailyBars;
       if (isWeekly) {
@@ -624,22 +614,27 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
           params.symbol,
           params.resolution
         );
-        if (historyState) {
+        const cachedHistoryState = weeklyHistoryRef.current.get(historyKey);
+        // TradingView can paginate older ranges after loading the latest bars,
+        // and those requests may finish out of order. Never let an older/empty
+        // page evict the current-week seed needed by the realtime aggregator.
+        if (
+          historyState &&
+          shouldReplaceWeeklyHistoryState(cachedHistoryState, historyState)
+        ) {
           weeklyHistoryRef.current.set(historyKey, historyState);
-        } else {
-          weeklyHistoryRef.current.delete(historyKey);
         }
 
         // resetData() reloads TradingView history without replacing the SDK
         // subscription object. Keep the mutable weekly aggregation state in
         // sync so the next daily candle cannot overwrite refreshed history
         // with the pre-disconnect week snapshot.
-        const nextState = cloneWeeklyHistoryState(historyState);
+        const historySeed = weeklyHistoryRef.current.get(historyKey);
         const currentWeekStart = getMondayUtc(Date.now());
-        subscriptionsRef.current.forEach((subscription) => {
+        subscriptionsRef.current.forEachSubscriber((subscription) => {
           if (
-            !nextState ||
-            nextState.currentWeekBar.time !== currentWeekStart ||
+            !historySeed ||
+            historySeed.currentWeekBar.time !== currentWeekStart ||
             !subscription.isWeekly ||
             getWeeklyHistoryKey(
               subscription.symbol,
@@ -649,12 +644,15 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
             return;
           }
 
-          subscription.currentWeekBar = nextState.currentWeekBar;
-          subscription.lastDailyVolume = nextState.lastDailyVolume;
+          subscription.hasWeeklyHistorySeed = seedWeeklyCandleStateFromHistory(
+            subscription,
+            historySeed,
+            currentWeekStart
+          );
         });
       }
       if (bars.length) {
-        stateRef.current.onLatestBar?.(toHoverData(bars[bars.length - 1]));
+        emitLatestBar(params.symbol, params.resolution, bars[bars.length - 1]);
       }
       barsLoaded = true;
       return {
@@ -679,118 +677,108 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
         symbol: params.symbol,
         resolution: params.resolution,
         subscribeInterval,
-        unsubscribe: () => undefined,
         currentWeekBar: null,
         lastDailyVolume: null,
         isWeekly,
-      };
+        hasWeeklyHistorySeed: false,
+        onCandle: (snapshot) => {
+          const parsed = parseBars([snapshot]);
+          if (!parsed.length) return;
+          const dayBar = parsed[0];
 
-      const openSubscription = () => {
-        const subscription = sdk.ws.subscribeToCandles(
-          params.symbol,
-          subscribeInterval,
-          (snapshot) => {
-            if (
-              !isCandleForChannel(snapshot, {
-                symbol: params.symbol,
-                subscribeInterval,
-              })
-            ) {
-              return;
-            }
-
-            const parsed = parseBars([snapshot]);
-            if (!parsed.length) return;
-            const dayBar = parsed[0];
-
-            if (!state.isWeekly) {
-              postToIframe({
-                channel: BRIDGE_CHANNEL,
-                kind: 'event',
-                event: 'realtimeBar',
-                payload: {
-                  subscriberUID: params.subscriberUID,
-                  bar: dayBar,
-                },
-              });
-              stateRef.current.onLatestBar?.(toHoverData(dayBar));
-              return;
-            }
-
-            const mondayTs = getMondayUtc(dayBar.time);
-            if (!state.currentWeekBar) {
-              const historyState = cloneWeeklyHistoryState(
-                weeklyHistoryRef.current.get(weeklyHistoryKey)
-              );
-              if (!historyState) {
-                return;
-              }
-              state.currentWeekBar = historyState.currentWeekBar;
-              state.lastDailyVolume = historyState.lastDailyVolume;
-            }
-
-            const currentWeekBar = state.currentWeekBar;
-            if (currentWeekBar && currentWeekBar.time === mondayTs) {
-              currentWeekBar.high = Math.max(currentWeekBar.high, dayBar.high);
-              currentWeekBar.low = Math.min(currentWeekBar.low, dayBar.low);
-              currentWeekBar.close = dayBar.close;
-
-              const prevDayVolume =
-                state.lastDailyVolume?.time === dayBar.time
-                  ? state.lastDailyVolume.value
-                  : 0;
-              currentWeekBar.volume =
-                currentWeekBar.volume - prevDayVolume + dayBar.volume;
-            } else {
-              state.currentWeekBar = {
-                ...dayBar,
-                time: mondayTs,
-              };
-            }
-
-            state.lastDailyVolume = {
-              time: dayBar.time,
-              value: dayBar.volume,
-            };
-
-            if (state.currentWeekBar) {
-              postToIframe({
-                channel: BRIDGE_CHANNEL,
-                kind: 'event',
-                event: 'realtimeBar',
-                payload: {
-                  subscriberUID: params.subscriberUID,
-                  bar: state.currentWeekBar,
-                },
-              });
-              stateRef.current.onLatestBar?.(toHoverData(state.currentWeekBar));
-            }
+          if (!state.isWeekly) {
+            postToIframe({
+              channel: BRIDGE_CHANNEL,
+              kind: 'event',
+              event: 'realtimeBar',
+              payload: {
+                subscriberUID: params.subscriberUID,
+                bar: dayBar,
+              },
+            });
+            emitLatestBar(state.symbol, state.resolution, dayBar);
+            return;
           }
-        );
 
-        state.unsubscribe = subscription.unsubscribe;
-        return state;
+          const currentWeekStart = getMondayUtc(dayBar.time);
+          if (state.currentWeekBar?.time !== currentWeekStart) {
+            state.hasWeeklyHistorySeed = false;
+          }
+          if (!state.currentWeekBar || !state.hasWeeklyHistorySeed) {
+            state.hasWeeklyHistorySeed = seedWeeklyCandleStateFromHistory(
+              state,
+              weeklyHistoryRef.current.get(weeklyHistoryKey),
+              dayBar.time
+            );
+          }
+
+          // History and subscribeBars are independent bridge requests. If the
+          // seed is missing or an older pagination request won the race,
+          // updateWeeklyCandle starts a partial current-week bar rather than
+          // freezing latest-price updates while waiting for history forever.
+          const currentWeekBar = updateWeeklyCandle(state, dayBar);
+          postToIframe({
+            channel: BRIDGE_CHANNEL,
+            kind: 'event',
+            event: 'realtimeBar',
+            payload: {
+              subscriberUID: params.subscriberUID,
+              bar: currentWeekBar,
+            },
+          });
+          emitLatestBar(state.symbol, state.resolution, currentWeekBar);
+        },
       };
 
-      openCandleSubscription(
-        subscriptionsRef.current,
+      subscriptionsRef.current.subscribe(
         params.subscriberUID,
-        { symbol: params.symbol, subscribeInterval },
-        openSubscription
+        state,
+        (onCandle) =>
+          sdk.ws.subscribeToCandles(params.symbol, subscribeInterval, onCandle)
       );
       return { ok: true };
     };
 
     const handleUnsubscribeBars = (params: { subscriberUID: string }) => {
-      closeCandleSubscription(subscriptionsRef.current, params.subscriberUID);
+      subscriptionsRef.current.unsubscribe(params.subscriberUID);
       return { ok: true };
     };
+
+    // TradingView samples pricescale once per resolveSymbol, so answering it
+    // with the price-less fallback makes the axis visibly re-tick when the
+    // first asset ctx lands (BTC: 1 decimal → 0). Wait while the requested
+    // symbol is still on that fallback — but only while it is still the
+    // parent's coin. Once the parent moves on, answer at once with the last
+    // precision seen for the requested symbol: never another coin's
+    // pricescale, and no stall ahead of the setSymbol that follows.
+    const resolvePxDecimals = (symbol: string) =>
+      new Promise<number>((resolve) => {
+        let symbolPxDecimals = stateRef.current.pxDecimals;
+        // Settling twice is harmless (the promise is already resolved), so
+        // the timeout is left to fire.
+        const settle = (force = false) => {
+          const current = stateRef.current;
+          const isRequestedCoin = current.coin === symbol;
+          if (isRequestedCoin) symbolPxDecimals = current.pxDecimals;
+          if (isRequestedCoin && !current.pxDecimalsReady && !force) {
+            return false;
+          }
+          pxDecimalsWaitersRef.current.delete(settle);
+          resolve(symbolPxDecimals);
+          return true;
+        };
+        if (settle()) return;
+        pxDecimalsWaitersRef.current.add(settle);
+        setTimeout(() => settle(true), PX_DECIMALS_WAIT_MS);
+      });
 
     const handleMessage = async (event: MessageEvent) => {
       const message = event.data as BridgeMessage;
       if (!message || message.channel !== BRIDGE_CHANNEL) return;
       if (event.source !== iframeRef.current?.contentWindow) return;
       if (iframeOrigin !== '*' && event.origin !== iframeOrigin) return;
+      const messageGeneration = chartGenerationRef.current;
+      if (iframeGenerationRef.current !== messageGeneration) return;
 
       bridgeAlive = true;
 
@@ -822,15 +810,19 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
 
       if (message.kind !== 'request') return;
 
+      const responseTarget = event.source as Window | null;
       const respond = (ok: boolean, result?: any, error?: string) => {
-        postToIframe({
-          channel: BRIDGE_CHANNEL,
-          kind: 'response',
-          id: message.id,
-          ok,
-          result,
-          error,
-        });
+        responseTarget?.postMessage(
+          {
+            channel: BRIDGE_CHANNEL,
+            kind: 'response',
+            id: message.id,
+            ok,
+            result,
+            error,
+          },
+          iframeOrigin
+        );
       };
 
       try {
@@ -858,27 +850,52 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
             });
             break;
           case 'resolveSymbol':
-            respond(true, {
-              name: message.params?.symbol || stateRef.current.coin,
-              ticker: message.params?.symbol || stateRef.current.coin,
-              description: message.params?.symbol || stateRef.current.coin,
-              type: 'crypto',
-              session: '24x7',
-              timezone: stateRef.current.timezone,
-              // exchange: 'Hyperliquid',
-              // listed_exchange: 'Hyperliquid',
-              minmov: 1,
-              pricescale: 10 ** Math.max(stateRef.current.pxDecimals, 0),
-              has_intraday: true,
-              has_weekly_and_monthly: true,
-              supported_resolutions: SUPPORTED_RESOLUTIONS,
-              intraday_multipliers: ['1', '5', '15', '30', '60', '240', '480'],
-              data_status: 'streaming',
-              volume_precision: 2,
-            });
+            {
+              // Bound before the wait: the answer describes the symbol that
+              // was asked for, not whatever the parent shows by then.
+              const symbol = message.params?.symbol || stateRef.current.coin;
+              const pxDecimals = await resolvePxDecimals(symbol);
+              respond(true, {
+                name: symbol,
+                ticker: symbol,
+                description: symbol,
+                type: 'crypto',
+                session: '24x7',
+                timezone: stateRef.current.timezone,
+                // exchange: 'Hyperliquid',
+                // listed_exchange: 'Hyperliquid',
+                minmov: 1,
+                pricescale: 10 ** Math.max(pxDecimals, 0),
+                has_intraday: true,
+                has_weekly_and_monthly: true,
+                supported_resolutions: SUPPORTED_RESOLUTIONS,
+                intraday_multipliers: [
+                  '1',
+                  '5',
+                  '15',
+                  '30',
+                  '60',
+                  '240',
+                  '480',
+                ],
+                data_status: 'streaming',
+                volume_precision: 2,
+              });
+            }
             break;
           case 'getBars':
-            respond(true, await handleGetBars(message.params as any));
+            {
+              const result = await handleGetBars(
+                message.params as any,
+                event.source,
+                messageGeneration
+              );
+              if (result) {
+                respond(true, result);
+              } else {
+                respond(false, undefined, 'Stale chart request');
+              }
+            }
             break;
           case 'subscribeBars':
             respond(true, handleSubscribeBars(message.params as any));
@@ -916,8 +933,9 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
     // issued while a load is in flight), and any such record would then be
     // wrong forever, suppressing the command that would recover the chart.
     // The iframe drops a command matching what it already shows, so a repeat
-    // costs nothing; TradingView retires the superseded series itself through
-    // unsubscribeBars, and openCandleSubscription clears whatever survives.
+    // costs nothing. If TradingView does reopen the logical series, the candle
+    // registry replaces the same UID without bouncing its physical channel and
+    // refcounts any 1D/1W channel shared by different UIDs.
     postToIframe({
       channel: BRIDGE_CHANNEL,
       kind: 'command',
@@ -994,7 +1012,7 @@ export const TradingViewIframeChart: React.FC<TradingViewIframeChartProps> = ({
   return (
     <iframe
       key={chartReloadKey}
-      ref={iframeRef}
+      ref={setIframeRef}
       src={iframeUrl}
       className={className}
       title="tradingview-advanced-chart"

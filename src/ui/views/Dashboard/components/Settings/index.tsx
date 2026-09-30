@@ -5,7 +5,6 @@ import { Button, DrawerProps, Form, Input, message, Modal, Switch } from 'antd';
 import clsx from 'clsx';
 import {
   INITIAL_OPENAPI_URL,
-  INITIAL_TESTNET_OPENAPI_URL,
   CUSTOM_RPC_ENABLED,
   LANGS,
   ThemeIconType,
@@ -66,8 +65,6 @@ import { ReactComponent as RcIconDataAnalysisCC } from 'ui/assets/dashboard/sett
 import IconIntro from 'ui/assets/dashboard/dapp-account-intro.png';
 
 import stats from '@/stats';
-import { useAsync, useCss } from 'react-use';
-import semver from 'semver-compare';
 import Contacts from '../Contacts';
 import RecentConnections from '../RecentConnections';
 import SwitchThemeModal from './components/SwitchThemeModal';
@@ -75,15 +72,17 @@ import { CurrencyModal } from './components/CurrencyModal';
 import ThemeIcon from '@/ui/component/ThemeMode/ThemeIcon';
 import FeedbackPopup from '../Feedback';
 import { getChainList } from '@/utils/chain';
-import { SvgIconCross } from '@/ui/assets';
 import { sendPersonalMessage } from '@/ui/utils/sendPersonalMessage';
 import { ga4 } from '@/utils/ga4';
 import { EcosystemBanner } from './components/EcosystemBanner';
+import { ExtensionUpdateCard } from './components/ExtensionUpdateCard';
+import { ExtensionUpdateDialog } from './components/ExtensionUpdateDialog';
 import { useMemoizedFn } from 'ahooks';
 import RateModalTriggerOnSettings from '@/ui/component/RateModal/RateModalTriggerOnSettings';
 import { useMakeMockDataForRateGuideExposure } from '@/ui/component/RateModal/hooks';
 import { PwdForNonWhitelistedTxModal } from '@/ui/component/Whitelist/Modal';
 import { useCurrency } from '@/ui/hooks/useCurrency';
+import { useExtensionUpdateSettingsCard } from '@/ui/hooks/useExtensionUpdateSettingsCard';
 import {
   cleanupBiometricCredential,
   isBiometricUnlockSupported,
@@ -91,6 +90,11 @@ import {
 import { PERPS_TEST_INCLUDE_WATCH_KEY } from '@/ui/views/Perps/components/SelectAddressList';
 import { useOpenapiStore } from '@/ui/state/openapi';
 import { appIsDebugPkg, appIsDev } from '@/utils/env';
+import {
+  selectHasNewExtensionVersion,
+  selectExtensionUpdateChangelog,
+  useExtensionUpdateStore,
+} from '@/ui/state/extensionUpdate';
 
 const useAutoLockOptions = () => {
   const { t } = useTranslation();
@@ -622,9 +626,8 @@ const SettingsInner = ({
 }) => {
   const wallet = useWallet();
   const history = useHistory();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [showOpenApiModal, setShowOpenApiModal] = useState(false);
-  const [showTestnetOpenApiModal, setShowTestnetOpenApiModal] = useState(false);
   const [showResetAccountModal, setShowResetAccountModal] = useState(false);
   const [isShowAutoLockModal, setIsShowAutoLockModal] = useState(false);
   const [isShowLangModal, setIsShowLangModal] = useState(false);
@@ -808,50 +811,21 @@ const SettingsInner = ({
     });
   };
 
-  const { value: hasNewVersion = false } = useAsync(async () => {
-    const data = await wallet.openapi.getLatestVersion();
-
-    return semver(process.env.release || '0.0.0', data.version_tag) === -1;
-  });
-
-  const updateVersionClassName = useCss({
-    '& .ant-modal-body': {
-      padding: '15px 14px 28px 14px',
-    },
-    '& .ant-modal-confirm-content': {
-      padding: '24px 0 0 0',
-      background: 'transparent',
-      'background-color': 'transparent',
-    },
-    '& .ant-modal-confirm-btns': {
-      justifyContent: 'center',
-      'button:first-child': {
-        display: 'none',
-      },
-    },
-  });
+  const hasNewVersion = useExtensionUpdateStore(selectHasNewExtensionVersion);
+  const pendingVersion = useExtensionUpdateStore((s) => s.pendingVersion);
+  const changelog = useExtensionUpdateStore((s) =>
+    selectExtensionUpdateChangelog(s, i18n.language)
+  );
+  const reloadForUpdate = useExtensionUpdateStore((s) => s.reloadForUpdate);
+  const [updateDialogVisible, setUpdateDialogVisible] = useState(false);
+  const showExtensionUpdateCard = useExtensionUpdateSettingsCard();
+  const dismissSettingsCard = useExtensionUpdateStore(
+    (s) => s.dismissSettingsCard
+  );
 
   const updateVersion = () => {
     if (hasNewVersion) {
-      confirm({
-        width: 320,
-        closable: true,
-        centered: true,
-        closeIcon: (
-          <SvgIconCross className="w-14 fill-current text-r-neutral-foot" />
-        ),
-        className: clsx(updateVersionClassName, 'modal-support-darkmode'),
-        title: t('page.dashboard.settings.updateVersion.title'),
-        content: (
-          <div className="text-14 leading-[18px] text-center text-r-neutral-body">
-            {t('page.dashboard.settings.updateVersion.content')}
-          </div>
-        ),
-        okText: t('page.dashboard.settings.updateVersion.okText'),
-        onOk() {
-          openInTab('https://rabby.io/update-extension');
-        },
-      });
+      setUpdateDialogVisible(true);
     } else {
       message.success({
         key: 'latest version',
@@ -1321,19 +1295,6 @@ const SettingsInner = ({
         },
         {
           leftIcon: RcIconServerCC,
-          content: (
-            <span>{t('page.dashboard.settings.testnetBackendServiceUrl')}</span>
-          ),
-          onClick: () => setShowTestnetOpenApiModal(true),
-          rightIcon: (
-            <ThemeIcon
-              src={RcIconArrowRight}
-              className="icon icon-arrow-right"
-            />
-          ),
-        },
-        {
-          leftIcon: RcIconServerCC,
           content: <span>Sync chain list</span>,
           onClick: () => {
             wallet.syncMainnetChainList({
@@ -1509,7 +1470,10 @@ const SettingsInner = ({
               <span
                 className="text-14 mr-[8px] text-r-neutral-foot"
                 role="button"
-                onClick={updateVersion}
+                onClick={(evt) => {
+                  evt.stopPropagation();
+                  updateVersion();
+                }}
               >
                 {process.env.release}
                 <span
@@ -1669,7 +1633,16 @@ const SettingsInner = ({
         <div className={clsx('content')}>
           {/* <ClaimRabbyBadge onClick={onOpenBadgeModal} /> */}
 
-          <RateModalTriggerOnSettings className="mb-[16px]" />
+          {showExtensionUpdateCard ? (
+            <ExtensionUpdateCard
+              version={pendingVersion}
+              changelog={changelog}
+              onUpdate={reloadForUpdate}
+              onClose={dismissSettingsCard}
+            />
+          ) : (
+            <RateModalTriggerOnSettings className="mb-[16px]" />
+          )}
 
           {Object.values(renderData).map((group, idxl1) => {
             return (
@@ -1752,17 +1725,6 @@ const SettingsInner = ({
         }}
         onCancel={() => setShowOpenApiModal(false)}
       />
-      <OpenApiModal
-        visible={showTestnetOpenApiModal}
-        value={openapiStore.testnetHost}
-        defaultValue={INITIAL_TESTNET_OPENAPI_URL}
-        title={t('page.dashboard.settings.testnetBackendServiceUrl')}
-        onFinish={(host) => {
-          openapiStore.setTestnetHost(host);
-          setShowTestnetOpenApiModal(false);
-        }}
-        onCancel={() => setShowTestnetOpenApiModal(false)}
-      />
       <ResetAccountModal
         visible={showResetAccountModal}
         onFinish={() => setShowResetAccountModal(false)}
@@ -1772,6 +1734,13 @@ const SettingsInner = ({
         visible={isShowAutoLockModal}
         onFinish={() => setIsShowAutoLockModal(false)}
         onCancel={() => setIsShowAutoLockModal(false)}
+      />
+      <ExtensionUpdateDialog
+        visible={!!visible && hasNewVersion && updateDialogVisible}
+        version={pendingVersion}
+        changelog={changelog}
+        onClose={() => setUpdateDialogVisible(false)}
+        onUpdate={reloadForUpdate}
       />
       <SwitchLangModal
         visible={isShowLangModal}

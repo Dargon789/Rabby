@@ -1,7 +1,7 @@
 import { TxHistoryItemRow } from '@/db/schema/history';
 import {
   GAS_ACCOUNT_RECEIVED_ADDRESS,
-  GAS_ACCOUNT_WITHDRAWED_ADDRESS,
+  GAS_ACCOUNT_WITHDRAWED_ADDRESSES,
   L2_DEPOSIT_ADDRESS_MAP,
 } from '@/constant/gas-account';
 import { NameAndAddress, TxAvatar } from '@/ui/component';
@@ -50,8 +50,12 @@ export const DesktopTxExplain = ({ data }: TxInterAddressExplainProps) => {
     tokenURL = data.sends?.[0]?.token?.logo_url || '';
     interAddressExplain = (
       <>
-        <div className="tx-explain-title">Deposited Gas</div>
-        <div className="tx-explain-desc">To Gas Deposit</div>
+        <div className="text-[14px] leading-[17px] text-r-neutral-title1">
+          Deposited Gas
+        </div>
+        <div className="text-[14px] leading-[17px] text-r-neutral-title1">
+          To Gas Deposit
+        </div>
       </>
     );
   } else if (isCancel) {
@@ -86,8 +90,12 @@ export const DesktopTxExplain = ({ data }: TxInterAddressExplainProps) => {
     // gas deposit
     interAddressExplain = (
       <>
-        <div className="tx-explain-title">Deposited Gas</div>
-        <div className="tx-explain-desc">To Gas Deposit</div>
+        <div className="text-[14px] leading-[17px] text-r-neutral-title1">
+          Deposited Gas
+        </div>
+        <div className="text-[14px] leading-[17px] text-r-neutral-title1">
+          To Gas Deposit
+        </div>
       </>
     );
   } else if (
@@ -99,21 +107,31 @@ export const DesktopTxExplain = ({ data }: TxInterAddressExplainProps) => {
     // gas received
     interAddressExplain = (
       <>
-        <div className="tx-explain-title">Received Gas</div>
-        <div className="tx-explain-desc">From Gas Deposit</div>
+        <div className="text-[14px] leading-[17px] text-r-neutral-title1">
+          Received Gas
+        </div>
+        <div className="text-[14px] leading-[17px] text-r-neutral-title1">
+          From Gas Deposit
+        </div>
       </>
     );
   } else if (
     data.cate_id === 'receive' &&
     data.tx?.from_addr &&
-    isSameAddress(data.tx.from_addr, GAS_ACCOUNT_WITHDRAWED_ADDRESS)
+    GAS_ACCOUNT_WITHDRAWED_ADDRESSES.some((addr) =>
+      isSameAddress(data.tx!.from_addr, addr)
+    )
   ) {
     tokenURL = data.receives?.[0]?.token?.logo_url || '';
     // gas withdraw
     interAddressExplain = (
       <>
-        <div className="tx-explain-title">Withdrawn Gas</div>
-        <div className="tx-explain-desc">From Gas Deposit</div>
+        <div className="text-[14px] leading-[17px] text-r-neutral-title1">
+          Withdrawn Gas
+        </div>
+        <div className="text-[14px] leading-[17px] text-r-neutral-title1">
+          From Gas Deposit
+        </div>
       </>
     );
   } else {

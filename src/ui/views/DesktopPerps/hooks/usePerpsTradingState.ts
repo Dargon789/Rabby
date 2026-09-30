@@ -14,9 +14,8 @@ import {
 } from '../../Perps/utils';
 import { useMemoizedFn } from 'ahooks';
 import BigNumber from 'bignumber.js';
-import { DEFAULT_TPSL_CONFIG } from '@/ui/models/perps';
+import { DEFAULT_TPSL_CONFIG } from '@/ui/state/perps';
 import { formatUsdValue, splitNumberByStep } from '@/ui/utils';
-import { usePerpsAccount } from '../../Perps/hooks/usePerpsAccount';
 import { calcAmountFromPercentage } from '../components/TradingPanel/utils';
 import { useTranslation } from 'react-i18next';
 
@@ -140,8 +139,6 @@ export const usePerpsTradingState = ({ readOnly = false } = {}) => {
   const maxLeverage = currentMarketData?.maxLeverage || 25;
   const leverage = wsActiveAssetData?.leverage.value || maxLeverage;
   const leverageType = wsActiveAssetData?.leverage.type || 'isolated';
-
-  const { availableBalance: withdrawableBalance } = usePerpsAccount();
 
   // Scoped to the selected market's DEX and collateral token. Summing every
   // DEX's `crossMarginSummary` instead collapses a unified account down to the
@@ -303,6 +300,10 @@ export const usePerpsTradingState = ({ readOnly = false } = {}) => {
         maxLeverage,
         pxDecimals,
         side: direction === 'Long' ? 'buy' : 'sell',
+        // The pro panel keeps quoting while the typed size exceeds what the
+        // balance can fund (submission is blocked elsewhere), so price the
+        // order as if the margin were there instead of showing `-`.
+        assumeSufficientMargin: true,
       });
       if (!projected) {
         return { liqPrice: '-', liqPriceNum: null, cost };

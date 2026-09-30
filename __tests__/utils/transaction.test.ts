@@ -6,6 +6,7 @@ import {
   buildParseTxRequest,
   buildPreExecTxRequest,
   buildSignTx,
+  calcGasLimit,
   normalizeTxParams,
   checkGasAndNonce,
   explainGas,
@@ -71,10 +72,14 @@ jest.mock('@/utils/chain', () => ({
   }),
 }));
 
-jest.mock('@/utils/tempo', () => ({
-  getTempoFeeTokenInfo: jest.fn(),
-  isTempoChain: (serverId?: string) => serverId === 'tempo',
-}));
+jest.mock('@/utils/tempo', () => {
+  const actual = jest.requireActual('@/utils/tempo');
+  return {
+    ...actual,
+    getTempoFeeTokenInfo: jest.fn(),
+    isTempoChain: (serverId?: string) => serverId === 'tempo',
+  };
+});
 
 const createCheckParams = (overrides = {}) => ({
   recommendGasLimitRatio: 1,
@@ -527,5 +532,59 @@ describe('buildSignTx', () => {
     expect(tx.chainId).toBe(1);
     expect(tx.gasPrice).toBe('0x3b9aca00');
     expect(tx.maxPriorityFeePerGas).toBeUndefined();
+  });
+
+  test('buildSignTx uses the Tempo signing semantics for display', () => {
+    const tx = buildSignTx({
+      tx: normalizeTxParams(
+        {
+          from: '0xfrom',
+          type: '0x76',
+          to: '0xpathusd',
+          data: '0xa9059cbbdead',
+          value: '0x0',
+          calls: [{}],
+        } as any,
+        true
+      ) as any,
+      chainId: 123,
+    }) as any;
+
+    expect(tx.calls).toStrictEqual([
+      {
+        to: '0xpathusd',
+        data: '0xa9059cbbdead',
+        value: '0x0',
+      },
+    ]);
+    expect(tx.to).toBeUndefined();
+    expect(tx.value).toBeUndefined();
+    expect(tx.data).toBe('0x');
+  });
+});
+
+describe('calcGasLimit dapp tx.gas cap', () => {
+  const run = (enumName: string, blockGasLimit: number, txGas: string) =>
+    calcGasLimit({
+      chain: { id: 1, enum: enumName, serverId: 'x' } as any,
+      tx: { gas: txGas } as any,
+      gas: new BigNumber(21000),
+      selectedGas: null,
+      nativeTokenBalance: '0',
+      explainTx: { gas: { gas_ratio: 1 } } as any,
+      needRatio: false,
+      wallet: {} as any,
+      preparedBlock: { gasLimit: intToHex(blockGasLimit) } as any,
+    }).then((r) => r.gasLimit);
+
+  // ETH single-tx limit 16,777,216 (EIP-7825); UNKNOWN is only capped by block
+  test.each([
+    ['single-tx limit + 1', 'ETH', 30_000_000, intToHex(16_777_217), '0x5208'],
+    ['single-tx limit', 'ETH', 30_000_000, intToHex(16_777_216), '0x1000000'],
+    ['block limit + 1', 'UNKNOWN', 1_000_000, intToHex(1_000_001), '0x5208'],
+    ['block limit', 'UNKNOWN', 1_000_000, intToHex(1_000_000), '0xf4240'],
+    ['invalid tx.gas', 'UNKNOWN', 1_000_000, '0x', '0x5208'],
+  ])('%s', async (_, enumName, blockGasLimit, txGas, expected) => {
+    await expect(run(enumName, blockGasLimit, txGas)).resolves.toBe(expected);
   });
 });

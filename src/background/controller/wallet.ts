@@ -5,12 +5,14 @@ import {
   toChecksumAddress,
 } from '@ethereumjs/util';
 import { ethErrors } from 'eth-rpc-errors';
+import { KEYRING_IMPORT_EXPIRED } from '@/constant/message';
 import { ethers, Contract } from 'ethers';
 import {
   capitalize,
   groupBy,
   isEqual,
   last,
+  omit,
   pick,
   sortBy,
   truncate,
@@ -44,10 +46,10 @@ import {
   OfflineChainsService,
   perpsService,
   miscService,
-  lendingService,
   feedbackService,
 } from 'background/service';
 import type { GasAccountServiceStore } from 'background/service/gasAccount';
+import extensionUpdateService from 'background/service/extensionUpdate';
 import buildinProvider, {
   EthereumProvider,
 } from 'background/utils/buildinProvider';
@@ -85,7 +87,6 @@ import {
   BridgeHistory,
   getOpenapiStore,
   patchOpenapiStore,
-  testnetOpenapiService,
 } from '../service/openapi';
 import {
   ContextActionData,
@@ -201,6 +202,10 @@ import {
 } from '@/utils/tempo';
 import { getRecommendGas, getRecommendNonce } from './walletUtils/sign';
 import { bootWallet } from './walletUtils/boot';
+import {
+  assertApprovalSigningBinding,
+  waitForApprovalSigning,
+} from './walletUtils/approvalSigning';
 import { gasMarketV2 as loadGasMarketV2 } from '../service/gasMarket';
 import {
   cancelAllSignTxPreparations,
@@ -229,7 +234,6 @@ import { buildCreateListingTypedData } from '@/utils/nft';
 import { http } from '../utils/http';
 import { getPerpsSDK } from '@/ui/views/Perps/sdkManager';
 import { GNOSIS_SUPPORT_CHAINS } from '@rabby-wallet/gnosis-sdk/dist/api';
-import { AccountScene } from '@/constant/scene-account';
 import { syncDbService } from '@/db/services/syncDbService';
 import { historyDbService } from '@/db/services/historyDbService';
 import { tokenDbService } from '@/db/services/tokenDbService';
@@ -238,6 +242,7 @@ import { appChainDbService } from '@/db/services/appChainDbService';
 import { balanceDbService } from '@/db/services/balanceDbService';
 import { nftDbService } from '@/db/services/nftDbService';
 import { BALANCE_SYNC_SCENE, CACHE_VALID_DURATION } from '@/db/constants';
+import { assertGasAccountSignText } from '@/utils/gasAccount';
 import {
   BalanceCacheData,
   normalizeBalanceCacheData,
@@ -458,19 +463,17 @@ const gnosisPQueue = new PQueue({
   concurrency: 2,
 });
 
-type DesktopPageType = 'profile' | 'perps' | 'lending' | 'prediction';
+type DesktopPageType = 'profile' | 'perps' | 'prediction';
 
 function getDesktopPageType(path: string): DesktopPageType {
   const normalized = path.replace(/^\//, '');
   if (normalized.startsWith('desktop/perps')) return 'perps';
-  if (normalized.startsWith('desktop/lending')) return 'lending';
   if (normalized.startsWith('desktop/prediction')) return 'prediction';
   return 'profile';
 }
 
 export class WalletController extends BaseController {
   openapi = openapiService;
-  testnetOpenapi = testnetOpenapiService;
   fakeTestnetOpenapi = fakeTestnetOpenapi;
 
   /* wallet */
@@ -537,9 +540,11 @@ export class WalletController extends BaseController {
       isBuild?: boolean;
       account?: Account;
       session?: typeof INTERNAL_REQUEST_SESSION;
+      approvalRequestId?: string;
     }
   ) => {
-    const { isBuild = false, account, session } = options || {};
+    const { isBuild = false, account, session, approvalRequestId } =
+      options || {};
     if (isBuild) {
       return Promise.resolve<T>(data as T);
     }
@@ -547,6 +552,13 @@ export class WalletController extends BaseController {
       data,
       session: session || INTERNAL_REQUEST_SESSION,
       account,
+      onApproval: approvalRequestId
+        ? (approval) =>
+            this.emitEvent(EVENTS.APPROVAL_CREATED, {
+              requestId: approvalRequestId,
+              approval,
+            })
+        : undefined,
     });
   };
 
@@ -555,10 +567,8 @@ export class WalletController extends BaseController {
   };
 
   getApproval = notificationService.getApproval;
-  resolveApproval = notificationService.resolveApproval;
-  rejectApproval = (err?: string, stay = false, isInternal = false) => {
-    return notificationService.rejectApproval(err, stay, isInternal);
-  };
+  resolveApprovalFor = notificationService.resolveApprovalFor;
+  rejectApprovalFor = notificationService.rejectApprovalFor;
 
   rejectAllApprovals = () => {
     notificationService.rejectAllApprovals();
@@ -2439,66 +2449,30 @@ export class WalletController extends BaseController {
     }
   );
 
-  private getTestnetTotalBalanceCached = cached(
-    'getTestnetTotalBalanceCached',
-    async (address: string) => {
-      const testnetData = await testnetOpenapiService.getTotalBalance(address);
-      preferenceService.updateTestnetAddressBalance(address, testnetData);
-      return testnetData;
-    },
-    {
-      timeout: BALANCE_LOADING_CONFS.TIMEOUT,
-      maxSize: BALANCE_LOADING_CONFS.CACHE_LIMIT,
-    }
-  );
-
   /**
    * @description get balance about info by address,
    * it will use cache in memory, or re-fetch, update-cache
    * AND **persist the cache to preference store** if expired
    */
-  getInMemoryAddressBalance = async (
-    address: string,
-    force = false,
-    isTestnet = false
-  ) => {
+  getInMemoryAddressBalance = async (address: string, force = false) => {
     const addr = address?.toLowerCase() || '';
-
-    if (isTestnet) {
-      return this.getTestnetTotalBalanceCached.fn([addr], addr, force);
-    }
     return this.getTotalBalanceCached.fn([addr], addr, force);
   };
 
-  forceExpireInMemoryAddressBalance = (address: string, isTestnet = false) => {
-    if (isTestnet) {
-      // preferenceService.removeTestnetAddressBalance(address);
-      return this.getTestnetTotalBalanceCached.forceExpire(address);
-    }
-
+  forceExpireInMemoryAddressBalance = (address: string) => {
     // preferenceService.removeAddressBalance(address);
     return this.getTotalBalanceCached.forceExpire(address);
   };
 
-  isInMemoryAddressBalanceExpired = (address: string, isTestnet = false) => {
-    if (isTestnet) {
-      return this.getTestnetTotalBalanceCached.isExpired(address);
-    }
-
+  isInMemoryAddressBalanceExpired = (address: string) => {
     return this.getTotalBalanceCached.isExpired(address);
   };
 
   /**
    * @deprecatedgetPersistedBalanceAboutCacheMap
    */
-  getAddressCacheBalance = async (
-    address: string | undefined,
-    isTestnet = false
-  ) => {
+  getAddressCacheBalance = async (address: string | undefined) => {
     if (!address) return null;
-    if (isTestnet) {
-      return null;
-    }
 
     try {
       const balance = await balanceDbService.queryBalance(address);
@@ -2673,19 +2647,6 @@ export class WalletController extends BaseController {
     preferenceService.setPreferencePartials({ ga4EventTime: timestamp });
   };
 
-  switchSceneAccount = ({
-    scene,
-    account,
-  }: {
-    scene: AccountScene;
-    account: Account;
-  }) => {
-    const prev = preferenceService.getPreference('sceneAccountMap') || {};
-    preferenceService.setPreferencePartials({
-      sceneAccountMap: { ...prev, [scene]: account },
-    });
-  };
-
   getLastTimeSendToken = () => preferenceService.getLastTimeSendToken();
   setLastTimeSendToken = (token: TokenItem) =>
     preferenceService.setLastTimeSendToken(token);
@@ -2734,8 +2695,14 @@ export class WalletController extends BaseController {
     key: Key
   ): PersistedStoreMap[Key] => {
     switch (key) {
+      case 'bridge':
+        return bridgeService.getBridgeData() as PersistedStoreMap[Key];
+      case 'contactBook':
+        return contactBookService.getContactsByMap() as PersistedStoreMap[Key];
       case 'currency':
         return currencyService.getStore() as PersistedStoreMap[Key];
+      case 'pendingExtensionUpdate':
+        return extensionUpdateService.store as PersistedStoreMap[Key];
       case 'openapi':
         return getOpenapiStore() as PersistedStoreMap[Key];
       case 'rpc':
@@ -2778,8 +2745,21 @@ export class WalletController extends BaseController {
     }
 
     switch (key) {
+      case 'bridge':
+        bridgeService.patchStore(patch as PersistedStorePatch<'bridge'>);
+        return;
+      case 'contactBook':
+        contactBookService.patchStore(
+          patch as PersistedStorePatch<'contactBook'>
+        );
+        return;
       case 'currency':
         currencyService.patchStore(patch as PersistedStorePatch<'currency'>);
+        return;
+      case 'pendingExtensionUpdate':
+        extensionUpdateService.patchStore(
+          patch as PersistedStorePatch<'pendingExtensionUpdate'>
+        );
         return;
       case 'openapi':
         return patchOpenapiStore(patch as PersistedStorePatch<'openapi'>);
@@ -2805,11 +2785,6 @@ export class WalletController extends BaseController {
   setRabbyPointsSignature = RabbyPointsService.setSignature;
   getRabbyPointsSignature = RabbyPointsService.getSignature;
   clearRabbyPointsSignature = RabbyPointsService.clearSignature;
-
-  getLastSelectedLendingChain = lendingService.getLastSelectedChain;
-  setLastSelectedLendingChain = lendingService.setLastSelectedChain;
-  getSkipHealthFactorWarning = lendingService.getSkipHealthFactorWarning;
-  setSkipHealthFactorWarning = lendingService.setSkipHealthFactorWarning;
 
   addHDKeyRingLastAddAddrTime = HDKeyRingLastAddAddrTimeService.addUnixRecord;
   getHDKeyRingLastAddAddrTimeStore = HDKeyRingLastAddAddrTimeService.getStore;
@@ -3269,19 +3244,15 @@ export class WalletController extends BaseController {
     ).then((chains) => chains.filter((chain): chain is Chain => !!chain));
   };
 
-  syncAllGnosisNetworks = () => {
+  syncAllGnosisNetworks = async () => {
     const keyring: GnosisKeyring = this.#getKeyringByType(KEYRING_CLASS.GNOSIS);
     if (!keyring) {
       return;
     }
-    Object.entries(keyring.networkIdsMap).forEach(
-      async ([address, networks]) => {
-        const chainList = await this.fetchGnosisChainList(address);
-        keyring.setNetworkIds(
-          address,
-          uniq((networks || []).concat(chainList.map((chain) => chain.network)))
-        );
-      }
+    await Promise.all(
+      Object.keys(keyring.networkIdsMap).map((address) =>
+        this.syncGnosisNetworks(address)
+      )
     );
   };
 
@@ -3290,11 +3261,14 @@ export class WalletController extends BaseController {
     if (!keyring) {
       return;
     }
-    const networks = keyring.networkIdsMap[address];
+    const networks = keyring.networkIdsMap[address.toLowerCase()];
     const chainList = await this.fetchGnosisChainList(address);
     const nextNetworks = uniq(
       (networks || []).concat(chainList.map((chain) => chain.network))
-    );
+    ).filter((networkId) => {
+      const chain = findChain({ networkId });
+      return chain && GNOSIS_SUPPORT_CHAINS.includes(chain.enum);
+    });
     const isSame = isEqual(sortBy(networks), sortBy(nextNetworks));
     if (isSame) {
       return;
@@ -5021,10 +4995,19 @@ export class WalletController extends BaseController {
     options?: any
   ) => {
     const keyring = await keyringService.getKeyringForAccount(from, type);
+    assertApprovalSigningBinding(notificationService.getApproval(), {
+      type,
+      from,
+      data,
+      options,
+    });
+    const signingOptions = options
+      ? omit(options, ['sourceApprovalId', 'approvalComponent'])
+      : options;
     const res = await keyringService.signTypedMessage(
       keyring,
       { from, data },
-      options
+      signingOptions
     );
     eventBus.emit(EVENTS.broadcastToUI, {
       method: EVENTS.SIGN_FINISHED,
@@ -5046,7 +5029,14 @@ export class WalletController extends BaseController {
     options?: any
   ) => {
     const fn = () =>
-      waitSignComponentAmounted().then(() => {
+      waitForApprovalSigning({
+        type,
+        from,
+        data,
+        options,
+        getApproval: notificationService.getApproval,
+        waitForUI: waitSignComponentAmounted,
+      }).then(() => {
         return this.signTypedData(type, from, data as any, options);
       });
 
@@ -5116,6 +5106,12 @@ export class WalletController extends BaseController {
     let keyring: any;
     if (keyringId !== null && keyringId !== undefined) {
       keyring = stashKeyrings[keyringId];
+      if (!keyring) {
+        throw Object.assign(
+          new Error('Wallet import session expired. Please try again.'),
+          { code: KEYRING_IMPORT_EXPIRED }
+        );
+      }
     } else {
       try {
         keyring = this.#getKeyringByType(type);
@@ -5277,6 +5273,8 @@ export class WalletController extends BaseController {
   checkIsGasDepositTxs: typeof transactionHistoryService.checkIsGasDepositTxs = (
     params
   ) => transactionHistoryService.checkIsGasDepositTxs(params);
+  getGasDepositTxKeys: typeof transactionHistoryService.getGasDepositTxKeys = () =>
+    transactionHistoryService.getGasDepositTxKeys();
   completeBridgeTxHistory = (
     from_tx_id: string,
     chainId: number,
@@ -5631,7 +5629,9 @@ export class WalletController extends BaseController {
     return preferenceService.updateLastTimeGasSelection(chainId, gas);
   };
   getIsFirstOpen = () => {
-    return preferenceService.getIsFirstOpen();
+    return extensionUpdateService.shouldShowFirstNotice(
+      preferenceService.getIsFirstOpen()
+    );
   };
   getIsNewUser = () => {
     return preferenceService.getIsNewUser();
@@ -6399,9 +6399,11 @@ export class WalletController extends BaseController {
     result?: any;
   }> {
     const { closeWindowBeforeSign = true } = options || {};
-    const { text } = await wallet.openapi.getGasAccountSignText(
+    const { text: rawText } = await wallet.openapi.getGasAccountSignText(
       account.address
     );
+    const text = assertGasAccountSignText(rawText, account.address);
+
     if (closeWindowBeforeSign) {
       eventBus.emit(EVENTS.broadcastToUI, {
         method: EVENTS.GAS_ACCOUNT.CLOSE_WINDOW,
@@ -7117,6 +7119,10 @@ export class WalletController extends BaseController {
 
   setReportGasLevel = miscService.setCurrentGasLevel;
   getReportGasLevel = miscService.getCurrentGasLevel;
+
+  getPendingExtensionVersion = extensionUpdateService.getPendingVersion;
+  requestExtensionUpdateCheck = extensionUpdateService.requestUpdateCheck;
+  reloadExtensionForUpdate = extensionUpdateService.reloadForUpdate;
 
   getScreenshotFeedbacks = feedbackService.getScreenshotFeedbacks;
   onScreenshotFeedbackSubmitted = feedbackService.onScreenshotFeedbackSubmitted;
