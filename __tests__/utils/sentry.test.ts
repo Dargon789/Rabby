@@ -9,12 +9,38 @@ describe('Sentry ignored errors', () => {
     expect(shouldIgnoreSentryError(message)).toBe(true);
   });
 
+  // A broken local IndexedDB surfaces as the bare message; only the
+  // disk/backing-store flavour is environmental noise.
+  test.each([
+    'UnknownError: Internal error.',
+    'DatabaseClosedError: UnknownError Internal error.',
+  ])('keeps the generic IndexedDB failure reportable: %s', (message) => {
+    expect(shouldIgnoreSentryError(message)).toBe(false);
+  });
+
+  test('still ignores the disk-backed IndexedDB failure', () => {
+    expect(
+      shouldIgnoreSentryError(
+        'UnknownError: Internal error. IO error: .../000041.log: FILE_ERROR_FAILED (ChromeMethodBFE: 3::WritableFileAppend::1)'
+      )
+    ).toBe(true);
+  });
+
   test('keeps the bounds issue reportable', () => {
     expect(
       shouldIgnoreSentryError(
         'Invalid value for bounds. Bounds must be at least 50% within visible screen space.'
       )
     ).toBe(false);
+  });
+
+  test('ignores an expired import stash, thrown or forwarded over the port', () => {
+    const thrown = Object.assign(new Error('Wallet import session expired.'), {
+      code: 'KEYRING_IMPORT_EXPIRED',
+    });
+    const forwarded = { message: thrown.message, code: thrown.code };
+    expect(shouldIgnoreSentryError(thrown)).toBe(true);
+    expect(shouldIgnoreSentryError(forwarded)).toBe(true);
   });
 
   test('ignores a Request timeout Error', () => {

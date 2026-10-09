@@ -18,6 +18,11 @@ const attachHardwareSigningContext = (
     operation: string;
     originalError?: unknown;
     error_category?: 'user_cancelled' | 'unknown';
+    provider_code?: string;
+    provider_error_tag?: string;
+    provider_stage?: string;
+    provider_reason?: string;
+    provider_metadata?: Record<string, string | number | boolean>;
   }
 ) =>
   attachSigningContext(error, {
@@ -32,12 +37,22 @@ const attachHardwareSigningContext = (
     outcome: 'failed',
     error_category: context.error_category ?? 'unknown',
     duration_bucket: 'lt_100ms',
+    provider_code: context.provider_code,
+    provider_error_tag: context.provider_error_tag,
+    provider_stage: context.provider_stage,
+    provider_reason: context.provider_reason,
+    provider_metadata: context.provider_metadata,
     originalError: context.originalError,
   });
+
+// A client without a DSN drops every event before the transport runs, so
+// these tests would pass vacuously wherever RABBY_SENTRY_DSN is unset.
+const TEST_DSN = 'https://examplePublicKey@o0.ingest.sentry.io/0';
 
 const createRecordingClient = (events: any[]) => {
   const client = new Sentry.BrowserClient({
     ...getSentryConfig(),
+    dsn: getSentryConfig().dsn || TEST_DSN,
     integrations: [Sentry.eventFiltersIntegration()],
     stackParser: Sentry.defaultStackParser,
     sendClientReports: false,
@@ -82,6 +97,48 @@ describe('Sentry configuration', () => {
       type: 'SigningError',
       value: 'unknown',
       stacktrace,
+    });
+  });
+
+  test('uses the safe provider code in the canonical exception and grouping', () => {
+    const error = new Error('device failed');
+    attachHardwareSigningContext(error, {
+      wallet: 'ledger',
+      operation: 'transaction',
+      provider_code: '0x6985',
+      provider_error_tag: 'EthAppCommandError',
+      provider_stage: 'signer.eth.steps.signTransaction',
+      provider_reason: 'condition_not_satisfied',
+      provider_metadata: {
+        status_word: '0x6985',
+        last_required_user_interaction: 'sign-transaction',
+        used_fallback: false,
+      },
+    });
+    const event: any = {
+      exception: { values: [{ type: 'Error', value: error.message }] },
+    };
+
+    applySigningContext(event, error);
+
+    expect(event.exception.values[0]).toMatchObject({
+      type: 'SigningError',
+      value: '0x6985',
+    });
+    expect(event.tags).toMatchObject({
+      signing_provider_code: '0x6985',
+      signing_provider_error_tag: 'EthAppCommandError',
+      signing_provider_stage: 'signer.eth.steps.signTransaction',
+    });
+    expect(event.fingerprint).toContain('0x6985');
+    expect(event.extra).toMatchObject({
+      signing_provider_code: '0x6985',
+      signing_provider_error_tag: 'EthAppCommandError',
+      signing_provider_reason: 'condition_not_satisfied',
+      signing_provider_metadata: {
+        last_required_user_interaction: 'sign-transaction',
+        used_fallback: false,
+      },
     });
   });
 
@@ -212,7 +269,12 @@ describe('Sentry configuration', () => {
     });
     scope.captureEvent({
       exception: {
-        values: [{ type: 'UnknownError', value: 'Internal error.' }],
+        values: [
+          {
+            type: 'UnknownError',
+            value: 'Internal error opening backing store for indexedDB.open.',
+          },
+        ],
       },
     });
     await client.flush(2000);
@@ -276,6 +338,25 @@ describe('Sentry configuration', () => {
         (event) => event.message ?? event.exception?.values?.[0]?.value
       )
     ).toEqual([]);
+    await client.close(2000);
+  });
+
+  // A broken local IndexedDB reaches Sentry as this bare message. It was
+  // dropped between 2026-08-07 and 2026-09-23, which hid every IndexedDB
+  // fault in the field, so the pipeline has to keep it.
+  test('reports the generic IndexedDB failure through the real pipeline', async () => {
+    const events: any[] = [];
+    const { client, scope } = createRecordingClient(events);
+
+    scope.captureException(new Error('UnknownError: Internal error.'));
+    scope.captureEvent({
+      exception: {
+        values: [{ type: 'UnknownError', value: 'Internal error.' }],
+      },
+    });
+    await client.flush(2000);
+
+    expect(events).toHaveLength(2);
     await client.close(2000);
   });
 });

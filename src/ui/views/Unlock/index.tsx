@@ -30,6 +30,7 @@ import { useThemeMode } from '@/ui/hooks/usePreference';
 import { useEventBusListener } from '@/ui/hooks/useEventBusListener';
 import { EVENTS } from '@/constant';
 import { ga4 } from '@/utils/ga4';
+import { useWalletStatusStore } from '@/ui/state/walletStatus';
 
 const InputFormStyled = styled(Form.Item)`
   .ant-form-item-explain {
@@ -90,7 +91,13 @@ const UnlockMethodSwitch = styled.button`
 const Unlock = () => {
   type UnlockType = 'Biometrics' | 'Password';
   const wallet = useWallet();
-  const [getApproval, resolveApproval] = useApproval();
+  // A plain unlock is not consent to any pending sign/approval. Bind an Unlock
+  // approval only after its unlock event has been observed.
+  const [pendingUnlockApproval, setPendingUnlockApproval] = useState<{
+    approvalId: string;
+    approvalComponent: 'Unlock';
+  } | null>(null);
+  const [getApproval, resolveApproval] = useApproval(pendingUnlockApproval);
   const [form] = Form.useForm();
   const inputEl = useRef<InputRef>(null);
   const autoBiometricTriggeredRef = useRef(false);
@@ -123,8 +130,8 @@ const Unlock = () => {
   const unlockPreferredMethod = useRabbySelector(
     (state) => state.preference.unlockPreferredMethod
   );
-  const hasUnlockedOnce = useRabbySelector(
-    (state) => state.app.hasUnlockedOnce
+  const hasUnlockedOnce = useWalletStatusStore(
+    (state) => state.hasUnlockedOnce
   );
   const query = useMemo(() => {
     return qs.parse(location.search, {
@@ -167,6 +174,13 @@ const Unlock = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!pendingUnlockApproval) return;
+    void resolveApproval(undefined, false, false);
+    // Binding changes are the only settlement trigger. resolveApproval is recreated
+    // by useApproval on every render and must not retrigger this effect.
+  }, [pendingUnlockApproval]);
+
   const handleUnlockSuccess = useMemoizedFn(async () => {
     const unlockType = pendingUnlockTypeRef.current;
     pendingUnlockTypeRef.current = null;
@@ -179,21 +193,24 @@ const Unlock = () => {
       );
     }
 
-    dispatch.app.setField({
+    useWalletStatusStore.setState({
       hasUnlockedOnce: true,
     });
     if (UiType.isNotification) {
       if (query.from === '/connect-approval') {
         history.replace('/approval?ignoreOtherWallet=1');
       } else {
+        // Read the approval after the unlock event, then bind its identity before
+        // resolving. The approval hook performs the authoritative re-check.
         const approval = await getApproval();
         if (!approval) {
           history.replace('/');
         } else if (String(approval.data.approvalComponent) === 'Unlock') {
-          // Only resolve the Unlock approval itself, bound by id. A pending
-          // SignText/SignTypedData/SignTx must never be resolved by a
-          // password entry — hand control back to its own approval screen.
-          resolveApproval(undefined, false, false, approval.id);
+          setPendingUnlockApproval((current) =>
+            current?.approvalId === approval.id
+              ? current
+              : { approvalId: approval.id, approvalComponent: 'Unlock' }
+          );
         } else {
           history.replace('/approval');
         }

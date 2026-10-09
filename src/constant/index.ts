@@ -527,8 +527,6 @@ export const INTERNAL_REQUEST_SESSION = {
 
 export const INITIAL_OPENAPI_URL = 'https://api.rabby.io';
 
-export const INITIAL_TESTNET_OPENAPI_URL = 'https://api.testnet.rabby.io';
-
 export const EVENTS = {
   BRIDGE_HISTORY_UPDATED: 'BRIDGE_HISTORY_UPDATED',
   broadcastToUI: 'broadcastToUI',
@@ -600,6 +598,7 @@ export const EVENTS = {
   },
 
   RELOAD_APPROVAL: 'RELOAD_APPROVAL',
+  APPROVAL_CREATED: 'APPROVAL_CREATED',
 };
 
 export const EVENTS_IN_BG = {
@@ -1409,9 +1408,15 @@ export const ARB_LIKE_L2_CHAINS = [CHAINS_ENUM.ARBITRUM, CHAINS_ENUM.AURORA];
 
 export const CAN_NOT_SPECIFY_INTRINSIC_GAS_CHAINS = [...L2_ENUMS];
 
+// Scroll-derived L2s: same getL1Fee(bytes) ABI, but the predeploy address differs per chain
+export const SCROLL_STYLE_L1_GAS_ORACLE: Record<string, string> = {
+  [CHAINS_ENUM.SCRL]: '0x5300000000000000000000000000000000000002',
+  MORPH: '0x530000000000000000000000000000000000000f',
+};
+
 export const CAN_ESTIMATE_L1_FEE_CHAINS = [
   ...OP_STACK_ENUMS,
-  CHAINS_ENUM.SCRL,
+  ...Object.keys(SCROLL_STYLE_L1_GAS_ORACLE),
   ...ARB_LIKE_L2_CHAINS,
   CHAINS_ENUM.PZE,
   CHAINS_ENUM.ERA,

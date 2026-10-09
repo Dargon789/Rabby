@@ -1,4 +1,3 @@
-import { flatten, uniqBy } from 'lodash';
 import { useCurrentAccount } from '@/ui/hooks/backgroundState/useAccount';
 import { isSameAddress, useWallet } from '@/ui/utils';
 import { Tx, WithdrawAction } from '@rabby-wallet/rabby-api/dist/types';
@@ -15,10 +14,9 @@ import PQueue from 'p-queue';
 import { CHAINS_ENUM, ETH_USDT_CONTRACT } from '@/constant';
 import BigNumber from 'bignumber.js';
 import { DisplayedProject } from '@/ui/utils/portfolio/project';
-import { useRequest } from 'ahooks';
-import { Account } from '@/background/service/preference';
 import { ActionType } from './DappActionsForPopup';
 import { useTranslation } from 'react-i18next';
+import * as Sentry from '@sentry/browser';
 
 const rpcQueue = new PQueue({
   concurrency: 20,
@@ -26,10 +24,14 @@ const rpcQueue = new PQueue({
   intervalCap: 10,
 });
 
-export const isBlacklistMethod = (method: string) => {
-  return BLACKLIST_METHODS.map((item) => item.toLowerCase()).includes(
-    method.toLowerCase()
-  );
+const BLACKLIST_METHOD_SET = new Set(
+  BLACKLIST_METHODS.map((name) => name.toLowerCase())
+);
+
+// Name parsed for encodeFunctionData. That name is what tx.data's selector is built from.
+// Any parameter overload of these names is blocked.
+export const isBlacklistMethodName = (name: string) => {
+  return BLACKLIST_METHOD_SET.has(name.toLowerCase());
 };
 
 export const isWhitelistAddress = (address: string) => {
@@ -91,9 +93,21 @@ export const getMethodDesc = (fncName: string) => {
   return `function ${normalizedName.split(')(')[0] + ')'}`;
 };
 
+export const buildActionCalldata = (func: string, strParams?: string[]) => {
+  const normalizedFunc = getMethodDesc(func);
+  const abi = parseAbiItem(normalizedFunc) as AbiFunction;
+  const calldata = encodeFunctionData({
+    abi: [abi],
+    functionName: abi.name,
+    args: strParams as any[],
+  });
+  return { abi, calldata };
+};
+
 export const useDappAction = (
   data: WithdrawAction | undefined,
-  chain?: string
+  chain?: string,
+  protocolName?: string
 ) => {
   const currentAccount = useCurrentAccount();
   const wallet = useWallet();
@@ -107,13 +121,15 @@ export const useDappAction = (
   }, [chain]);
 
   useEffect(() => {
-    if (!data || !chain) return;
+    if (!data || !chain) {
+      setValid(false);
+      return;
+    }
 
     let isMounted = true;
 
     try {
-      const normalizedFunc = getMethodDesc(data.func);
-      const abi = parseAbiItem(normalizedFunc) as AbiFunction;
+      const { abi } = buildActionCalldata(data.func, data.str_params);
       const isAddressArray = abi.inputs.map((item) => item.type === 'address');
       const addresses = data.str_params
         ? data.str_params
@@ -144,8 +160,7 @@ export const useDappAction = (
           }
           return;
         }
-        const isValidMethod = !isBlacklistMethod(data.func);
-        if (!isValidMethod) {
+        if (isBlacklistMethodName(abi.name)) {
           if (isMounted) {
             setValid(false);
           }
@@ -274,16 +289,40 @@ export const useDappAction = (
       return [];
     }
 
-    const normalizedFunc = getMethodDesc(data.func);
-    const abi = parseAbiItem(normalizedFunc) as AbiFunction;
-    const params = data.str_params;
-    const calldata = encodeFunctionData({
-      abi: [abi],
-      functionName: abi.name,
-      args: params as any[],
-    });
+    let calldata: `0x${string}`;
+    let methodName = '';
+    let expectedParamCount: number | undefined;
+    try {
+      const built = buildActionCalldata(data.func, data.str_params);
+      expectedParamCount = built.abi.inputs.length;
+      methodName = built.abi.name;
+      calldata = built.calldata;
+    } catch (error) {
+      const errorName =
+        error instanceof Error && error.name ? error.name : 'UnknownError';
 
-    const approve_txs = await buildApproveTxs();
+      Sentry.captureException(
+        new Error(`DappAction parameter encoding failed: ${errorName}`),
+        {
+          tags: {
+            feature: 'dapp_action',
+            error_stage: 'encode_params',
+            protocol_name: protocolName || 'unknown',
+            chain_id: String(chainInfo.id),
+            chain_server_id: chainInfo.serverId,
+            action_type: data.type,
+            original_error_name: errorName,
+          },
+          fingerprint: ['dapp-action', 'encode-params', errorName],
+          extra: {
+            function_signature: data.func,
+            expected_param_count: expectedParamCount,
+            actual_param_count: data.str_params?.length || 0,
+          },
+        }
+      );
+      return [];
+    }
 
     const tx = {
       chainId: chainInfo.id,
@@ -293,8 +332,22 @@ export const useDappAction = (
       data: calldata,
     } as any;
 
+    if (isBlacklistMethodName(methodName)) {
+      return [];
+    }
+
+    const approve_txs = await buildApproveTxs();
+
     return [...approve_txs, tx];
-  }, [data, valid, currentAccount?.address, chainInfo?.id, buildApproveTxs]);
+  }, [
+    data,
+    valid,
+    currentAccount?.address,
+    chainInfo?.id,
+    chainInfo?.serverId,
+    buildApproveTxs,
+    protocolName,
+  ]);
 
   return {
     valid,
@@ -320,7 +373,12 @@ export const useGetDappActions = ({
         ) {
           return;
         }
-        if (isBlacklistMethod(action.func)) {
+        try {
+          const { abi } = buildActionCalldata(action.func, action.str_params);
+          if (isBlacklistMethodName(abi.name)) {
+            return;
+          }
+        } catch (error) {
           return;
         }
         if (
