@@ -5,6 +5,7 @@ import {
   toChecksumAddress,
 } from '@ethereumjs/util';
 import { ethErrors } from 'eth-rpc-errors';
+import { KEYRING_IMPORT_EXPIRED } from '@/constant/message';
 import { ethers, Contract } from 'ethers';
 import {
   capitalize,
@@ -48,6 +49,7 @@ import {
   feedbackService,
 } from 'background/service';
 import type { GasAccountServiceStore } from 'background/service/gasAccount';
+import extensionUpdateService from 'background/service/extensionUpdate';
 import buildinProvider, {
   EthereumProvider,
 } from 'background/utils/buildinProvider';
@@ -240,6 +242,7 @@ import { appChainDbService } from '@/db/services/appChainDbService';
 import { balanceDbService } from '@/db/services/balanceDbService';
 import { nftDbService } from '@/db/services/nftDbService';
 import { BALANCE_SYNC_SCENE, CACHE_VALID_DURATION } from '@/db/constants';
+import { assertGasAccountSignText } from '@/utils/gasAccount';
 import {
   BalanceCacheData,
   normalizeBalanceCacheData,
@@ -537,9 +540,11 @@ export class WalletController extends BaseController {
       isBuild?: boolean;
       account?: Account;
       session?: typeof INTERNAL_REQUEST_SESSION;
+      approvalRequestId?: string;
     }
   ) => {
-    const { isBuild = false, account, session } = options || {};
+    const { isBuild = false, account, session, approvalRequestId } =
+      options || {};
     if (isBuild) {
       return Promise.resolve<T>(data as T);
     }
@@ -547,6 +552,13 @@ export class WalletController extends BaseController {
       data,
       session: session || INTERNAL_REQUEST_SESSION,
       account,
+      onApproval: approvalRequestId
+        ? (approval) =>
+            this.emitEvent(EVENTS.APPROVAL_CREATED, {
+              requestId: approvalRequestId,
+              approval,
+            })
+        : undefined,
     });
   };
 
@@ -555,22 +567,8 @@ export class WalletController extends BaseController {
   };
 
   getApproval = notificationService.getApproval;
-  resolveApproval = notificationService.resolveApproval;
-  rejectApproval = (
-    err?: string,
-    stay = false,
-    isInternal = false,
-    approvalId?: string,
-    approvalComponent?: Parameters<typeof notificationService.rejectApproval>[4]
-  ) => {
-    return notificationService.rejectApproval(
-      err,
-      stay,
-      isInternal,
-      approvalId,
-      approvalComponent
-    );
-  };
+  resolveApprovalFor = notificationService.resolveApprovalFor;
+  rejectApprovalFor = notificationService.rejectApprovalFor;
 
   rejectAllApprovals = () => {
     notificationService.rejectAllApprovals();
@@ -2703,6 +2701,8 @@ export class WalletController extends BaseController {
         return contactBookService.getContactsByMap() as PersistedStoreMap[Key];
       case 'currency':
         return currencyService.getStore() as PersistedStoreMap[Key];
+      case 'pendingExtensionUpdate':
+        return extensionUpdateService.store as PersistedStoreMap[Key];
       case 'openapi':
         return getOpenapiStore() as PersistedStoreMap[Key];
       case 'rpc':
@@ -2755,6 +2755,11 @@ export class WalletController extends BaseController {
         return;
       case 'currency':
         currencyService.patchStore(patch as PersistedStorePatch<'currency'>);
+        return;
+      case 'pendingExtensionUpdate':
+        extensionUpdateService.patchStore(
+          patch as PersistedStorePatch<'pendingExtensionUpdate'>
+        );
         return;
       case 'openapi':
         return patchOpenapiStore(patch as PersistedStorePatch<'openapi'>);
@@ -3239,19 +3244,15 @@ export class WalletController extends BaseController {
     ).then((chains) => chains.filter((chain): chain is Chain => !!chain));
   };
 
-  syncAllGnosisNetworks = () => {
+  syncAllGnosisNetworks = async () => {
     const keyring: GnosisKeyring = this.#getKeyringByType(KEYRING_CLASS.GNOSIS);
     if (!keyring) {
       return;
     }
-    Object.entries(keyring.networkIdsMap).forEach(
-      async ([address, networks]) => {
-        const chainList = await this.fetchGnosisChainList(address);
-        keyring.setNetworkIds(
-          address,
-          uniq((networks || []).concat(chainList.map((chain) => chain.network)))
-        );
-      }
+    await Promise.all(
+      Object.keys(keyring.networkIdsMap).map((address) =>
+        this.syncGnosisNetworks(address)
+      )
     );
   };
 
@@ -3260,11 +3261,14 @@ export class WalletController extends BaseController {
     if (!keyring) {
       return;
     }
-    const networks = keyring.networkIdsMap[address];
+    const networks = keyring.networkIdsMap[address.toLowerCase()];
     const chainList = await this.fetchGnosisChainList(address);
     const nextNetworks = uniq(
       (networks || []).concat(chainList.map((chain) => chain.network))
-    );
+    ).filter((networkId) => {
+      const chain = findChain({ networkId });
+      return chain && GNOSIS_SUPPORT_CHAINS.includes(chain.enum);
+    });
     const isSame = isEqual(sortBy(networks), sortBy(nextNetworks));
     if (isSame) {
       return;
@@ -5102,6 +5106,12 @@ export class WalletController extends BaseController {
     let keyring: any;
     if (keyringId !== null && keyringId !== undefined) {
       keyring = stashKeyrings[keyringId];
+      if (!keyring) {
+        throw Object.assign(
+          new Error('Wallet import session expired. Please try again.'),
+          { code: KEYRING_IMPORT_EXPIRED }
+        );
+      }
     } else {
       try {
         keyring = this.#getKeyringByType(type);
@@ -5263,6 +5273,8 @@ export class WalletController extends BaseController {
   checkIsGasDepositTxs: typeof transactionHistoryService.checkIsGasDepositTxs = (
     params
   ) => transactionHistoryService.checkIsGasDepositTxs(params);
+  getGasDepositTxKeys: typeof transactionHistoryService.getGasDepositTxKeys = () =>
+    transactionHistoryService.getGasDepositTxKeys();
   completeBridgeTxHistory = (
     from_tx_id: string,
     chainId: number,
@@ -5617,7 +5629,9 @@ export class WalletController extends BaseController {
     return preferenceService.updateLastTimeGasSelection(chainId, gas);
   };
   getIsFirstOpen = () => {
-    return preferenceService.getIsFirstOpen();
+    return extensionUpdateService.shouldShowFirstNotice(
+      preferenceService.getIsFirstOpen()
+    );
   };
   getIsNewUser = () => {
     return preferenceService.getIsNewUser();
@@ -6385,9 +6399,11 @@ export class WalletController extends BaseController {
     result?: any;
   }> {
     const { closeWindowBeforeSign = true } = options || {};
-    const { text } = await wallet.openapi.getGasAccountSignText(
+    const { text: rawText } = await wallet.openapi.getGasAccountSignText(
       account.address
     );
+    const text = assertGasAccountSignText(rawText, account.address);
+
     if (closeWindowBeforeSign) {
       eventBus.emit(EVENTS.broadcastToUI, {
         method: EVENTS.GAS_ACCOUNT.CLOSE_WINDOW,
@@ -7103,6 +7119,10 @@ export class WalletController extends BaseController {
 
   setReportGasLevel = miscService.setCurrentGasLevel;
   getReportGasLevel = miscService.getCurrentGasLevel;
+
+  getPendingExtensionVersion = extensionUpdateService.getPendingVersion;
+  requestExtensionUpdateCheck = extensionUpdateService.requestUpdateCheck;
+  reloadExtensionForUpdate = extensionUpdateService.reloadForUpdate;
 
   getScreenshotFeedbacks = feedbackService.getScreenshotFeedbacks;
   onScreenshotFeedbackSubmitted = feedbackService.onScreenshotFeedbackSubmitted;

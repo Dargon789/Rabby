@@ -1,4 +1,5 @@
 import type { SigningContext } from '@/background/service/keyring/signing-diagnostics';
+import { KEYRING_IMPORT_EXPIRED } from '@/constant/message';
 
 export type SentryIgnorePattern = string | RegExp;
 
@@ -60,7 +61,11 @@ export const RABBY_SENTRY_IGNORE_ERRORS: SentryIgnorePattern[] = [
   /^(Error: )?NotAllowedError: Permission denied\.$/,
   /NotAllowedError: Failed to execute 'writeText' on 'Clipboard': Document is not focused\./,
   /DataCloneError: Function object could not be cloned/,
-  /UnknownError: Internal error\./,
+  // Only the disk/backing-store flavour is environmental. A bare
+  // "UnknownError: Internal error." is Chrome's generic IndexedDB failure and
+  // is how a broken local database surfaces, so it has to stay reportable:
+  // dropping it hid every IndexedDB fault in the field from 2026-08-07 on.
+  /UnknownError: Internal error\.[\s\S]*(?:ChromeMethodBFE|backing store|IO error|FILE_ERROR)/,
   /^(TypeError: )?Load failed$/,
 
   // External RPC receipt polling failures from public/testnet endpoints.
@@ -209,6 +214,10 @@ export const shouldIgnoreSentryError = (
   }
 
   if (matchesAny(RABBY_SENTRY_IGNORE_ERRORS, candidates)) {
+    return true;
+  }
+
+  if ((error as { code?: unknown } | null)?.code === KEYRING_IMPORT_EXPIRED) {
     return true;
   }
 
