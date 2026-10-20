@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@bitboxswiss/bitbox-api": "0.1.1",
-    "@coinbase/wallet-sdk": "3.8.0-beta.3",
+    "@coinbase/wallet-sdk": "3.9.0",
     "@debank/common": "0.3.60",
     "@debank/festats": "1.0.1",
     "@dnd-kit/core": "5.0.1",
@@ -115,7 +115,7 @@
     "eth-rpc-errors": "4.0.3",
     "ethers": "5.8.0",
     "events": "3.3.0",
-    "fflate": "0.8.2",
+    "fflate": "0.8.3",
     "hdkey": "0.8.0",
     "https-browserify": "1.0.0",
     "human-standard-token-abi": "2.0.0",
@@ -163,7 +163,7 @@
     "warden-for-js": "3.0.2",
     "web3-eth-abi": "1.7.0",
     "webextension-polyfill": "0.7.0",
-    "zod": "4.4.3",
+    "zod": "4.6.6",
     "zustand": "5.0.14"
   },
   "devDependencies": {
