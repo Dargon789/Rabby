@@ -198,19 +198,14 @@ const TokenSelect = forwardRef<
       tokens: allTokens,
       isLoading: isLoadingAllTokens,
       isAllTokenLoading, // 包含lp Token的请求
-    } = useTokens(
-      useSwapTokenList ? undefined : currentAccount?.address,
-      undefined,
-      tokenSelectorVisible,
+    } = useTokens(useSwapTokenList ? undefined : currentAccount?.address, {
+      visible: tokenSelectorVisible,
       updateNonce,
-      queryConds.chainServerId,
-      undefined,
-      isFromMode ? lpTokenMode : undefined, // only show lp tokens in from mode
-      undefined,
-      !!queryConds.keyword,
-      false,
-      true
-    );
+      chainServerId: queryConds.chainServerId,
+      lpTokensOnly: isFromMode ? lpTokenMode : undefined, // only show lp tokens in from mode
+      searchMode: !!queryConds.keyword,
+      realtimeMode: true,
+    });
 
     const {
       value: swapTokenList,
@@ -265,13 +260,14 @@ const TokenSelect = forwardRef<
             (token) => token.chain === queryConds.chainServerId
           )
         : allDisplayTokens;
+      const searchedTokens = searchedTokenByQuery.map(abstractTokenToTokenItem);
       return uniqBy(
         queryConds.keyword
           ? isSwapTo
             ? contactAmountTokens(
                 // remoteSwapToSearchTokens获取的接口不好加amount，就从已推荐列表中找到amount合并进去
                 remoteSwapToSearchTokens || [],
-                swapTokenList || []
+                [...(swapTokenList || []), ...(searchedTokens || [])]
               )
                 ?.filter((e) => e.chain === queryConds.chainServerId)
                 .filter((e) =>
@@ -279,11 +275,7 @@ const TokenSelect = forwardRef<
                     ? true
                     : scamTokenFilter(e)
                 )
-            : concatAndSort(
-                searchedTokenByQuery.map(abstractTokenToTokenItem),
-                allTokens,
-                queryConds.keyword
-              )
+            : concatAndSort(searchedTokens, allTokens, queryConds.keyword)
           : allTokens,
         (token) => {
           return `${token.chain}-${token.id}`;

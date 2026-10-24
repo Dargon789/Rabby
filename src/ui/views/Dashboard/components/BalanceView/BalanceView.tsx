@@ -1,49 +1,81 @@
 /* eslint "react-hooks/exhaustive-deps": ["error"] */
 /* eslint-enable react-hooks/exhaustive-deps */
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-  useMemo,
-  useImperativeHandle,
-} from 'react';
-import useCurrentBalance from '@/ui/hooks/useCurrentBalance';
-import { formatUsdValue, useCommonPopupView, useWallet } from 'ui/utils';
-import { KEYRING_TYPE } from 'consts';
-import { SvgIconOffline } from '@/ui/assets';
-import clsx from 'clsx';
-import { Skeleton } from 'antd';
-import { Chain } from '@debank/common';
-import { ChainList } from './ChainList';
-import { formChartData, useCurve } from './useCurve';
-import { CurvePoint, CurveThumbnail } from './CurveView';
-import ArrowNextSVG from '@/ui/assets/dashboard/arrow-next.svg';
+import type { Account } from '@/background/service/preference';
+import { BALANCE_LOADING_CONFS } from '@/constant/timeout';
+import {
+  RcIconArrowRightDashboardCC,
+  RcIconJumpCC,
+} from '@/ui/assets/dashboard';
 import { ReactComponent as UpdateSVG } from '@/ui/assets/dashboard/update.svg';
 import { ReactComponent as WarningSVG } from '@/ui/assets/dashboard/warning-1.svg';
-import { useDebounce } from 'react-use';
-import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
-import { BalanceLabel } from './BalanceLabel';
-import { useTranslation } from 'react-i18next';
 import { TooltipWithMagnetArrow } from '@/ui/component/Tooltip/TooltipWithMagnetArrow';
+import { useCurrency } from '@/ui/hooks/useCurrency';
+import useCurrentBalance from '@/ui/hooks/useCurrentBalance';
+import { useRabbySelector } from '@/ui/store';
+import { IExtractFromPromise } from '@/ui/utils/type';
 import { findChain } from '@/utils/chain';
+import { ga4 } from '@/utils/ga4';
+import { matomoRequestEvent } from '@/utils/matomo-request';
+import { Chain } from '@debank/common';
+import { Skeleton } from 'antd';
+import clsx from 'clsx';
+import { KEYRING_TYPE } from 'consts';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { useTranslation } from 'react-i18next';
+import { useDebounce } from 'react-use';
+import { useCommonPopupView, useWallet } from 'ui/utils';
+import { useQueryProjects } from 'ui/utils/portfolio';
+import { BalanceLabel } from './BalanceLabel';
+import { ChainList } from './ChainList';
+import { CurvePoint, CurveThumbnail } from './CurveView';
+import { formChartData, useCurve } from './useCurve';
 import {
   useHomeBalanceView,
   useRefreshHomeBalanceView,
 } from './useHomeBalanceView';
-import { BALANCE_LOADING_CONFS } from '@/constant/timeout';
-import type { Account } from '@/background/service/preference';
-import { IExtractFromPromise } from '@/ui/utils/type';
-import { OfflineChainNotify } from '../OfflineChainNotify';
-import { RcIconArrowRightCC } from '@/ui/assets/dashboard';
-import { useQueryProjects } from 'ui/utils/portfolio';
+import { ZeroAssets } from './ZeroAssets';
+
+export const BalanceViewJumpButton = ({
+  className,
+  onClick,
+}: {
+  className?: string;
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
+}) => {
+  const { t } = useTranslation();
+
+  return (
+    <button
+      type="button"
+      className={clsx(
+        'balance-view-jump-button hidden shrink-0 items-center justify-center cursor-pointer rounded-[4px] border-0',
+        'bg-[rgba(255,255,255,0.2)] p-[5px] opacity-60',
+        'hover:bg-[rgba(255,255,255,0.1)] hover:opacity-100',
+        className
+      )}
+      aria-label={t('page.dashboard.assets.openInTabV2')}
+      onClick={onClick}
+    >
+      <RcIconJumpCC className="h-[12px] w-[12px] text-r-neutral-title2" />
+    </button>
+  );
+};
 
 export const BalanceView = ({
   currentAccount,
+  hideJumpButton,
 }: {
   currentAccount?: Account | null;
+  hideJumpButton?: boolean;
 }) => {
   const { t } = useTranslation();
+  const { currency, syncCurrencyList } = useCurrency();
 
   const { currentHomeBalanceCache } = useHomeBalanceView(
     currentAccount?.address
@@ -94,13 +126,16 @@ export const BalanceView = ({
     nonce: accountBalanceUpdateNonce,
     realtimeNetWorth: latestEvmBalance,
     initData: currentHomeBalanceCache?.originalCurveData,
+    currency,
   });
   const wallet = useWallet();
-  const [isGnosis, setIsGnosis] = useState(false);
   const [gnosisNetworks, setGnosisNetworks] = useState<Chain[]>([]);
   const [isHover, setHover] = useState(false);
   const [curvePoint, setCurvePoint] = useState<CurvePoint>();
   const [isDebounceHover, setIsDebounceHover] = useState(false);
+  const isGnosis = useMemo(() => {
+    return currentAccount?.type === KEYRING_TYPE.GnosisKeyring;
+  }, [currentAccount?.type]);
 
   const {
     balance,
@@ -124,8 +159,9 @@ export const BalanceView = ({
         latestCurveChartData ||
         formChartData(
           currentHomeBalanceCache?.originalCurveData || [],
-          balanceValue,
-          Date.now()
+          undefined,
+          undefined,
+          currency
         ),
       matteredChainBalances: latestMatteredChainBalances.length
         ? latestMatteredChainBalances
@@ -142,6 +178,7 @@ export const BalanceView = ({
     latestChainBalancesWithValue,
     latestCurveChartData,
     currentHomeBalanceCache,
+    currency,
   ]);
 
   const getCacheExpired = useCallback(async () => {
@@ -161,16 +198,10 @@ export const BalanceView = ({
     refreshCurve,
     isExpired: getCacheExpired,
   });
-  const { refreshPositions } = useQueryProjects(
-    currentAccount?.address,
-    false,
-    true,
-    false,
-    false,
-    false,
-    false,
-    false
-  );
+  const { refreshPositions } = useQueryProjects(currentAccount?.address, {
+    visible: true,
+    autoLoad: false,
+  });
 
   // const refreshTimerlegacy = useRef<NodeJS.Timeout>();
   // only execute once on component mounted or address changed
@@ -202,6 +233,10 @@ export const BalanceView = ({
     []
   );
 
+  useEffect(() => {
+    syncCurrencyList();
+  }, [syncCurrencyList]);
+
   const handleIsGnosisChange = useCallback(async () => {
     if (!currentAccount) return;
     const networkIds = await wallet.getGnosisNetworkIds(currentAccount.address);
@@ -220,11 +255,6 @@ export const BalanceView = ({
   };
 
   const { activePopup, setData, componentName } = useCommonPopupView();
-  const onClickViewAssets = () => {
-    activePopup('AssetList');
-    // wallet.openInDesktop('/desktop/profile');
-    // window.close();
-  };
 
   useEffect(() => {
     if (componentName === 'AssetList') {
@@ -246,11 +276,9 @@ export const BalanceView = ({
     loadBalanceSuccess,
   ]);
 
-  useEffect(() => {
-    if (currentAccount) {
-      setIsGnosis(currentAccount.type === KEYRING_TYPE.GnosisKeyring);
-    }
-  }, [currentAccount]);
+  const hasCustomNetwork = useRabbySelector(
+    (store) => !!store.chains.testnetList?.length
+  );
 
   useEffect(() => {
     if (isGnosis) {
@@ -333,15 +361,56 @@ export const BalanceView = ({
     return evmBalance !== balance;
   }, [evmBalance, balance]);
 
+  const onClickViewAssets = () => {
+    if (shouldShowBalanceLoading) {
+      return;
+    }
+    matomoRequestEvent({
+      category: 'Front Page Click',
+      action: 'Click_BalanceCard',
+    });
+    ga4.fireEvent('Click_BalanceCard', {
+      event_category: 'Front Page Click',
+    });
+    activePopup('AssetList');
+    // wallet.openInDesktop('/desktop/profile');
+    // window.close();
+  };
+
+  const onClickOpenInDesktop = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    wallet.openInDesktop('/desktop/profile');
+    window.close();
+  };
+
+  if (
+    !balanceLoading &&
+    !isGnosis &&
+    !hasCustomNetwork &&
+    !chainBalancesWithValue?.length &&
+    !balance
+  ) {
+    return <ZeroAssets />;
+  }
+
   return (
     <div onMouseLeave={onMouseLeave} className={clsx('w-full')}>
       <div
-        className="min-h-[132px] w-full cursor-pointer rounded-[8px] bg-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.1)]"
+        className={clsx(
+          'balance-view-card group/balance-card relative min-h-[132px] w-full cursor-pointer rounded-[8px]',
+          'bg-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.1)]',
+          '[&:has(.balance-view-jump-button:hover)]:bg-[rgba(255,255,255,0.05)]'
+        )}
         onClick={onClickViewAssets}
       >
-        <div
-          className={clsx('group w-full flex items-end px-[12px] pt-[10px]')}
-        >
+        {!hideJumpButton && (
+          <BalanceViewJumpButton
+            className="absolute right-[8px] top-[8px] z-[1] group-hover/balance-card:flex"
+            onClick={onClickOpenInDesktop}
+          />
+        )}
+        <div className="group flex w-full items-end pl-[12px] pr-[42px] pt-[10px]">
           <div
             className={clsx(
               'text-r-neutral-title2 text-[30px] leading-[36px] font-bold max-w-full'
@@ -355,12 +424,13 @@ export const BalanceView = ({
             ) : (
               <BalanceLabel
                 // isCache={balanceFromCache}
-                balance={currentBalance || 0}
+                balanceUsd={currentBalance || 0}
+                currency={currency}
               />
             )}
           </div>
           <div
-            className="flex flex-end items-center gap-[8px] mb-[7px] ml-[8px] min-h-[20px] cursor-pointer"
+            className="flex flex-end items-center gap-[8px] mb-[4px] ml-[8px] min-h-[20px] cursor-pointer"
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -429,7 +499,7 @@ export const BalanceView = ({
                 <div
                   className={clsx(
                     'w-full flex items-center gap-[4px]',
-                    !currentHover && 'opacity-80'
+                    !currentHover && 'opacity-50'
                   )}
                 >
                   <ChainList
@@ -437,13 +507,13 @@ export const BalanceView = ({
                     matteredChainBalances={chainBalancesWithValue.slice(0)}
                     gnosisNetworks={gnosisNetworks}
                   />
-                  <RcIconArrowRightCC className="ml-auto w-[18px] h-[18px] text-r-neutral-title2 opacity-50" />
+                  <RcIconArrowRightDashboardCC className="w-[18px] h-[18px] text-r-neutral-title2" />
                 </div>
               ) : (
                 <div
                   className={clsx(
                     'w-full flex items-center gap-[4px]',
-                    !currentHover && 'opacity-80'
+                    !currentHover && 'opacity-50'
                   )}
                 >
                   <div
@@ -453,7 +523,7 @@ export const BalanceView = ({
                   >
                     {t('page.dashboard.assets.noAssets')}
                   </div>
-                  <RcIconArrowRightCC className="ml-auto w-[18px] h-[18px] text-r-neutral-title2 opacity-50" />
+                  <RcIconArrowRightDashboardCC className="w-[18px] h-[18px] text-r-neutral-title2" />
                 </div>
               )}
             </div>
@@ -479,7 +549,6 @@ export const BalanceView = ({
           </div>
         </div>
       </div>
-      <OfflineChainNotify />
     </div>
   );
 };

@@ -1,9 +1,9 @@
 import { useCommonPopupView, useWallet } from '@/ui/utils';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { ChainList } from './ChainList';
 import { AssetListContainer } from './AssetListContainer';
 import NetSwitchTabs, {
-  useSwitchNetTab,
+  usePureNetSwitch,
 } from 'ui/component/PillsSwitch/NetSwitchTabs';
 import { ReactComponent as AssetEmptySVG } from '@/ui/assets/dashboard/asset-empty.svg';
 import clsx from 'clsx';
@@ -14,8 +14,8 @@ import { Button } from 'antd';
 import { SpecialTokenListPopup } from './components/TokenButton';
 import { TestnetChainList } from './TestnetChainList';
 import { useFilteredTokens } from './useFilteredTokens';
-import { RcIconExternal1CC, RcIconExternalCC } from '@/ui/assets/dashboard';
-import { useScroll } from 'ahooks';
+import { RcIconJumpBoldCC } from '@/ui/assets/dashboard';
+import { useHistory } from 'react-router-dom';
 
 export const AssetList = ({
   visible,
@@ -25,12 +25,13 @@ export const AssetList = ({
   onClose?(): void;
 }) => {
   const { t } = useTranslation();
-  const { setHeight, data } = useCommonPopupView();
+  const { setHeight } = useCommonPopupView();
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectChainId, setSelectChainId] = useState<string | null>(null);
   const [selectTestnetChainId, setSelectTestnetChainId] = useState<
     string | null
   >(null);
+  const history = useHistory();
   const handleSelectChainChange = (id: string | null) => {
     setSelectChainId(id);
   };
@@ -38,8 +39,7 @@ export const AssetList = ({
     setSelectTestnetChainId(id);
   };
   const [isEmptyAssets, setIsEmptyAssets] = useState<boolean>(false);
-  const [isTestnetEmptyAssets, setIsTestnetEmptyAssets] = useState(false);
-  const { isShowTestnet, selectedTab, onTabChange } = useSwitchNetTab();
+  const { selectedTab, onTabChange } = usePureNetSwitch();
 
   React.useEffect(() => {
     setHeight(500);
@@ -63,20 +63,30 @@ export const AssetList = ({
   const { sortedCustomize: tokens } = useFilteredTokens(selectChainId, false);
   const [showCustomizedTokens, setShowCustomizedTokens] = React.useState(false);
   const wallet = useWallet();
-  const scroll = useScroll(containerRef);
+  const handleOpenInTab = () => {
+    wallet.openInDesktop('/desktop/profile');
+    window.close();
+  };
 
   return (
     <div ref={containerRef} className="pt-[12px] h-full overflow-auto">
-      <div className="px-[20px] pb-[12px]">
-        {isShowTestnet ? (
+      <div className="px-[20px] pb-[20px]">
+        <div className="relative min-h-[32px]">
           <NetSwitchTabs
             value={selectedTab}
             onTabChange={onTabChange}
             // className="h-[28px] box-content mt-[20px] mb-[20px]"
           />
-        ) : (
-          <div className="h-[8px]" />
-        )}
+
+          <div className="absolute top-0 right-0 h-[32px] flex items-center">
+            <div
+              className="text-rb-neutral-body hover:text-rb-brand-default cursor-pointer relative hit-slop-8"
+              onClick={handleOpenInTab}
+            >
+              <RcIconJumpBoldCC width={16} height={16} />
+            </div>
+          </div>
+        </div>
         <div className={clsx(selectedTab === 'mainnet' ? 'block' : 'hidden')}>
           <div
             className={clsx('mt-[120px]', isEmptyAssets ? 'block' : 'hidden')}
@@ -92,10 +102,12 @@ export const AssetList = ({
                   type="primary"
                   className="w-[200px] h-[44px] mt-[50px]"
                   onClick={() => {
-                    setIsShowAddModal(true);
+                    // setIsShowAddModal(true);
+                    history.push('/receive');
+                    onClose?.();
                   }}
                 >
-                  {t('page.dashboard.assets.customButtonText')}
+                  {t('page.dashboard.assets.addAssets')}
                 </Button>
                 <AddCustomTokenPopup
                   visible={isShowAddModal}
@@ -145,35 +157,6 @@ export const AssetList = ({
           />
         </div>
       </div>
-      <footer className={clsx('h-[69px] mt-[8px]')}>
-        <div
-          className={clsx(
-            'fixed bottom-0 left-0 right-0',
-            'px-[20px] py-[14px]',
-            'border-t-[0.5px] border-solid border-rabby-neutral-line',
-            'bg-r-neutral-bg-2',
-            scroll?.top ? 'hidden' : ''
-          )}
-        >
-          <button
-            type="button"
-            className={clsx(
-              'w-full h-[40px] text-r-blue-default text-[13px] leading-[16px] font-medium',
-              'rounded-[8px]',
-              'border-[1px] border-solid border-rabby-blue-default',
-              'bg-r-neutral-bg-2 hover:bg-r-blue-light1'
-            )}
-            onClick={() => {
-              wallet.openInDesktop('/desktop/profile');
-              window.close();
-            }}
-          >
-            <div className="flex items-center justify-center gap-[4px]">
-              {t('page.dashboard.assets.openInTab')}
-            </div>
-          </button>
-        </div>
-      </footer>
     </div>
   );
 };

@@ -5,19 +5,24 @@ import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
 
 const Wrapper = styled.div`
-  position: absolute;
-  top: 66px;
-  right: 28px;
-  height: 27px;
-  padding: 6px 12px;
+  box-sizing: border-box;
+  min-width: 54px;
+  height: 22px;
+  padding: 4px 8px;
   background: rgba(255, 255, 255, 0.2);
   border-radius: 4px;
+  opacity: 0.6;
   cursor: pointer;
 
-  font-weight: 500;
-  font-size: 13px;
-  line-height: 15px;
+  font-weight: 400;
+  font-size: 12px;
+  line-height: 14px;
   color: #ffffff;
+
+  &:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.1);
+  }
 `;
 
 interface QueueProps {
@@ -40,8 +45,8 @@ const Queue = ({ count, className }: QueueProps) => {
         className,
         'ease-in-out',
         'group',
-        'whitespace-nowrap overflow-hidden overflow-ellipsis',
-        'flex justify-end'
+        'whitespace-nowrap overflow-hidden text-ellipsis',
+        'flex items-center justify-center'
       )}
     >
       <div className="group-hover:block hidden">

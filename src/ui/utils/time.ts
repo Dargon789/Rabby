@@ -55,6 +55,23 @@ export function getTimeSpan(times: number) {
   };
 }
 
+export const formatTimeSpanToMinutes = ({
+  d,
+  h,
+  m,
+}: {
+  d: number;
+  h: number;
+  m: number;
+}) =>
+  [
+    d > 0 ? `${d} day${d > 1 ? 's' : ''}` : '',
+    h > 0 ? `${h} hour${h > 1 ? 's' : ''}` : '',
+    m > 0 && d === 0 ? `${m} minute${m > 1 ? 's' : ''}` : '',
+  ]
+    .filter(Boolean)
+    .join(' ') || '1 minute';
+
 export const formatTimeReadable = (timeElapse: number) => {
   if (timeElapse < 0) return 'just now';
 
@@ -91,11 +108,11 @@ export function fromNow(time: number, currTime?: number) {
     flag++;
   }
   if ((h || flag) && flag < 3) {
-    str += `${flag > 0 ? ' ' : ''}${h} hour`;
+    str += `${flag > 0 ? ' ' : ''}${h}h`;
     flag++;
   }
   if ((m || flag) && flag < 3) {
-    str += `${flag > 0 ? ' ' : ''}${m} min`;
+    str += `${flag > 0 ? ' ' : ''}${m}m`;
     flag++;
   }
   if (str) successTimeView = str;

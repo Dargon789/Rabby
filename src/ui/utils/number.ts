@@ -1,6 +1,75 @@
 import BigNumber from 'bignumber.js';
+import { normalizeInputNumber } from '@/constant/regexp';
 
 const Sub_Numbers = '₀₁₂₃₄₅₆₇₈₉';
+
+const AMOUNT_DECIMAL_SEPARATOR_RE = /^\d+,\d*$/;
+const AMOUNT_GROUPED_INPUT_RE = /^[1-9]\d{0,2}(?:,\d{3})+(?:\.\d*)?$/;
+export const AMOUNT_INPUT_NUMBER_RE = /^\d*(\.\d*)?$/;
+
+export const normalizeAmountInput = (inputValue: number | string) => {
+  const value = String(inputValue);
+
+  if (AMOUNT_GROUPED_INPUT_RE.test(value)) {
+    return value;
+  }
+
+  if (AMOUNT_DECIMAL_SEPARATOR_RE.test(value)) {
+    return value.replace(',', '.');
+  }
+
+  return value;
+};
+
+export const truncateAmountToDecimals = (
+  inputValue: string,
+  tokenDecimals?: number | null
+) => {
+  if (tokenDecimals === undefined || tokenDecimals === null) {
+    return inputValue;
+  }
+
+  const decimalsLimit =
+    Number.isFinite(tokenDecimals) && tokenDecimals > 0
+      ? Math.floor(tokenDecimals)
+      : 0;
+  const [whole, decimals] = inputValue.split('.');
+
+  if (decimals === undefined) {
+    return inputValue;
+  }
+
+  if (decimalsLimit === 0) {
+    return whole;
+  }
+
+  if (decimals.length <= decimalsLimit) {
+    return inputValue;
+  }
+
+  return `${whole}.${decimals.slice(0, decimalsLimit)}`;
+};
+
+export const formatTokenAmountInput = (
+  inputValue: number | string,
+  tokenDecimals?: number | null
+) => {
+  const normalizedValue = normalizeAmountInput(inputValue);
+
+  if (
+    !AMOUNT_INPUT_NUMBER_RE.test(normalizedValue) &&
+    !AMOUNT_GROUPED_INPUT_RE.test(normalizedValue)
+  ) {
+    return normalizedValue;
+  }
+
+  return truncateAmountToDecimals(normalizedValue, tokenDecimals);
+};
+
+export const normalizeAmountInputValue = (
+  inputValue: number | string,
+  decimalLimit?: number | null
+) => normalizeInputNumber(formatTokenAmountInput(inputValue, decimalLimit));
 
 export const splitNumberByStep = (
   num: number | string,
@@ -69,17 +138,20 @@ export const formatTokenAmount = (
 
 export const numberWithCommasIsLtOne = (
   x?: number | string | BigNumber,
-  precision?: number
+  precision?: number,
+  prefix?: string
 ) => {
   if (x === undefined || x === null) {
     return '-';
   }
-  if (x.toString() === '0') return '0';
+  if (x.toString() === '0') {
+    return `${prefix || ''}0`;
+  }
 
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-expect-error
   if (x < 0.00005) {
-    return '< 0.0001';
+    return `< ${prefix || ''}0.0001`;
   }
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-expect-error
@@ -87,7 +159,7 @@ export const numberWithCommasIsLtOne = (
   const parts: string[] = Number(x).toFixed(precision).split('.');
 
   parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return parts.join('.');
+  return `${prefix || ''}${parts.join('.')}`;
 };
 
 export const formatNumber = (
@@ -159,6 +231,124 @@ export const formatUsdValue = (
   return '<$0.01';
 };
 
+export const formatTVL = (
+  value: string | number,
+  roundingMode = BigNumber.ROUND_HALF_UP as BigNumber.RoundingMode
+) => {
+  const bnValue = new BigNumber(value);
+  if (bnValue.isNaN()) {
+    return value.toString();
+  }
+
+  const absoluteValue = bnValue.abs();
+
+  if (absoluteValue.lt(1e6)) {
+    return formatUsdValue(value, roundingMode);
+  }
+
+  const formatCompactValue = (amount: BigNumber) => {
+    if (amount.gte(1e9)) {
+      return `${formatNumber(
+        amount.div(1e9).toFixed(),
+        2,
+        undefined,
+        roundingMode
+      )}B`;
+    }
+    if (amount.gte(1e6)) {
+      return `${formatNumber(
+        amount.div(1e6).toFixed(),
+        2,
+        undefined,
+        roundingMode
+      )}M`;
+    }
+    return `${formatNumber(amount.toFixed(), 2, undefined, roundingMode)}`;
+  };
+
+  if (bnValue.lt(0)) {
+    return `-$${formatCompactValue(absoluteValue)}`;
+  }
+  return `$${formatCompactValue(bnValue)}`;
+};
+
+export type CurrencyLike = {
+  code?: string;
+  symbol: string;
+  logo_url?: string;
+  usd_rate: number;
+  is_prefix?: boolean;
+};
+
+const DEFAULT_USD_CURRENCY: CurrencyLike = {
+  code: 'USD',
+  symbol: '$',
+  usd_rate: 1,
+  is_prefix: true,
+};
+
+type FormatCurrencyOptions = {
+  decimal?: number;
+  currency?: CurrencyLike;
+  roundingMode?: BigNumber.RoundingMode;
+};
+
+export const formatCurrencyParts = (
+  value: string | number,
+  options?: FormatCurrencyOptions
+) => {
+  const {
+    decimal = 2,
+    currency = DEFAULT_USD_CURRENCY,
+    roundingMode = BigNumber.ROUND_HALF_UP,
+  } = options || {};
+
+  const bnValue = new BigNumber(value).times(currency.usd_rate || 1);
+  const symbol = currency.symbol || '$';
+  const isPrefix = currency.is_prefix !== false;
+  const sign = bnValue.lt(0) ? '-' : '';
+  const absoluteValue = bnValue.absoluteValue();
+  const formatPrefixAmount = (num: BigNumber) =>
+    formatNumber(num.toFixed(), decimal, undefined, roundingMode);
+  const formatPostfixAmount = (num: BigNumber) =>
+    formatTokenAmount(num.toFixed());
+
+  let amount: string;
+  let isLessThan = false;
+
+  if (!isPrefix) {
+    amount = formatPostfixAmount(absoluteValue);
+  } else if (bnValue.lt(0)) {
+    amount = formatPrefixAmount(absoluteValue);
+  } else if (bnValue.gte(0.01) || bnValue.eq(0)) {
+    amount = formatPrefixAmount(bnValue);
+  } else {
+    amount = '0.01';
+    isLessThan = true;
+  }
+
+  const amountPrefix = `${sign}${isLessThan ? '<' : ''}`;
+  const text = isPrefix
+    ? `${amountPrefix}${symbol}${amount}`
+    : `${amountPrefix}${amount} ${symbol}`;
+
+  return {
+    amount,
+    isLessThan,
+    isPrefix,
+    sign,
+    symbol,
+    text,
+  };
+};
+
+export const formatCurrency = (
+  value: string | number,
+  options?: FormatCurrencyOptions
+) => {
+  return formatCurrencyParts(value, options).text;
+};
+
 export const formatAmount = (amount: string | number, decimals = 4) => {
   // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-expect-error
@@ -178,6 +368,27 @@ export const formatAmount = (amount: string | number, decimals = 4) => {
     return formatLittleNumber(str);
   }
   return formatNumber(amount, decimals);
+};
+
+const COMPACT_TOKEN_AMOUNT_THRESHOLD = new BigNumber('1e14');
+const SCIENTIFIC_TOKEN_AMOUNT_THRESHOLD = new BigNumber('1e24');
+const SCIENTIFIC_TOKEN_AMOUNT_DECIMALS = 4;
+
+export const formatLargeTokenAmount = (amount: number | string) => {
+  const bn = new BigNumber(amount);
+
+  if (
+    bn.isFinite() &&
+    bn.absoluteValue().gte(SCIENTIFIC_TOKEN_AMOUNT_THRESHOLD)
+  ) {
+    return bn.toExponential(SCIENTIFIC_TOKEN_AMOUNT_DECIMALS);
+  }
+
+  if (bn.isFinite() && bn.absoluteValue().gte(COMPACT_TOKEN_AMOUNT_THRESHOLD)) {
+    return formatAmount(amount);
+  }
+
+  return formatTokenAmount(amount);
 };
 
 export const calcPercent = (

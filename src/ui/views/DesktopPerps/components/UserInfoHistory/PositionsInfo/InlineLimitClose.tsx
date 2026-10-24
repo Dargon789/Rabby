@@ -5,15 +5,15 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Button, Modal, Tooltip } from 'antd';
+import { Tooltip } from 'antd';
 import { ScrollAwareTooltip } from './ScrollAwareTooltip';
 import clsx from 'clsx';
 import BigNumber from 'bignumber.js';
 import { useTranslation } from 'react-i18next';
 import { useMemoizedFn, useRequest } from 'ahooks';
-import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
+import { useRabbySelector } from '@/ui/store';
 import { formatUsdValue, splitNumberByStep } from '@/ui/utils';
-import { MarketData } from '@/ui/models/perps';
+import { MarketData } from '@/ui/state/perps';
 import { calculatePnL } from '../../TradingPanel/utils';
 import { validatePriceInput, formatTpOrSlPrice } from '@/ui/views/Perps/utils';
 import { validateAmountInput } from '../../TradingPanel/utils';
@@ -25,30 +25,12 @@ import stats from '@/stats';
 import { getStatsReportSide } from '../../../utils';
 import eventBus from '@/eventBus';
 import { EVENTS } from '@/constant';
-import { useThemeMode } from '@/ui/hooks/usePreference';
-import { PerpsBlueBorderedButton } from '@/ui/views/Perps/components/BlueBorderedButton';
-import { PerpsCheckbox } from '../../TradingPanel/components/PerpsCheckbox';
+import { ThousandsNativeInput } from '../../ThousandsNativeInput';
+import { useOrderConfirm } from '../../../modal/OrderConfirmProvider';
+import type { OrderConfirmRow } from '../../../modal/OrderConfirmModal';
+import { ConfirmAmount } from '../../../modal/OrderConfirmLiveValues';
 
 const CLOSE_PERCENTAGES = [10, 25, 50, 75, 100];
-
-const MarketCloseCheckbox: React.FC<{
-  defaultChecked: boolean;
-  onChange: (checked: boolean) => void;
-}> = ({ defaultChecked, onChange }) => {
-  const [checked, setChecked] = useState(defaultChecked);
-  const { t } = useTranslation();
-  const title = t('page.perpsPro.userInfo.positionInfo.dontShowAgain');
-  return (
-    <PerpsCheckbox
-      checked={checked}
-      onChange={(val) => {
-        setChecked(val);
-        onChange(val);
-      }}
-      title={<span className="text-r-neutral-foot text-[12px]">{title}</span>}
-    />
-  );
-};
 
 interface InlineLimitCloseProps {
   record: PositionFormatData;
@@ -60,22 +42,20 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
   marketData,
 }) => {
   const { t } = useTranslation();
-  const { isDarkTheme } = useThemeMode();
-  const dispatch = useRabbyDispatch();
   const currentPerpsAccount = useRabbySelector(
     (store) => store.perps.currentPerpsAccount
   );
   const sizeDisplayUnit = useRabbySelector(
     (state) => state.perps.sizeDisplayUnit
   );
-  const skipMarketCloseConfirm = useRabbySelector(
-    (state) => state.perps.skipMarketCloseConfirm
-  );
 
   const selectedCoin = useRabbySelector((store) => store.perps.selectedCoin);
 
+  const requestConfirm = useOrderConfirm();
+
   const szDecimals = marketData.szDecimals ?? 4;
   const pxDecimals = marketData.pxDecimals ?? 2;
+  const quoteAsset = marketData.quoteAsset || 'USDC';
   const midPrice = Number(marketData.midPx || marketData.markPx || 0);
   const positionSize = Math.abs(Number(record.size || 0));
   const entryPrice = Number(record.entryPx);
@@ -83,7 +63,7 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
 
   const closeLimitCount = record.closeLimitOrders.length;
   const coinUnit =
-    sizeDisplayUnit === 'usdc' ? 'USDC' : formatPerpsCoin(record.coin);
+    sizeDisplayUnit === 'usd' ? quoteAsset : formatPerpsCoin(record.coin);
 
   const [limitPrice, setLimitPrice] = useState(
     formatTpOrSlPrice(midPrice, szDecimals)
@@ -214,6 +194,7 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
 
       await handleOpenLimitOrder({
         coin: record.coin,
+        dex: marketData.dexId ?? '',
         isBuy,
         size: effectiveSize,
         limitPx: limitPrice,
@@ -250,6 +231,7 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
       const size = new BigNumber(positionSize).toFixed(szDecimals);
       const res = await handleCloseWithMarketOrder({
         coin: record.coin,
+        dex: marketData.dexId ?? '',
         isBuy,
         size,
         midPx: String(midPrice),
@@ -279,67 +261,123 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
     }
   );
 
+  const confirmTitle = `${formatPerpsCoin(record.coin)}-${quoteAsset}`;
+  // Coloured by the trade the close actually places, not by the position being
+  // closed: closing a long sells (red), closing a short buys (green).
+  const confirmTitleSuffix = {
+    text: isLong
+      ? t('page.perpsPro.orderConfirm.closeLong')
+      : t('page.perpsPro.orderConfirm.closeShort'),
+    tone: (isLong ? 'down' : 'up') as 'up' | 'down',
+  };
+
+  // PnL settles in the market's quote asset, not always USDC — a hardcoded
+  // "USDC" would contradict the Price row above on a USDH/USDT-quoted market.
+  const buildEstPnlRow = useMemoizedFn((pnl: number): OrderConfirmRow[] => {
+    if (!Number.isFinite(pnl)) return [];
+    const isUp = pnl >= 0;
+    return [
+      {
+        key: 'estPnl',
+        label: t('page.perpsPro.orderConfirm.estPnl'),
+        value: `${isUp ? '+' : '-'}${splitNumberByStep(
+          new BigNumber(Math.abs(pnl)).toFixed(2)
+        )} ${quoteAsset}`,
+        tone: isUp ? 'up' : 'down',
+      },
+    ];
+  });
+
   const handleMarketCloseWithConfirm = useMemoizedFn(() => {
     if (marketLoading || isMarketSubmitting.current) return;
 
-    if (skipMarketCloseConfirm) {
-      isMarketSubmitting.current = true;
-      handleMarketClose().finally(() => {
-        isMarketSubmitting.current = false;
-      });
-      return;
-    }
+    requestConfirm({
+      type: 'closeMarket',
+      content: () => ({
+        title: confirmTitle,
+        titleSuffix: confirmTitleSuffix,
+        sections: [
+          {
+            key: 'main',
+            rows: [
+              {
+                key: 'price',
+                label: t('page.perpsPro.orderConfirm.price'),
+                value: t('page.perpsPro.orderConfirm.marketPrice'),
+              },
+              {
+                key: 'amount',
+                label: t('page.perpsPro.orderConfirm.amount'),
+                value: (
+                  <ConfirmAmount
+                    amount={new BigNumber(positionSize).toFixed(szDecimals)}
+                    coin={record.coin}
+                    price={midPrice}
+                    quoteAsset={quoteAsset}
+                  />
+                ),
+              },
+              // Closing the full position realizes exactly its unrealized PnL.
+              ...buildEstPnlRow(Number(record.unrealizedPnl)),
+            ],
+          },
+        ],
+      }),
+      dontShowAgainText: t('page.perpsPro.orderConfirm.dontShowAgain', {
+        orderType: t('page.perpsPro.orderConfirm.orderTypeName.closeMarket'),
+      }),
+      submit: () => {
+        isMarketSubmitting.current = true;
+        return handleMarketClose().finally(() => {
+          isMarketSubmitting.current = false;
+        });
+      },
+    });
+  });
 
-    const dontShowAgainRef = { current: true };
-    const modal = Modal.info({
-      width: 400,
-      closable: false,
-      maskClosable: true,
-      centered: true,
-      title: null,
-      icon: null,
-      // bodyStyle: { padding: 0 },
-      className: clsx(
-        'perps-bridge-swap-modal perps-close-all-position-modal',
-        isDarkTheme
-          ? 'perps-bridge-swap-modal-dark'
-          : 'perps-bridge-swap-modal-light'
-      ),
-      content: (
-        <div className="flex items-center justify-center flex-col gap-12">
-          <div className="text-[16px] font-bold text-r-neutral-title-1 text-center">
-            {t('page.perpsPro.userInfo.positionInfo.marketCloseTitle')}
-          </div>
-          <div className="text-[13px] leading-[16px] text-rb-neutral-foot text-center mb-[20px]">
-            {t('page.perpsPro.userInfo.positionInfo.marketCloseDesc')}
-          </div>
-          <MarketCloseCheckbox
-            defaultChecked={true}
-            onChange={(checked) => {
-              dontShowAgainRef.current = checked;
-            }}
-          />
-          <div className="flex items-center justify-center w-full gap-12 mt-[12px]">
-            <PerpsBlueBorderedButton block onClick={() => modal.destroy()}>
-              {t('page.manageAddress.cancel')}
-            </PerpsBlueBorderedButton>
-            <Button
-              size="large"
-              block
-              type="primary"
-              onClick={() => {
-                if (dontShowAgainRef.current) {
-                  dispatch.perps.updateSkipMarketCloseConfirm(true);
-                }
-                handleMarketClose();
-                modal.destroy();
-              }}
-            >
-              {t('page.perpsPro.userInfo.positionInfo.marketCloseBtn')}
-            </Button>
-          </div>
-        </div>
-      ),
+  const handleLimitCloseWithConfirm = useMemoizedFn(() => {
+    if (loading) return;
+
+    requestConfirm({
+      type: 'closeLimit',
+      content: () => {
+        // Mirrors the clamping inside `handleSubmit`.
+        const effectiveSize =
+          sizeNum >= positionSize ? positionSize.toString() : sizeInput;
+        return {
+          title: confirmTitle,
+          titleSuffix: confirmTitleSuffix,
+          sections: [
+            {
+              key: 'main',
+              rows: [
+                {
+                  key: 'price',
+                  label: t('page.perpsPro.orderConfirm.price'),
+                  value: `${splitNumberByStep(limitPrice)} ${quoteAsset}`,
+                },
+                {
+                  key: 'amount',
+                  label: t('page.perpsPro.orderConfirm.amount'),
+                  value: (
+                    <ConfirmAmount
+                      amount={effectiveSize}
+                      coin={record.coin}
+                      price={priceNum}
+                      quoteAsset={quoteAsset}
+                    />
+                  ),
+                },
+                ...(priceNum && sizeNum ? buildEstPnlRow(estPnl) : []),
+              ],
+            },
+          ],
+        };
+      },
+      dontShowAgainText: t('page.perpsPro.orderConfirm.dontShowAgain', {
+        orderType: t('page.perpsPro.orderConfirm.orderTypeName.closeLimit'),
+      }),
+      submit: () => handleSubmit(),
     });
   });
 
@@ -377,7 +415,7 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
 
   const handleKeyDown = useMemoizedFn((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && isPriceValid && sizeNum > 0 && !loading) {
-      handleSubmit();
+      handleLimitCloseWithConfirm();
     }
   });
 
@@ -385,7 +423,7 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
     if (!priceNum) return null;
     const pnlIsUp = estPnl >= 0;
     return (
-      <div className="text-[12px] space-y-[2px]">
+      <div className="text-12 space-y-[2px]">
         <div>Price: {splitNumberByStep(limitPrice)}</div>
         {Boolean(Number(estPnl)) && (
           <div>
@@ -409,14 +447,15 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
     const coin = formatPerpsCoin(record.coin);
     const pnlIsUp = estPnl >= 0;
     return (
-      <div className="text-[12px] space-y-[2px]">
-        {sizeDisplayUnit === 'usdc' ? (
+      <div className="text-12 space-y-[2px]">
+        {sizeDisplayUnit === 'usd' ? (
           <>
             <div>
               Position Size: {positionSize} {coin}
             </div>
             <div>
-              Qty: {sizeInput} {coin} ≈ {splitNumberByStep(notionalValue)} USDC
+              Qty: {sizeInput} {coin} ≈ {splitNumberByStep(notionalValue)}{' '}
+              {quoteAsset}
             </div>
           </>
         ) : (
@@ -455,13 +494,13 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
       <div className="space-y-[4px] px-2">
         {record.closeLimitOrders.map((order) => {
           const orderSize =
-            sizeDisplayUnit === 'usdc'
+            sizeDisplayUnit === 'usd'
               ? new BigNumber(order.sz).multipliedBy(order.limitPx).toFixed(2)
               : order.sz;
           return (
             <div
               key={order.oid}
-              className="flex items-center justify-between gap-[28px] text-[12px]"
+              className="flex items-center justify-between gap-[28px] text-12"
             >
               <span>
                 {splitNumberByStep(orderSize)} {coinUnit} to be closed @$
@@ -490,8 +529,11 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
       <div className="flex items-center gap-[6px]">
         {/* Market link */}
         <span
-          className="text-rb-brand-default cursor-pointer font-bold text-[12px] hover:text-r-neutral-title-1 transition-colors"
-          onClick={() => !marketLoading && handleMarketCloseWithConfirm()}
+          className="text-rb-brand-default cursor-pointer text-12 hover:text-r-neutral-title-1 transition-colors"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!marketLoading) handleMarketCloseWithConfirm();
+          }}
         >
           Market
         </span>
@@ -507,12 +549,13 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
         >
           <span
             className={clsx(
-              'cursor-pointer font-bold text-[12px] transition-colors text-rb-brand-default hover:text-r-neutral-title-1'
+              'cursor-pointer text-12 transition-colors text-rb-brand-default hover:text-r-neutral-title-1'
             )}
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               if (isPriceValid && sizeNum > 0 && !loading) {
                 setShowValidation(false);
-                handleSubmit();
+                handleLimitCloseWithConfirm();
               } else {
                 setShowValidation(true);
               }
@@ -530,10 +573,10 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
         overlayClassName="rectangle"
         title={priceTooltipContent}
       >
-        <input
+        <ThousandsNativeInput
           className={clsx(
-            'w-[68px] h-[24px] px-[6px] text-[11px] rounded-[4px] outline-none',
-            'bg-transparent text-r-neutral-title-1',
+            'w-[68px] h-[24px] px-[6px] text-[11px] rounded-[3px] outline-none',
+            'bg-transparent text-r-neutral-body',
             'border border-solid',
             !isPriceValid
               ? 'border-rb-red-default'
@@ -543,6 +586,7 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
           )}
           placeholder="Price"
           value={limitPrice}
+          onClick={(e) => e.stopPropagation()}
           onChange={(e) => {
             handlePriceChange(e);
             if (showValidation) setShowValidation(false);
@@ -575,11 +619,13 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
               {CLOSE_PERCENTAGES.map((pct) => (
                 <span
                   key={pct}
-                  className="text-13 text-rb-neutral-title-1 bg-rb-neutral-line hover:text-rb-brand-default cursor-pointer px-[11px] h-[24px] flex items-center justify-center rounded-[4px]"
+                  className="text-13 text-rb-neutral-title-1 bg-rb-neutral-line hover:text-rb-brand-default cursor-pointer px-[11px] h-[24px] flex items-center justify-center rounded-[3px]"
                   onMouseDown={(e) => {
                     e.preventDefault();
+                    e.stopPropagation();
                     handlePercentageClick(pct);
                   }}
+                  onClick={(e) => e.stopPropagation()}
                 >
                   {pct}%
                 </span>
@@ -587,11 +633,11 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
             </div>
           }
         >
-          <input
+          <ThousandsNativeInput
             ref={sizeInputRef}
             className={clsx(
-              'w-[60px] h-[24px] px-[6px] text-[11px] rounded-[4px] outline-none',
-              'bg-transparent text-r-neutral-title-1',
+              'w-[60px] h-[24px] px-[6px] text-[11px] rounded-[3px] outline-none',
+              'bg-transparent text-r-neutral-body',
               'border border-solid',
               isSizeOverMax || sizeNum <= 0
                 ? 'border-rb-red-default'
@@ -601,6 +647,7 @@ export const InlineLimitClose: React.FC<InlineLimitCloseProps> = ({
             )}
             placeholder="Size"
             value={sizeInput}
+            onClick={(e) => e.stopPropagation()}
             onChange={(e) => {
               handleSizeChange(e);
               if (showValidation) setShowValidation(false);

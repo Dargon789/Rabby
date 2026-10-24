@@ -1,125 +1,181 @@
+import BigNumber from 'bignumber.js';
 import { Account } from 'background/service/preference';
-import { AccountHistoryItem, MarketData } from '@/ui/models/perps';
-import { Meta, AssetCtx, MarginTable } from '@rabby-wallet/hyperliquid-sdk';
-import { PerpTopToken } from '@rabby-wallet/rabby-api/dist/types';
-import { PERPS_MAX_NTL_VALUE, PERPS_POSITION_RISK_LEVEL } from './constants';
+import { MarketData, perpsActions, usePerpsStore } from '@/ui/state/perps';
+import { Meta, MarginTable } from '@rabby-wallet/hyperliquid-sdk';
+import { PerpTopTokenV3 } from '@rabby-wallet/rabby-api/dist/types';
+import {
+  PERPS_MAX_NTL_VALUE,
+  PERPS_POSITION_RISK_LEVEL,
+  PERPS_BUILD_FEE_RECEIVE_ADDRESS,
+  PerpsQuoteAsset,
+  COLLATERAL_TOKEN_TO_QUOTE,
+} from './constants';
 import { useWallet, WalletController } from '@/ui/utils';
 import { KEYRING_CLASS } from '@/constant';
 import { getPerpsSDK } from './sdkManager';
-import { maxBy } from 'lodash';
+import { formatTpOrSlPrice, validatePriceInput } from './pricePrecision';
 
-const getPxDecimals = (markPx: string) => {
-  const parts = markPx.split('.');
-  if (!parts[1]) return 2;
-  const decimalPart = parts[1];
-  return decimalPart.length;
+export { formatTpOrSlPrice, validatePriceInput };
+
+// Matches Hyperliquid's "Builder fee has not been approved" order rejection.
+const BUILDER_FEE_NOT_APPROVED_RE = /builder fee has not been approved/i;
+export const isBuilderFeeNotApprovedError = (errorMessage?: string): boolean =>
+  !!errorMessage && BUILDER_FEE_NOT_APPROVED_RE.test(errorMessage);
+
+// self-sign has no agent — only the builder fee can be pending. Shared by both
+// perps init flows; uses store actions so it can live outside the hooks.
+export const checkSelfSignBuilderFee = async () => {
+  try {
+    const maxFee = await getPerpsSDK().info.getMaxBuilderFee(
+      PERPS_BUILD_FEE_RECEIVE_ADDRESS
+    );
+    perpsActions.setAccountNeedApproveAgent(false);
+    perpsActions.setAccountNeedApproveBuilderFee(!maxFee);
+  } catch (e) {
+    // best-effort; keep current flags
+    console.error('Failed to check self-sign builder fee:', e);
+  }
 };
 
-export const normalizeHyperliquidCoinForLogo = (coin: string) => {
-  if (!coin) {
-    return '';
-  }
-  // Keep km:* untouched, but drop k-prefix for meme perps like kPEPE -> PEPE.
-  if (coin.startsWith('k') && !coin.startsWith('km:')) {
-    return coin.slice(1);
-  }
-  return coin;
+/**
+ * Wait until both the user clearinghouseState and the global asset ticker
+ * have arrived via WS for the current account. Resolves immediately if both
+ * are already ready, or after `timeoutMs` to avoid hanging init forever
+ * (e.g. brand-new account with no positions, flaky WS).
+ */
+export const waitForInitialWsData = (timeoutMs = 5000): Promise<void> => {
+  return new Promise((resolve) => {
+    const isReady = () => {
+      const s = usePerpsStore.getState();
+      return s.isUserDataReady && s.isMarketTickerReady;
+    };
+    if (isReady()) {
+      resolve();
+      return;
+    }
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      unsubscribe();
+      clearTimeout(timer);
+      resolve();
+    };
+    const unsubscribe = usePerpsStore.subscribe(() => {
+      if (isReady()) finish();
+    });
+    const timer = setTimeout(finish, timeoutMs);
+  });
 };
 
-export const getHyperliquidCoinLogoUrl = (coin: string) => {
-  const iconKey = normalizeHyperliquidCoinForLogo(coin);
-  if (!iconKey) {
-    return '';
-  }
-  return `https://app.hyperliquid.xyz/coins/${iconKey}.svg`;
+// Hyperliquid price-axis precision, ported from the official app bundle:
+// decimals = clamp(4 - floor(log10(0.95 * px)), 0, cap) — i.e. 5
+// significant figures derived from the price magnitude (BTC at 64,026 →
+// whole numbers; 0.123456 → 5 decimals). The ×0.95 is HL's hysteresis:
+// prices just above a power of ten keep the finer precision, so the axis
+// doesn't flap when hovering around a boundary (it also keeps log10 away
+// from exact powers of ten where floats have edges). We cap by
+// 6 - szDecimals (the perp tick bound) where HL's chart caps by a flat 6;
+// ours is never looser. Recomputed per tick but only changes when the
+// price crosses a magnitude.
+export const getPxDecimals = (szDecimals: number, refPx?: string | number) => {
+  const maxBySz = Math.max(0, 6 - Number(szDecimals ?? 0));
+  const px = Math.abs(Number(refPx));
+  if (!Number.isFinite(px) || px === 0) return maxBySz;
+  const sigDecimals = 4 - Math.floor(Math.log10(0.95 * px));
+  return Math.max(0, Math.min(sigDecimals, maxBySz));
+};
+
+import { getQuoteAssetFromMeta } from '@/utils/perps/quoteAsset';
+import {
+  normalizeHyperliquidCoinForLogo,
+  getHyperliquidCoinLogoUrl,
+} from '@/utils/perps/coinLogo';
+export {
+  getQuoteAssetFromMeta,
+  normalizeHyperliquidCoinForLogo,
+  getHyperliquidCoinLogoUrl,
 };
 
 export const formatMarkData = (
-  marketData: [Meta, AssetCtx[]],
-  topAssets: PerpTopToken[],
-  xyzMarketData: [Meta, AssetCtx[]]
+  allMetas: Meta[],
+  topAssets: PerpTopTokenV3[],
+  dexIdMap: Record<number, string>
 ): MarketData[] => {
   try {
-    if (!Array.isArray(marketData) || marketData.length < 2) {
-      console.error(
-        'Failed to format market data: marketData is not an array or has less than 2 items'
-      );
+    if (!Array.isArray(allMetas) || allMetas.length === 0) {
+      console.error('Failed to format market data: allMetas is empty');
       return [];
     }
 
-    const meta = marketData[0];
-    const metrics = marketData[1];
-    if (!meta || !Array.isArray(meta.universe) || !Array.isArray(metrics)) {
-      console.error(
-        'Failed to format market data: meta or metrics is not an array'
-      );
-      return [];
-    }
-
-    const marginTableMap: Record<number, MarginTable> = {};
-    if (Array.isArray(meta.marginTables)) {
-      for (const entry of meta.marginTables) {
-        const [id, table] = entry || [];
-        if (id != null) marginTableMap[id] = table;
+    // Build a lookup: dexId → { meta, marginTableMap, quoteAsset }
+    const dexLookup: Record<
+      string,
+      {
+        meta: Meta;
+        marginTableMap: Record<number, MarginTable>;
+        quoteAsset: PerpsQuoteAsset;
       }
-    }
+    > = {};
 
-    const xyzMarginTableMap: Record<number, MarginTable> = {};
-    if (
-      xyzMarketData?.[0]?.marginTables &&
-      Array.isArray(xyzMarketData[0].marginTables)
-    ) {
-      for (const entry of xyzMarketData[0].marginTables) {
-        const [id, table] = entry || [];
-        if (id != null) xyzMarginTableMap[id] = table;
+    allMetas.forEach((meta, idx) => {
+      const dexId = dexIdMap[idx] ?? String(idx);
+      const marginTableMap: Record<number, MarginTable> = {};
+      if (Array.isArray(meta.marginTables)) {
+        for (const entry of meta.marginTables) {
+          const [id, table] = entry || [];
+          if (id != null) marginTableMap[id] = table;
+        }
       }
-    }
+      dexLookup[dexId] = {
+        meta,
+        marginTableMap,
+        quoteAsset: getQuoteAssetFromMeta(meta),
+      };
+    });
 
     const result: MarketData[] = topAssets
       .map((topAsset) => {
-        const index = topAsset.id;
-        const dexId = topAsset.dex_id;
-        const meta = dexId === 'xyz' ? xyzMarketData[0] : marketData[0];
-        const metrics = dexId === 'xyz' ? xyzMarketData[1] : marketData[1];
-        const tableMap = dexId === 'xyz' ? xyzMarginTableMap : marginTableMap;
+        const index = topAsset.token_id;
+        const dexId = topAsset.dex_id ?? '';
+        const dexInfo = dexLookup[dexId] ?? dexLookup[''];
+        if (!dexInfo) return null;
+
+        const { meta, marginTableMap, quoteAsset } = dexInfo;
         const hlDataAsset = meta.universe[index];
+        if (!hlDataAsset || hlDataAsset.isDelisted) return null;
 
-        if (!hlDataAsset) return null;
-
-        if (hlDataAsset.isDelisted) return null;
-
-        const m = metrics[index] || {};
-        const table = tableMap[hlDataAsset?.marginTableId];
+        const table = marginTableMap[hlDataAsset.marginTableId];
         const tiers = table?.marginTiers || [];
-        const firstTier =
-          Array.isArray(tiers) && tiers.length > 0 ? tiers[0] : undefined;
-        const nextTier =
-          Array.isArray(tiers) && tiers.length > 1 ? tiers[1] : undefined;
+        const firstTier = tiers[0];
+        const nextTier = tiers[1];
 
         const item: MarketData = {
           index,
-          dexId: topAsset.dex_id,
+          dexId: topAsset.dex_id ?? '',
           name: String(topAsset.name ?? ''),
-          // 取保证金表第一档的最大杠杆；若无表则回退 asset.maxLeverage
+          quoteAsset,
+          displayName: topAsset.display_name || topAsset.name,
+          category: topAsset.category || '',
+          categoryId: topAsset.category_id || topAsset.category || '',
           maxLeverage: Number(
             firstTier?.maxLeverage ?? hlDataAsset?.maxLeverage
           ),
           minLeverage: 1,
-          // 第一档的最大名义值 = 下一档的 lowerBound；若不存在下一档则为兜底1000000
           maxUsdValueSize: String(nextTier?.lowerBound ?? PERPS_MAX_NTL_VALUE),
           szDecimals: Number(hlDataAsset.szDecimals ?? 0),
-          // 根据 markPx 推断价格精度
-          pxDecimals: getPxDecimals(m?.markPx ?? ''),
-          dayBaseVlm: String(m?.dayBaseVlm ?? '0'),
-          dayNtlVlm: String(m?.dayNtlVlm ?? '0'),
-          funding: String(m?.funding ?? '0'),
-          markPx: String(m?.markPx ?? ''),
-          midPx: String(m?.midPx ?? ''),
-          openInterest: String(m?.openInterest ?? '0'),
-          oraclePx: String(m?.oraclePx ?? ''),
-          premium: String(m?.premium ?? '0'),
-          prevDayPx: String(m?.prevDayPx ?? ''),
           onlyIsolated: hlDataAsset.onlyIsolated,
+          pxDecimals: getPxDecimals(Number(hlDataAsset.szDecimals ?? 0)),
+          // Price fields initialized empty; filled by WebSocket AssetCtx updates.
+          dayBaseVlm: '0',
+          dayNtlVlm: '0',
+          funding: '0',
+          markPx: '',
+          midPx: '',
+          openInterest: '0',
+          oraclePx: '',
+          premium: '0',
+          prevDayPx: '',
           logoUrl:
             topAsset.full_logo_url || getHyperliquidCoinLogoUrl(topAsset.name),
         };
@@ -134,25 +190,13 @@ export const formatMarkData = (
   }
 };
 
-export const calLiquidationPrice = (
-  markPrice: number,
-  margin: number,
-  direction: 'Long' | 'Short',
-  positionSize: number,
-  nationalValue: number,
-  maxLeverage: number
-) => {
-  const MMR = 1 / maxLeverage / 2;
-  const side = direction === 'Long' ? 1 : -1;
-  // const nationalValue = margin * leverage;
-  const maintenance_margin_required = nationalValue * MMR;
-  const margin_available = margin - maintenance_margin_required;
-  const liq_price =
-    markPrice - (side * margin_available) / positionSize / (1 - MMR * side);
-  // liq_price = price - side * margin_available / position_size / (1 - l * side)
-  return Math.max(liq_price, 0);
-};
-
+export {
+  calLiquidationPrice,
+  getCollateralTokenId,
+  resolveCrossMarginAvailableAfterMaintenance,
+  resolveProjectedLiquidationPrice,
+} from './liquidation';
+export type { PerpsProjectedPosition } from './liquidation';
 /**
  * Calculate the distance to liquidation as a percentage
  * @param liquidationPrice - The liquidation price
@@ -204,39 +248,6 @@ export const calTransferMarginRequired = (
   return transferMarginRequired;
 };
 
-const MAX_SIGNIFICANT_FIGURES = 6;
-
-export const validatePriceInput = (
-  value: string,
-  szDecimals: number
-): boolean => {
-  if (!/^[0-9.]*$/.test(value) || value.split('.').length > 2) return false;
-
-  if (!value || value === '0' || value === '0.') return true;
-
-  // Check if it's an integer (no decimal point or ends with decimal point)
-  if (!value.includes('.') || value.endsWith('.')) {
-    return true; // Integers are always allowed
-  }
-
-  // Split integer and decimal parts
-  const [integerPart, decimalPart] = value.split('.');
-
-  // Check decimal places: max (6 - szDecimals)
-  const maxDecimals = 6 - szDecimals;
-  if (decimalPart.length > maxDecimals) {
-    return false;
-  }
-
-  // Calculate significant figures (remove leading zeros)
-  const allDigits = (integerPart + decimalPart).replace(/^0+/, '');
-  if (allDigits.length > 5) {
-    return false;
-  }
-
-  return true;
-};
-
 export const validateTradeAmount = (value: string, szDecimals: number) => {
   if (!value || value === '0' || value === '0.') return true;
 };
@@ -244,89 +255,6 @@ export const validateTradeAmount = (value: string, szDecimals: number) => {
 export const formatTradeAmount = (value: string, szDecimals: number) => {
   if (!value || value === '0' || value === '0.') return '0';
   return value;
-};
-
-/**
- * Format TP/SL price to ensure it passes validation
- * Rules:
- * 1. Decimal places <= (6 - szDecimals)
- * 2. Significant figures <= 5
- * 3. Can be downgraded to integer if decimal part is all zeros
- * @param price - The price number to format
- * @param szDecimals - Size decimals parameter
- * @returns Formatted price string that will always pass validatePriceInput
- */
-export const formatTpOrSlPrice = (
-  price: number,
-  szDecimals: number
-): string => {
-  if (!price || price === 0) {
-    return '0';
-  }
-
-  const vStr = price.toString();
-  if (!vStr.includes('.')) {
-    // Integer: always valid
-    return vStr;
-  }
-
-  const [integerPart, decimalPart] = vStr.split('.');
-
-  // Rule: if integer part has 6+ digits, force integer to always pass validator
-  if (integerPart.length >= 6) {
-    return integerPart;
-  }
-
-  // Calculate max decimal places: (6 - szDecimals)
-  const maxDecimals = MAX_SIGNIFICANT_FIGURES - szDecimals;
-
-  // Calculate significant figures (same logic as validatePriceInput)
-  // Merge integer and decimal parts first, then remove leading zeros
-  const allSignificantDigits = (integerPart + decimalPart).replace(/^0+/, '');
-  const integerDigits = integerPart.replace(/^0+/, '');
-
-  // If significant digits <= 5, just limit decimal places
-  if (allSignificantDigits.length <= 5) {
-    if (decimalPart.length > maxDecimals) {
-      const newDecimalPart = decimalPart.slice(0, maxDecimals);
-      // Remove trailing zeros
-      const trimmedDecimal = newDecimalPart.replace(/0+$/, '');
-      if (trimmedDecimal) {
-        return `${integerPart}.${trimmedDecimal}`;
-      }
-      return `${integerPart}`;
-    }
-    // Remove trailing zeros from original
-    const trimmedDecimal = decimalPart.replace(/0+$/, '');
-    if (trimmedDecimal) {
-      return `${integerPart}.${trimmedDecimal}`;
-    }
-    return `${integerPart}`;
-  }
-
-  // Significant digits > 5
-  // Integer significant digits = non-zero digits in integer part (leading zeros removed)
-  const integerPartLength = integerDigits.length;
-
-  if (integerPartLength >= 5) {
-    // When integer already occupies 5 digits, drop decimals to pass validator
-    return integerPart;
-  }
-
-  // Calculate remaining digits allowed in decimal part
-  // Note: every digit in decimalPart counts toward allDigits length
-  const remainingDigits = 5 - integerPartLength;
-
-  // Limit decimal part to the minimum of remainingDigits and maxDecimals
-  const maxDecimalLength = Math.min(remainingDigits, maxDecimals);
-  let composedDecimal = decimalPart.slice(0, maxDecimalLength);
-
-  // Remove trailing zeros
-  composedDecimal = composedDecimal.replace(/0+$/, '');
-  if (composedDecimal) {
-    return `${integerPart}.${composedDecimal}`;
-  }
-  return `${integerPart}`;
 };
 
 export const checkPerpsReference = async ({
@@ -384,20 +312,4 @@ export const checkPerpsReference = async ({
     console.error('checkPerpsReference error', e);
     return false;
   }
-};
-
-export const getMaxTimeFromAccountHistory = (
-  historyList: AccountHistoryItem[]
-) => {
-  const depositList = historyList.filter((item) => item.type === 'deposit');
-  const withdrawList = historyList.filter((item) => item.type === 'withdraw');
-  const receiveList = historyList.filter((item) => item.type === 'receive');
-  const depositMaxTime = maxBy(depositList, 'time')?.time || 0;
-  const withdrawMaxTime = maxBy(withdrawList, 'time')?.time || 0;
-  const receiveMaxTime = maxBy(receiveList, 'time')?.time || 0;
-  return {
-    depositMaxTime,
-    withdrawMaxTime,
-    receiveMaxTime,
-  };
 };

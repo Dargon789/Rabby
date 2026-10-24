@@ -5,7 +5,7 @@ import { AddressInput } from './AddressInput';
 import { Button, message } from 'antd';
 import clsx from 'clsx';
 import { Header } from './Header';
-import { getUiType, useApproval, useWallet } from '@/ui/utils';
+import { getUiType, bindApproval, useApproval, useWallet } from '@/ui/utils';
 import { isAddress } from 'viem';
 import { SelectAddressPopup } from './SelectAddressPopup';
 import { useHistory, useLocation } from 'react-router-dom';
@@ -27,6 +27,7 @@ export const ImportCoboArgus: React.FC<{
   const { state } = useLocation<{
     address: string;
     chainId: number | string;
+    approvalId?: string;
   }>();
   const { t } = useTranslation();
   const [selectedChain, setSelectedChain] = React.useState<
@@ -41,7 +42,8 @@ export const ImportCoboArgus: React.FC<{
   const history = useHistory();
   const [hasImportError, setHasImportError] = React.useState<boolean>(false);
   const { show, contextHolder } = useRepeatImportConfirm();
-  const isByImportAddressEvent = !!state;
+  // A manual pick also carries state.approvalId; only hide back when a prefill actually drove us here.
+  const isByImportAddressEvent = !!(state?.address && state?.chainId);
 
   const { openSuccessPage } = useCreateAddressActions({
     onNavigate,
@@ -71,6 +73,11 @@ export const ImportCoboArgus: React.FC<{
     }
   }, [selectedChain, step, inputAddress]);
 
+  // bindApproval no-ops when state.approvalId is absent, rather than falling back to whatever's current.
+  const [, resolveApproval, rejectApproval] = useApproval(
+    bindApproval(state?.approvalId, 'ImportAddress')
+  );
+
   const handleDone = React.useCallback(async () => {
     try {
       const accounts = await wallet.coboSafeImport({
@@ -78,6 +85,11 @@ export const ImportCoboArgus: React.FC<{
         networkId: CHAINS[selectedChain!].serverId,
         safeModuleAddress: inputAddress,
       });
+      // Also completes the bound ImportAddress approval, if any (no-op when unbound).
+      // Result not checked: coboSafeImport() above already succeeded, so the success
+      // screen is correct regardless of whether the optional approval also resolved.
+      // Await before openSuccessPage, which navigates and would unmount this view mid-flight.
+      await resolveApproval(undefined, true);
       openSuccessPage({
         addresses: accounts.map((item) => ({
           address: item.address,
@@ -97,9 +109,8 @@ export const ImportCoboArgus: React.FC<{
         message.error(e.message);
       }
     }
-  }, [selectedChain, safeAddress, inputAddress]);
+  }, [selectedChain, safeAddress, inputAddress, resolveApproval]);
 
-  const [, , rejectApproval] = useApproval();
   const handleClose = React.useCallback(() => {
     rejectApproval();
   }, [rejectApproval]);
@@ -132,7 +143,12 @@ export const ImportCoboArgus: React.FC<{
         {(step === 'add-address' || step === 'select-address') &&
           t('page.newAddress.coboSafe.addCoboArgusAddress')}
       </Header>
-      <div className="p-20 h-[calc(100vh-180px)] overflow-y-scroll pb-[100px]">
+      <div
+        className={clsx(
+          'p-20 overflow-y-scroll pb-[100px]',
+          isInModal ? 'h-[339px]' : 'h-[calc(100vh-261px)]'
+        )}
+      >
         {step === 'select-chain' && (
           <ChainList checked={selectedChain} onChecked={setSelectedChain} />
         )}
@@ -160,10 +176,9 @@ export const ImportCoboArgus: React.FC<{
       </div>
       <footer
         className={clsx(
-          'flex p-[20px]',
-          'absolute bottom-0 left-0 right-0',
+          'flex px-[20px] py-[18px]',
           'border-t border-t-r-neutral-line',
-          'bg-r-neutral-bg-1'
+          'bg-transparent'
         )}
       >
         <Button

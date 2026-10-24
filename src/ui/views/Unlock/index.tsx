@@ -11,7 +11,7 @@ import {
   isSameAddress,
 } from 'ui/utils';
 import rabbyLogo from '@/ui/assets/unlock/rabby.svg';
-import { ReactComponent as BackgroundSVG } from '@/ui/assets/unlock/background.svg';
+import unlockBackground from '@/ui/assets/unlock/background.svg';
 import { ReactComponent as BiometricsSVG } from '@/ui/assets/unlock/biometrics.svg';
 import { ReactComponent as PasswordSwitchSVG } from '@/ui/assets/dashboard/settings/password.svg';
 import { ReactComponent as BiometricSwitchSVG } from '@/ui/assets/dashboard/settings/biometric.svg';
@@ -30,6 +30,7 @@ import { useThemeMode } from '@/ui/hooks/usePreference';
 import { useEventBusListener } from '@/ui/hooks/useEventBusListener';
 import { EVENTS } from '@/constant';
 import { ga4 } from '@/utils/ga4';
+import { useWalletStatusStore } from '@/ui/state/walletStatus';
 
 const InputFormStyled = styled(Form.Item)`
   .ant-form-item-explain {
@@ -46,6 +47,19 @@ const BiometricsImage = styled.div`
   margin-top: 28px;
   display: flex;
   justify-content: center;
+`;
+
+const UnlockPage = styled.div`
+  background-color: #ecf3ff;
+  background-image: url(${unlockBackground});
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+
+  html.dark & {
+    background-color: var(--r-neutral-bg-1);
+    background-image: none;
+  }
 `;
 
 const UnlockMethodSwitch = styled.button`
@@ -77,7 +91,13 @@ const UnlockMethodSwitch = styled.button`
 const Unlock = () => {
   type UnlockType = 'Biometrics' | 'Password';
   const wallet = useWallet();
-  const [, resolveApproval] = useApproval();
+  // A plain unlock is not consent to any pending sign/approval. Bind an Unlock
+  // approval only after its unlock event has been observed.
+  const [pendingUnlockApproval, setPendingUnlockApproval] = useState<{
+    approvalId: string;
+    approvalComponent: 'Unlock';
+  } | null>(null);
+  const [getApproval, resolveApproval] = useApproval(pendingUnlockApproval);
   const [form] = Form.useForm();
   const inputEl = useRef<InputRef>(null);
   const autoBiometricTriggeredRef = useRef(false);
@@ -110,8 +130,8 @@ const Unlock = () => {
   const unlockPreferredMethod = useRabbySelector(
     (state) => state.preference.unlockPreferredMethod
   );
-  const hasUnlockedOnce = useRabbySelector(
-    (state) => state.app.hasUnlockedOnce
+  const hasUnlockedOnce = useWalletStatusStore(
+    (state) => state.hasUnlockedOnce
   );
   const query = useMemo(() => {
     return qs.parse(location.search, {
@@ -119,6 +139,28 @@ const Unlock = () => {
     });
   }, [location.search]);
   const dispatch = useRabbyDispatch();
+  const inputErrorNode = useMemo(() => {
+    if (!inputError) return null;
+
+    return (
+      <div>
+        <span>{inputError}</span>
+        {hasForgotPassword && (
+          <button
+            type="button"
+            className={clsx(
+              'text-r-blue-default font-medium',
+              'underline',
+              'ml-[8px]'
+            )}
+            onClick={() => openInternalPageInTab('forgot-password')}
+          >
+            {t('page.unlock.btnForgotPassword')}
+          </button>
+        )}
+      </div>
+    );
+  }, [hasForgotPassword, inputError, t]);
 
   useEffect(() => {
     let mounted = true;
@@ -132,6 +174,13 @@ const Unlock = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!pendingUnlockApproval) return;
+    void resolveApproval(undefined, false, false);
+    // Binding changes are the only settlement trigger. resolveApproval is recreated
+    // by useApproval on every render and must not retrigger this effect.
+  }, [pendingUnlockApproval]);
+
   const handleUnlockSuccess = useMemoizedFn(async () => {
     const unlockType = pendingUnlockTypeRef.current;
     pendingUnlockTypeRef.current = null;
@@ -144,14 +193,27 @@ const Unlock = () => {
       );
     }
 
-    dispatch.app.setField({
+    useWalletStatusStore.setState({
       hasUnlockedOnce: true,
     });
     if (UiType.isNotification) {
       if (query.from === '/connect-approval') {
         history.replace('/approval?ignoreOtherWallet=1');
       } else {
-        resolveApproval();
+        // Read the approval after the unlock event, then bind its identity before
+        // resolving. The approval hook performs the authoritative re-check.
+        const approval = await getApproval();
+        if (!approval) {
+          history.replace('/');
+        } else if (String(approval.data.approvalComponent) === 'Unlock') {
+          setPendingUnlockApproval((current) =>
+            current?.approvalId === approval.id
+              ? current
+              : { approvalId: approval.id, approvalComponent: 'Unlock' }
+          );
+        } else {
+          history.replace('/approval');
+        }
       }
     } else if (UiType.isTab || UiType.isDesktop) {
       const account = query.address
@@ -182,12 +244,10 @@ const Unlock = () => {
   });
 
   const [run] = useWalletRequest(wallet.unlock, {
-    onSuccess: handleUnlockSuccess,
     onError(err) {
       pendingUnlockTypeRef.current = null;
       console.log('error', err);
       setInputError(err?.message || t('page.unlock.password.error'));
-      form.validateFields(['password']);
     },
   });
 
@@ -245,7 +305,6 @@ const Unlock = () => {
       const errorMessage = error?.message || t('page.unlock.biometricFailed');
       if (!String(errorMessage).toLowerCase().includes('canceled')) {
         setInputError(errorMessage);
-        form.validateFields(['password']);
       }
     } finally {
       isUnlockingRef.current = false;
@@ -315,8 +374,7 @@ const Unlock = () => {
 
   return (
     <FullscreenContainer isUnlock>
-      <div className="unlock page-has-ant-input relative h-full min-h-[550px]">
-        <BackgroundSVG className="absolute inset-0 z-[-1]" />
+      <UnlockPage className="unlock page-has-ant-input relative h-full min-h-[550px]">
         <div className="pt-[124px]">
           {showBiometricSwitch && (
             <div className="w-full absolute top-32 left-0 right-0 flex justify-center z-10">
@@ -391,36 +449,12 @@ const Unlock = () => {
             <InputFormStyled
               className="mt-[34px] mx-20"
               name="password"
+              validateStatus={inputError ? 'error' : undefined}
+              help={inputErrorNode}
               rules={[
                 {
                   required: true,
                   message: t('page.unlock.password.required'),
-                },
-                {
-                  validator: (_, value) => {
-                    if (inputError) {
-                      return Promise.reject(
-                        <div>
-                          <span>{inputError}</span>
-                          {hasForgotPassword && (
-                            <button
-                              className={clsx(
-                                'text-r-blue-default font-medium',
-                                'underline',
-                                'ml-[8px]'
-                              )}
-                              onClick={() =>
-                                openInternalPageInTab('forgot-password')
-                              }
-                            >
-                              {t('page.unlock.btnForgotPassword')}
-                            </button>
-                          )}
-                        </div>
-                      );
-                    }
-                    return Promise.resolve();
-                  },
                 },
               ]}
             >
@@ -474,7 +508,7 @@ const Unlock = () => {
             </footer>
           </Form>
         )}
-      </div>
+      </UnlockPage>
     </FullscreenContainer>
   );
 };

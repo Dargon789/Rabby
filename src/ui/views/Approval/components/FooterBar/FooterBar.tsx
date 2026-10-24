@@ -1,6 +1,7 @@
 import { Account } from '@/background/service/preference';
 import { FallbackSiteLogo } from '@/ui/component';
-import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
+import { useSecurityEngineStore } from '@/ui/state/securityEngine';
+import { useShallow } from 'zustand/react/shallow';
 import { useWallet } from '@/ui/utils';
 import { TooltipWithMagnetArrow } from '@/ui/component/Tooltip/TooltipWithMagnetArrow';
 import { Chain } from '@debank/common';
@@ -24,6 +25,8 @@ import {
   GasAccountTips,
 } from './GasLessComponents';
 import { GasAccountCheckResult } from '@/background/service/openapi';
+import { shouldShowGasLessNotEnough } from './gasAccountDecision';
+import { isApprovalProcessDisabled } from './securityGate';
 
 interface Props extends Omit<ActionGroupProps, 'account'> {
   chain?: Chain;
@@ -33,6 +36,7 @@ interface Props extends Omit<ActionGroupProps, 'account'> {
   origin?: string;
   originLogo?: string;
   hasUnProcessSecurityResult?: boolean;
+  securityBlocked?: boolean;
   hasShadow?: boolean;
   isTestnet?: boolean;
   engineResults?: Result[];
@@ -48,13 +52,18 @@ interface Props extends Omit<ActionGroupProps, 'account'> {
   isGasNotEnough?: boolean;
   gasMethod?: 'native' | 'gasAccount';
   gasAccountCost?: GasAccountCheckResult;
-  onChangeGasAccount?: () => void;
+  onChangeGasAccount?: () => void | Promise<void>;
   isGasAccountLogin?: boolean;
   isWalletConnect?: boolean;
   gasAccountCanPay?: boolean;
   noCustomRPC?: boolean;
   canGotoUseGasAccount?: boolean;
   canDepositUseGasAccount?: boolean;
+  gasAccountAddress?: string;
+  onOpenGasAccountDeposit?: () => void;
+  disableGasAccountDeposit?: boolean;
+  preserveApprovalContext?: boolean;
+  gasTipsApprovalUiStyle?: boolean;
 }
 
 const Wrapper = styled.section`
@@ -151,6 +160,7 @@ export const FooterBar: React.FC<Props> = ({
   securityLevel,
   engineResults = [],
   hasUnProcessSecurityResult,
+  securityBlocked = false,
   hasShadow = false,
   showGasLess = false,
   useGasLess = false,
@@ -170,6 +180,11 @@ export const FooterBar: React.FC<Props> = ({
   noCustomRPC,
   canGotoUseGasAccount,
   canDepositUseGasAccount,
+  gasAccountAddress,
+  onOpenGasAccountDeposit,
+  disableGasAccountDeposit,
+  preserveApprovalContext = false,
+  gasTipsApprovalUiStyle = false,
   ...props
 }) => {
   const [
@@ -178,13 +193,15 @@ export const FooterBar: React.FC<Props> = ({
   ] = React.useState<ConnectedSite | null>(null);
   const account = gnosisAccount || currentAccount;
   const wallet = useWallet();
-  const dispatch = useRabbyDispatch();
   const { t } = useTranslation();
 
-  const { rules, processedRules } = useRabbySelector((s) => ({
-    rules: s.securityEngine.rules,
-    processedRules: s.securityEngine.currentTx.processedRules,
-  }));
+  const { rules, processedRules, openRuleDrawer } = useSecurityEngineStore(
+    useShallow((s) => ({
+      rules: s.rules,
+      processedRules: s.currentTx.processedRules,
+      openRuleDrawer: s.openRuleDrawer,
+    }))
+  );
 
   const currentChain = useMemo(() => {
     if (origin === INTERNAL_REQUEST_ORIGIN) {
@@ -211,7 +228,7 @@ export const FooterBar: React.FC<Props> = ({
     const rule = rules.find((item) => item.id === id);
     if (!rule) return;
     const result = engineResultMap[id];
-    dispatch.securityEngine.openRuleDrawer({
+    openRuleDrawer({
       ruleConfig: rule,
       value: result?.value,
       level: result?.level,
@@ -228,6 +245,25 @@ export const FooterBar: React.FC<Props> = ({
   }, [origin]);
 
   const { isDarkTheme } = useThemeMode();
+  const showGasLessNotEnoughTip =
+    showGasLess &&
+    !payGasByGasAccount &&
+    (!securityLevel || !hasUnProcessSecurityResult) &&
+    !canUseGasLess &&
+    !isWatchAddr &&
+    shouldShowGasLessNotEnough({
+      showGasLess,
+      isGasNotEnough: !!props.isGasNotEnough,
+      payGasByGasAccount,
+      canUseGasLess,
+    });
+  const showNativePendingHardwareGasAccountTip =
+    showGasLess &&
+    !payGasByGasAccount &&
+    (!securityLevel || !hasUnProcessSecurityResult) &&
+    !canUseGasLess &&
+    !isWatchAddr &&
+    !!props.isGasNotEnough;
 
   if (!account) {
     return null;
@@ -253,14 +289,15 @@ export const FooterBar: React.FC<Props> = ({
           account={account}
           gasLess={useGasLess && !payGasByGasAccount}
           {...props}
-          disabledProcess={
-            payGasByGasAccount
-              ? !gasAccountCanPay ||
-                (!!securityLevel && !!hasUnProcessSecurityResult)
-              : useGasLess
-              ? false
-              : props.disabledProcess
-          }
+          disabledProcess={isApprovalProcessDisabled({
+            securityBlocked,
+            hasUnprocessedSecurityResult:
+              !!securityLevel && !!hasUnProcessSecurityResult,
+            payGasByGasAccount,
+            gasAccountCanPay,
+            useGasLess,
+            disabledProcess: props.disabledProcess,
+          })}
           enableTooltip={
             payGasByGasAccount
               ? false
@@ -314,22 +351,50 @@ export const FooterBar: React.FC<Props> = ({
               }}
               gasLessConfig={gasLessConfig}
             />
-          ) : isWatchAddr ? null : (
+          ) : showGasLessNotEnoughTip ? (
             <GasLessNotEnough
-              gasLessFailedReason={gasLessFailedReason}
+              approvalUiStyle={gasTipsApprovalUiStyle}
+              nativeTokenInsufficient={!!props.isGasNotEnough}
+              gasAccountCost={gasAccountCost}
+              gasAccountAddress={gasAccountAddress}
               canGotoUseGasAccount={canGotoUseGasAccount}
               onChangeGasAccount={onChangeGasAccount}
               canDepositUseGasAccount={canDepositUseGasAccount}
+              onOpenGasAccountDeposit={onOpenGasAccountDeposit}
+              disableGasAccountDeposit={disableGasAccountDeposit}
+              preserveApprovalContext={preserveApprovalContext}
             />
-          )
+          ) : null
+        ) : null}
+
+        {showNativePendingHardwareGasAccountTip ? (
+          <GasAccountTips
+            approvalUiStyle={gasTipsApprovalUiStyle}
+            gasAccountCost={gasAccountCost}
+            gasAccountAddress={gasAccountAddress}
+            isWalletConnect={isWalletConnect}
+            noCustomRPC={noCustomRPC}
+            nativeTokenInsufficient={!!props.isGasNotEnough}
+            onOpenGasAccountDeposit={onOpenGasAccountDeposit}
+            disableGasAccountDeposit={disableGasAccountDeposit}
+            onChangeGasAccount={onChangeGasAccount}
+            preserveApprovalContext={preserveApprovalContext}
+            pendingHardwareOnly
+          />
         ) : null}
 
         {payGasByGasAccount && !gasAccountCanPay ? (
           <GasAccountTips
+            approvalUiStyle={gasTipsApprovalUiStyle}
             gasAccountCost={gasAccountCost}
-            isGasAccountLogin={isGasAccountLogin}
+            gasAccountAddress={gasAccountAddress}
             isWalletConnect={isWalletConnect}
             noCustomRPC={noCustomRPC}
+            nativeTokenInsufficient={!!props.isGasNotEnough}
+            onOpenGasAccountDeposit={onOpenGasAccountDeposit}
+            disableGasAccountDeposit={disableGasAccountDeposit}
+            onChangeGasAccount={onChangeGasAccount}
+            preserveApprovalContext={preserveApprovalContext}
           />
         ) : null}
       </Wrapper>

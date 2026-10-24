@@ -1,15 +1,15 @@
-import { ReactComponent as RcIconSwapHistory } from '@/ui/assets/swap/history.svg';
+import { ReactComponent as RcIconSwapHistory } from '@/ui/assets/swap/history-cc.svg';
 
 import { PageHeader } from '@/ui/component';
 import React, { useCallback, useState } from 'react';
 import { useRabbyFee, useSetRabbyFee } from '../hooks';
 import { SwapTxHistory } from './History';
 import { useTranslation } from 'react-i18next';
-import { useRabbyDispatch } from '@/ui/store';
+import { useSwapStore } from '@/ui/state/swap';
 import { RabbyFeePopup } from './RabbyFeePopup';
 import { useHistory } from 'react-router-dom';
 import { getUiType } from '@/ui/utils';
-import { ReactComponent as RcIconFullscreen } from '@/ui/assets/fullscreen-cc.svg';
+import { RcIconJumpBoldCC } from '@/ui/assets/dashboard';
 const isTab = getUiType().isTab;
 const isDesktop = getUiType().isDesktop;
 
@@ -41,11 +41,13 @@ export const Header = ({
     history.push('/dashboard');
   };
 
-  const dispath = useRabbyDispatch();
+  const getSwapSupportedDEXList = useSwapStore(
+    (s) => s.getSwapSupportedDEXList
+  );
 
   React.useEffect(() => {
-    dispath.swap.getSwapSupportedDEXList();
-  }, []);
+    getSwapSupportedDEXList();
+  }, [getSwapSupportedDEXList]);
 
   return (
     <>
@@ -60,16 +62,19 @@ export const Header = ({
             <div className="flex items-center gap-[16px] absolute top-[50%] translate-y-[-50%] right-0">
               {isTab ? null : (
                 <div
-                  className="text-r-neutral-title1 cursor-pointer relative hit-slop-8"
+                  className="text-r-neutral-title1 hover:text-r-blue-default cursor-pointer relative hit-slop-8"
                   onClick={() => {
                     onOpenInTab?.();
                   }}
                 >
-                  <RcIconFullscreen />
+                  <RcIconJumpBoldCC />
                 </div>
               )}
-              <div className="relative hit-slop-8" onClick={openHistory}>
-                <RcIconSwapHistory className="cursor-pointer" />
+              <div
+                className="relative hit-slop-8 cursor-pointer text-r-neutral-title1 hover:text-r-blue-default"
+                onClick={openHistory}
+              >
+                <RcIconSwapHistory />
               </div>
             </div>
           }

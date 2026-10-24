@@ -1,31 +1,27 @@
-import { MarketData, PositionAndOpenOrder } from '@/ui/models/perps';
+import { MarketData } from '@/ui/state/perps';
 import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
 import { formatUsdValue, splitNumberByStep } from '@/ui/utils';
-import { useMemoizedFn, useRequest } from 'ahooks';
-import { Button, Modal, Tooltip } from 'antd';
+import { useMemoizedFn } from 'ahooks';
+import { Button, Modal } from 'antd';
 import BigNumber from 'bignumber.js';
 import clsx from 'clsx';
-import React, { useEffect, useMemo } from 'react';
-import { ReactComponent as RcIconAlarmCC } from '@/ui/assets/perps/icon-alarm-cc.svg';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSetState } from 'react-use';
 import { ReactComponent as RcIconCloseCC } from 'ui/assets/component/close-cc.svg';
 import { DesktopPerpsInput } from '../components/DesktopPerpsInput';
-import { DesktopPerpsSlider } from '../components/DesktopPerpsSlider';
 import { PerpsPositionCard } from '../components/PerpsPositionCard';
 import { usePerpsProPosition } from '../hooks/usePerpsProPosition';
 import { PositionFormatData } from '../components/UserInfoHistory/PositionsInfo';
-import {
-  calculateDistanceToLiquidation,
-  calLiquidationPrice,
-  formatPerpsPct,
-  formatTpOrSlPrice,
-  validatePriceInput,
-} from '../../Perps/utils';
+import { formatTpOrSlPrice, validatePriceInput } from '../../Perps/utils';
 import { PositionSizeInputAndSlider } from '../components/TradingPanel/components/PositionSizeInputAndSlider';
 import { PositionSize } from '../types';
 import stats from '@/stats';
-import { getStatsReportSide } from '../utils';
+import { formatPerpsCoin, getStatsReportSide } from '../utils';
+import { PerpsDisplayCoinName } from '../../Perps/components/PerpsDisplayCoinName';
+import { ReactComponent as RcIconReverseArrowDown } from '@/ui/assets/perps/icon-reverse-arrow-down.svg';
+import { useOrderConfirm } from './OrderConfirmProvider';
+import type { OrderConfirmContent } from './OrderConfirmProvider';
+import { ConfirmAmount } from './OrderConfirmLiveValues';
 
 export interface Props {
   visible: boolean;
@@ -48,6 +44,9 @@ const ClosePositionModalContent: React.FC<Omit<Props, 'visible'>> = ({
 
   const currentPerpsAccount = useRabbySelector(
     (store) => store.perps.currentPerpsAccount
+  );
+  const sizeDisplayUnit = useRabbySelector(
+    (store) => store.perps.sizeDisplayUnit
   );
   const marketPrice = marketData.markPx;
   const szDecimals = marketData.szDecimals;
@@ -139,103 +138,129 @@ const ClosePositionModalContent: React.FC<Omit<Props, 'visible'>> = ({
     handleCloseWithMarketOrder,
   } = usePerpsProPosition();
 
-  const { loading, runAsync: runSubmit } = useRequest(
-    async () => {
-      const isBuy = position.direction === 'Short';
-      const size = new BigNumber(positionSize.amount).toFixed(
-        marketData.szDecimals
-      );
-      if (type === 'limit') {
-        const price = new BigNumber(limitPrice).toFixed(marketData.pxDecimals);
-        await handleOpenLimitOrder({
-          coin: position.coin,
-          isBuy,
-          size,
-          limitPx: price,
-          reduceOnly: true,
-        });
+  const doSubmit = useMemoizedFn(async () => {
+    const isBuy = position.direction === 'Short';
+    const size = new BigNumber(positionSize.amount).toFixed(
+      marketData.szDecimals
+    );
+    if (type === 'limit') {
+      const price = new BigNumber(limitPrice).toFixed(marketData.pxDecimals);
+      await handleOpenLimitOrder({
+        coin: position.coin,
+        dex: marketData.dexId ?? '',
+        isBuy,
+        size,
+        limitPx: price,
+        reduceOnly: true,
+      });
+      stats.report('perpsTradeHistory', {
+        created_at: new Date().getTime(),
+        user_addr: currentPerpsAccount?.address || '',
+        trade_type: 'close limit',
+        leverage: position.leverage.toString(),
+        trade_side: getStatsReportSide(isBuy, true),
+        margin_mode: position.type === 'cross' ? 'cross' : 'isolated',
+        coin: position.coin,
+        size,
+        price,
+        trade_usd_value: new BigNumber(price).times(size).toFixed(2),
+        service_provider: 'hyperliquid',
+        app_version: process.env.release || '0',
+        address_type: currentPerpsAccount?.type || '',
+      });
+    } else if (type === 'market') {
+      const res = await handleCloseWithMarketOrder({
+        coin: position.coin,
+        dex: marketData.dexId ?? '',
+        isBuy,
+        size: new BigNumber(positionSize.amount).toFixed(marketData.szDecimals),
+        midPx: marketPrice,
+        reduceOnly: true,
+      });
+      if (res) {
+        const { totalSz, avgPx } = res;
         stats.report('perpsTradeHistory', {
           created_at: new Date().getTime(),
           user_addr: currentPerpsAccount?.address || '',
-          trade_type: 'close limit',
+          trade_type: 'close market',
           leverage: position.leverage.toString(),
           trade_side: getStatsReportSide(isBuy, true),
           margin_mode: position.type === 'cross' ? 'cross' : 'isolated',
           coin: position.coin,
-          size,
-          price,
-          trade_usd_value: new BigNumber(price).times(size).toFixed(2),
+          size: totalSz,
+          price: avgPx,
+          trade_usd_value: new BigNumber(avgPx).times(totalSz).toFixed(2),
           service_provider: 'hyperliquid',
           app_version: process.env.release || '0',
           address_type: currentPerpsAccount?.type || '',
         });
-      } else if (type === 'market') {
-        const res = await handleCloseWithMarketOrder({
-          coin: position.coin,
-          isBuy,
-          size: new BigNumber(positionSize.amount).toFixed(
-            marketData.szDecimals
-          ),
-          midPx: marketPrice,
-          reduceOnly: true,
-        });
-        if (res) {
-          const { totalSz, avgPx } = res;
-          stats.report('perpsTradeHistory', {
-            created_at: new Date().getTime(),
-            user_addr: currentPerpsAccount?.address || '',
-            trade_type: 'close market',
-            leverage: position.leverage.toString(),
-            trade_side: getStatsReportSide(isBuy, true),
-            margin_mode: position.type === 'cross' ? 'cross' : 'isolated',
-            coin: position.coin,
-            size: totalSz,
-            price: avgPx,
-            trade_usd_value: new BigNumber(avgPx).times(totalSz).toFixed(2),
-            service_provider: 'hyperliquid',
-            app_version: process.env.release || '0',
-            address_type: currentPerpsAccount?.type || '',
-          });
-        }
-      } else if (type === 'reverse') {
-        const res = await handleCloseWithMarketOrder({
-          coin: position.coin,
-          isBuy,
-          size: new BigNumber(position.size || 0)
-            .times(2)
-            .toFixed(marketData.szDecimals),
-          midPx: marketPrice,
-          reduceOnly: false,
-        });
-        if (res) {
-          const { totalSz, avgPx } = res;
-          stats.report('perpsTradeHistory', {
-            created_at: new Date().getTime(),
-            user_addr: currentPerpsAccount?.address || '',
-            trade_type: 'reverse market',
-            leverage: position.leverage.toString(),
-            trade_side: getStatsReportSide(isBuy, false),
-            margin_mode: position.type === 'cross' ? 'cross' : 'isolated',
-            coin: position.coin,
-            size: totalSz,
-            price: avgPx,
-            trade_usd_value: new BigNumber(avgPx).times(totalSz).toFixed(2),
-            service_provider: 'hyperliquid',
-            app_version: process.env.release || '0',
-            address_type: currentPerpsAccount?.type || '',
-          });
-        }
       }
-    },
-    {
-      manual: true,
-      onSuccess: () => {
-        dispatch.perps.fetchClearinghouseState();
-        dispatch.perps.fetchUserHistoricalOrders();
-        onConfirm?.();
-      },
+    } else if (type === 'reverse') {
+      const res = await handleCloseWithMarketOrder({
+        coin: position.coin,
+        dex: marketData.dexId ?? '',
+        isBuy,
+        size: new BigNumber(position.size || 0)
+          .times(2)
+          .toFixed(marketData.szDecimals),
+        midPx: marketPrice,
+        reduceOnly: false,
+      });
+      if (res) {
+        const { totalSz, avgPx } = res;
+        stats.report('perpsTradeHistory', {
+          created_at: new Date().getTime(),
+          user_addr: currentPerpsAccount?.address || '',
+          trade_type: 'reverse market',
+          leverage: position.leverage.toString(),
+          trade_side: getStatsReportSide(isBuy, false),
+          margin_mode: position.type === 'cross' ? 'cross' : 'isolated',
+          coin: position.coin,
+          size: totalSz,
+          price: avgPx,
+          trade_usd_value: new BigNumber(avgPx).times(totalSz).toFixed(2),
+          service_provider: 'hyperliquid',
+          app_version: process.env.release || '0',
+          address_type: currentPerpsAccount?.type || '',
+        });
+      }
     }
-  );
+  });
+
+  const inFlightRef = useRef(false);
+  const [loading, setLoading] = useState(false);
+
+  /**
+   * The single submit path for both buttons, and the only in-flight guard.
+   *
+   * Deliberately not `useRequest`: ahooks cancels an in-flight `runAsync` when
+   * this content unmounts (a WS position update can remove the position — and
+   * with it this modal — before the order response returns), and a cancelled
+   * `runAsync` returns a promise that never settles, deadlocking the confirm
+   * dialog in its submitting state.
+   *
+   * The ref matters because the dialog is not always there to block a second
+   * click: when the user has opted out of the confirmation for this order
+   * type, `requestConfirm` submits immediately with no dialog and no mask, so
+   * without it a double click sends two close orders.
+   */
+  const runSubmit = useMemoizedFn(async () => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    setLoading(true);
+    try {
+      await doSubmit();
+      // ClearinghouseState is refreshed inside the handlers (single-dex path).
+      dispatch.perps.fetchUserHistoricalOrders();
+      onConfirm?.();
+    } catch (e) {
+      // Swallowed on purpose: the handlers report their own failures, and the
+      // confirm dialog's `await` has to settle either way.
+    } finally {
+      inFlightRef.current = false;
+      setLoading(false);
+    }
+  });
 
   const handleMidClick = () => {
     setLimitPrice(
@@ -245,36 +270,6 @@ const ClosePositionModalContent: React.FC<Omit<Props, 'visible'>> = ({
       )
     );
   };
-
-  const reverseEstimatedLiquidationPrice = useMemo(() => {
-    const markPrice = Number(marketData.markPx);
-    if (!markPrice) return 0;
-    const maxLeverage = marketData.maxLeverage;
-    return calLiquidationPrice(
-      markPrice,
-      Number(position.marginUsed),
-      position.direction === 'Long' ? 'Short' : 'Long',
-      Number(position.size),
-      Number(position.size) * markPrice,
-      maxLeverage
-    ).toFixed(marketData.pxDecimals);
-  }, [
-    marketData.pxDecimals,
-    marketData.markPx,
-    position.marginUsed,
-    position.size,
-    position.direction,
-    marketData.maxLeverage,
-  ]);
-
-  const liquidationDistance = useMemo(
-    () =>
-      calculateDistanceToLiquidation(
-        reverseEstimatedLiquidationPrice,
-        marketData.markPx
-      ),
-    [reverseEstimatedLiquidationPrice, marketData.markPx]
-  );
 
   const validation = React.useMemo(() => {
     if (type === 'reverse') {
@@ -324,26 +319,281 @@ const ClosePositionModalContent: React.FC<Omit<Props, 'visible'>> = ({
     handleMidClick();
   }, []);
 
-  const newPosition = useMemo(() => {
-    if (type !== 'reverse') {
-      return null;
+  const baseAsset = formatPerpsCoin(position.coin);
+  const quoteAsset = marketData.quoteAsset || 'USDC';
+
+  // `reverse` is deliberately excluded: that mode of this modal already is the
+  // confirmation step, so it keeps submitting directly and has no settings
+  // toggle.
+  const requestConfirm = useOrderConfirm();
+
+  const buildConfirmContent = useMemoizedFn(
+    (): OrderConfirmContent => {
+      const isLong = position.direction === 'Long';
+      const isProfit = closedPnl.isGreaterThanOrEqualTo(0);
+
+      return {
+        title: `${baseAsset}-${quoteAsset}`,
+        titleSuffix: {
+          // Coloured by the trade the close places, not by the position being
+          // closed: closing a long sells (red), closing a short buys (green).
+          text: isLong
+            ? t('page.perpsPro.orderConfirm.closeLong')
+            : t('page.perpsPro.orderConfirm.closeShort'),
+          tone: isLong ? 'down' : 'up',
+        },
+        sections: [
+          {
+            key: 'close',
+            rows: [
+              {
+                key: 'price',
+                label: t('page.perpsPro.orderConfirm.price'),
+                value:
+                  type === 'limit'
+                    ? `${splitNumberByStep(limitPrice)} ${quoteAsset}`
+                    : t('page.perpsPro.orderConfirm.marketPrice'),
+              },
+              {
+                key: 'amount',
+                label: t('page.perpsPro.orderConfirm.amount'),
+                value: (
+                  <ConfirmAmount
+                    amount={positionSize.amount || '0'}
+                    coin={position.coin}
+                    price={type === 'limit' ? limitPrice : marketPrice}
+                    quoteAsset={quoteAsset}
+                  />
+                ),
+              },
+              {
+                key: 'estPnl',
+                label: t('page.perpsPro.orderConfirm.estPnl'),
+                tone: isProfit ? 'up' : 'down',
+                // Only the number is tinted; the unit stays title-1 per design.
+                value: (
+                  <>
+                    <span>
+                      {isProfit ? '+' : '-'}
+                      {splitNumberByStep(closedPnl.abs().toFixed(2))}
+                    </span>
+                    <span className="text-rb-neutral-title-1">{` ${quoteAsset}`}</span>
+                  </>
+                ),
+              },
+            ],
+          },
+        ],
+      };
+    }
+  );
+
+  const handleSubmitClick = useMemoizedFn(() => {
+    const confirmType = type === 'limit' ? 'closeLimit' : 'closeMarket';
+    requestConfirm({
+      type: confirmType,
+      content: buildConfirmContent,
+      dontShowAgainText: t('page.perpsPro.orderConfirm.dontShowAgain', {
+        orderType: t(`page.perpsPro.orderConfirm.orderTypeName.${confirmType}`),
+      }),
+      // Returned so the dialog can show loading while the order is in flight.
+      // `runSubmit` always settles and carries the in-flight guard the
+      // opted-out (no-dialog) path has nothing else to fall back on.
+      submit: () => runSubmit(),
+    });
+  });
+
+  const reverseDexTag = useMemo(() => {
+    const marketName = marketData.name || '';
+    if (!marketName.includes(':')) return '';
+
+    return marketName.split(':')[0]?.toUpperCase() || '';
+  }, [marketData.name]);
+
+  const reverseMarginModeLabel =
+    position.type === 'cross' ? 'Cross' : 'Isolated';
+
+  const formattedPositionSize = useMemo(() => {
+    if (sizeDisplayUnit === 'usd') {
+      return `${splitNumberByStep(
+        new BigNumber(position.size || 0).times(marketPrice || 0).toFixed(2)
+      )} ${quoteAsset}`;
+    }
+
+    return `${splitNumberByStep(position.size || 0)} ${baseAsset}`;
+  }, [baseAsset, marketPrice, position.size, quoteAsset, sizeDisplayUnit]);
+
+  const reverseOrderSize = useMemo(
+    () =>
+      new BigNumber(position.size || 0).times(2).toFixed(marketData.szDecimals),
+    [marketData.szDecimals, position.size]
+  );
+
+  const reverseActionDisplay = useMemo(() => {
+    if (sizeDisplayUnit === 'usd') {
+      return {
+        size: new BigNumber(reverseOrderSize || 0)
+          .times(marketPrice || 0)
+          .toFixed(2),
+        coin: quoteAsset,
+      };
     }
 
     return {
-      ...position,
-      direction:
-        position.direction === 'Long' ? 'Short' : ('Long' as 'Long' | 'Short'),
-      entryPx: marketPrice,
-      liquidationDistancePercent: formatPerpsPct(liquidationDistance),
+      size: reverseOrderSize,
+      coin: baseAsset,
     };
-  }, [position.size, positionSize.amount, marketPrice, liquidationDistance]);
+  }, [baseAsset, marketPrice, quoteAsset, reverseOrderSize, sizeDisplayUnit]);
+
+  const reverseActionSide =
+    position.direction === 'Long'
+      ? t('page.perpsPro.userInfo.positionInfo.sell')
+      : t('page.perpsPro.userInfo.positionInfo.buy');
+
+  const reverseDirection =
+    position.direction === 'Long' ? ('Short' as const) : ('Long' as const);
+
+  const renderReverseTag = (
+    children: React.ReactNode,
+    variant: 'brand' | 'neutral' | 'long' | 'short'
+  ) => {
+    return (
+      <span
+        className={clsx(
+          'flex h-[16px] shrink-0 items-center rounded-[4px] px-[4px] text-[10px] leading-[16px] font-medium',
+          variant === 'brand' && 'bg-rb-brand-light-2 text-rb-brand-default',
+          variant === 'neutral' && 'bg-rb-neutral-bg-4 text-rb-neutral-foot',
+          variant === 'long' && 'bg-rb-green-light-2 text-rb-green-default',
+          variant === 'short' && 'bg-rb-red-light-2 text-rb-red-default'
+        )}
+      >
+        {children}
+      </span>
+    );
+  };
+
+  const renderReverseMarketName = () => {
+    return (
+      <PerpsDisplayCoinName
+        item={marketData}
+        separator="-"
+        className="text-[16px] leading-[20px]"
+        baseClassName="font-medium text-r-neutral-title-1"
+        quoteClassName="text-r-neutral-title-1"
+      />
+    );
+  };
+
+  const renderReversePositionCard = (direction: 'Long' | 'Short') => {
+    const isLong = direction === 'Long';
+    return (
+      <div className="rounded-[6px] border border-solid border-rb-neutral-line p-[12px]">
+        <div className="mb-[18px] flex h-[20px] items-center gap-[4px]">
+          {renderReverseMarketName()}
+          {renderReverseTag(reverseMarginModeLabel, 'neutral')}
+          {renderReverseTag(
+            `${direction.toLowerCase()} ${position.leverage}x`,
+            isLong ? 'long' : 'short'
+          )}
+        </div>
+        <div className="flex items-start justify-between">
+          <div className="flex flex-col gap-[3px]">
+            <span className="text-[12px] leading-[14px] text-rb-neutral-secondary">
+              {t('page.perpsPro.userInfo.positionInfo.positionSize')}
+            </span>
+            <span className="text-[12px] leading-[16px] font-semibold text-r-neutral-title-1">
+              {formattedPositionSize}
+            </span>
+          </div>
+          <div className="flex flex-col items-end gap-[3px]">
+            <span className="text-[12px] leading-[14px] text-rb-neutral-secondary">
+              {t('page.perpsPro.userInfo.positionInfo.orderPrice')}
+            </span>
+            <span className="text-[12px] leading-[16px] font-semibold text-r-neutral-title-1">
+              {t('page.perpsPro.userInfo.positionInfo.marketPrice')}
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  if (type === 'reverse') {
+    return (
+      <div className="flex min-h-[540px] flex-col bg-rb-neutral-bg-1">
+        <div className="relative flex h-[56px] shrink-0 items-center justify-center px-[56px] text-center text-20 font-medium text-r-neutral-title-1">
+          {t('page.perpsPro.userInfo.positionInfo.reversePosition')}
+        </div>
+
+        <div className="flex-1 px-[20px] overflow-y-auto pb-24">
+          <section className="flex items-center justify-between pt-[10px]">
+            <div className="flex flex-col gap-[3px]">
+              {renderReverseMarketName()}
+              <div className="flex items-center gap-[3px]">
+                {reverseDexTag
+                  ? renderReverseTag(reverseDexTag, 'brand')
+                  : null}
+                {renderReverseTag(
+                  position.direction === 'Long'
+                    ? t('page.perpsPro.userInfo.positionInfo.buyToSell')
+                    : t('page.perpsPro.userInfo.positionInfo.sellToBuy'),
+                  'neutral'
+                )}
+              </div>
+            </div>
+            <div className="flex flex-col items-end gap-[3px] text-[12px] font-medium">
+              <span className="leading-[20px] text-rb-neutral-secondary">
+                {t('page.perpsPro.editMargin.currentPrice')}
+              </span>
+              <span className="text-r-neutral-title-1">
+                {splitNumberByStep(
+                  Number(marketPrice || 0).toFixed(marketData.pxDecimals ?? 2)
+                )}
+              </span>
+            </div>
+          </section>
+
+          <section className="mt-[24px] flex flex-col gap-[12px]">
+            {renderReversePositionCard(position.direction)}
+
+            <div className="flex items-center gap-[3px]">
+              <div className="h-0 flex-1 border-t border-solid border-rb-neutral-line" />
+              <div className="flex items-center gap-[4px] rounded-[3px] bg-rb-neutral-bg-4 px-[12px] py-[3px] text-[12px] leading-[16px] text-rb-neutral-foot">
+                <RcIconReverseArrowDown className="h-[16px] w-[16px]" />
+                {t('page.perpsPro.userInfo.positionInfo.reverseAction', {
+                  side: reverseActionSide,
+                  size: splitNumberByStep(reverseActionDisplay.size),
+                  coin: reverseActionDisplay.coin,
+                })}
+              </div>
+              <div className="h-0 flex-1 border-t border-solid border-rb-neutral-line" />
+            </div>
+
+            {renderReversePositionCard(reverseDirection)}
+          </section>
+        </div>
+
+        <div className="bottom-0 left-0 right-0 border-t border-solid border-rabby-neutral-line px-20 py-16 bg-rb-neutral-bg-1">
+          <Button
+            block
+            size="large"
+            type="primary"
+            className="h-[48px] text-15 font-medium rounded-[6px]"
+            loading={loading}
+            disabled={!validation.isValid}
+            onClick={runSubmit}
+          >
+            {btnText}
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col min-h-[520px] bg-r-neutral-bg2">
+    <div className="flex flex-col min-h-[520px] bg-rb-neutral-bg-0">
       <div className="text-center text-20 font-medium text-r-neutral-title-1 mt-16 mb-12">
-        {type === 'reverse'
-          ? t('page.perpsPro.userInfo.positionInfo.reversePosition')
-          : t('page.perpsPro.userInfo.positionInfo.closePosition')}
+        {t('page.perpsPro.userInfo.positionInfo.closePosition')}
       </div>
 
       <div className="flex-1 px-20 overflow-y-auto pb-24">
@@ -356,161 +606,116 @@ const ClosePositionModalContent: React.FC<Omit<Props, 'visible'>> = ({
           </div>
           <PerpsPositionCard position={position} marketData={marketData} />
         </section>
-        {type !== 'reverse' ? (
-          <>
-            <section className="mb-[12px]">
-              <div className="text-[13px] leading-[16px] text-rb-neutral-foot font-medium mb-[8px]">
-                {t('page.perpsPro.userInfo.positionInfo.configure')}
-              </div>
-              <div>
-                {type === 'limit' ? (
-                  <div className="flex items-center gap-[12px] mb-[12px]">
-                    <DesktopPerpsInput
-                      className="flex-1 text-right"
-                      prefix={
-                        <span className="text-[13px] leading-[16px] text-r-neutral-foot font-medium">
-                          {t('page.perpsPro.userInfo.positionInfo.limitPrice')}
-                        </span>
-                      }
-                      value={limitPrice}
-                      onChange={(e) => {
-                        handleLimitPriceChange(e.target.value);
-                      }}
-                      suffix={
-                        <span className="text-[13px] leading-[16px] font-medium text-rb-neutral-title-1">
-                          USD
-                        </span>
-                      }
-                    />
+        <section className="mb-[12px]">
+          <div className="text-[13px] leading-[16px] text-rb-neutral-foot font-medium mb-[8px]">
+            {t('page.perpsPro.userInfo.positionInfo.configure')}
+          </div>
+          <div>
+            {type === 'limit' ? (
+              <div className="flex items-center gap-[12px] mb-[12px]">
+                <DesktopPerpsInput
+                  className="flex-1 text-right"
+                  prefix={
+                    <span className="text-[13px] leading-[16px] text-r-neutral-foot font-medium">
+                      {t('page.perpsPro.userInfo.positionInfo.limitPrice')}
+                    </span>
+                  }
+                  value={limitPrice}
+                  onChange={(e) => {
+                    handleLimitPriceChange(e.target.value);
+                  }}
+                  suffix={
+                    <span className="text-[13px] leading-[16px] font-medium text-rb-neutral-title-1">
+                      USD
+                    </span>
+                  }
+                />
 
-                    <div
-                      className={clsx(
-                        'cursor-pointer w-[88px] py-[12px]',
-                        'rounded-[8px] bg-rb-neutral-bg-1',
-                        'text-center text-[13px] leading-[16px] font-medium text-rb-neutral-title-1 hover:border-rb-brand-default border border-solid border-transparent'
-                      )}
-                      onClick={handleMidClick}
-                    >
-                      {t('page.perpsPro.userInfo.positionInfo.mid')}
-                    </div>
-                  </div>
-                ) : null}
-                <div className="space-y-[16px]">
-                  <PositionSizeInputAndSlider
-                    defaultMax={true}
-                    price={type === 'limit' ? limitPrice : marketPrice}
-                    maxTradeSize={position.size}
-                    positionSize={positionSize}
-                    setPositionSize={setPositionSize}
-                    percentage={percentage}
-                    setPercentage={setPercentage}
-                    baseAsset={position.coin}
-                    quoteAsset="USDC"
-                    szDecimals={marketData.szDecimals}
-                    priceChangeUsdValue={true}
-                    pinToAmount={true}
-                  />
+                <div
+                  className={clsx(
+                    'cursor-pointer w-[88px] py-[12px]',
+                    'rounded-[8px] bg-rb-neutral-bg-1',
+                    'text-center text-[13px] leading-[16px] font-medium text-rb-neutral-title-1 hover:border-rb-brand-default border border-solid border-transparent'
+                  )}
+                  onClick={handleMidClick}
+                >
+                  {t('page.perpsPro.userInfo.positionInfo.mid')}
                 </div>
               </div>
-            </section>
-            <section className="space-y-[8px]">
-              {(type === 'market' || type === 'limit') && (
-                <div className="flex items-center justify-between">
-                  <div className="text-r-neutral-foot text-[12px] leading-[14px] font-medium">
-                    {t('page.perpsPro.userInfo.positionInfo.receive')}
-                  </div>
-                  {validation.isValid ? (
-                    <div
-                      className={clsx(
-                        'font-medium text-r-neutral-title-1 text-[12px] leading-[14px]'
-                      )}
-                    >
-                      {formatUsdValue(receiveAmount.toNumber())}
-                    </div>
-                  ) : (
-                    <div
-                      className={clsx(
-                        'font-medium text-r-neutral-title-1  text-[12px] leading-[14px]'
-                      )}
-                    >
-                      -
-                    </div>
+            ) : null}
+            <div className="space-y-[16px]">
+              <PositionSizeInputAndSlider
+                defaultMax={true}
+                price={type === 'limit' ? limitPrice : marketPrice}
+                maxTradeSize={position.size}
+                positionSize={positionSize}
+                setPositionSize={setPositionSize}
+                percentage={percentage}
+                setPercentage={setPercentage}
+                baseAsset={position.coin}
+                quoteAsset="USD"
+                szDecimals={marketData.szDecimals}
+                priceChangeUsdValue={true}
+                pinToAmount={true}
+              />
+            </div>
+          </div>
+        </section>
+        <section className="space-y-[8px]">
+          {(type === 'market' || type === 'limit') && (
+            <div className="flex items-center justify-between">
+              <div className="text-r-neutral-foot text-[12px] leading-[14px] font-medium">
+                {t('page.perpsPro.userInfo.positionInfo.receive')}
+              </div>
+              {validation.isValid ? (
+                <div
+                  className={clsx(
+                    'font-medium text-r-neutral-title-1 text-[12px] leading-[14px]'
                   )}
+                >
+                  {formatUsdValue(receiveAmount.toNumber())}
+                </div>
+              ) : (
+                <div
+                  className={clsx(
+                    'font-medium text-r-neutral-title-1  text-[12px] leading-[14px]'
+                  )}
+                >
+                  -
                 </div>
               )}
-              <div className="flex items-center justify-between">
-                <div className="text-r-neutral-foot text-[12px] leading-[14px] font-medium">
-                  {t('page.perpsPro.userInfo.positionInfo.closedPnl')}
-                </div>
-                {validation.isValid ? (
-                  <div
-                    className={clsx(
-                      'font-medium text-[12px] leading-[14px]',
-                      closedPnl.isLessThan(0)
-                        ? 'text-r-red-default'
-                        : 'text-r-green-default'
-                    )}
-                  >
-                    {closedPnl.isGreaterThanOrEqualTo(0) ? '+' : '-'}$
-                    {splitNumberByStep(closedPnl.abs().toFixed(2))}
-                  </div>
-                ) : (
-                  <div
-                    className={clsx(
-                      'font-medium text-r-neutral-title-1 text-[12px] leading-[14px]'
-                    )}
-                  >
-                    -
-                  </div>
+            </div>
+          )}
+          <div className="flex items-center justify-between">
+            <div className="text-r-neutral-foot text-[12px] leading-[14px] font-medium">
+              {t('page.perpsPro.userInfo.positionInfo.closedPnl')}
+            </div>
+            {validation.isValid ? (
+              <div
+                className={clsx(
+                  'font-medium text-[12px] leading-[14px]',
+                  closedPnl.isLessThan(0)
+                    ? 'text-r-red-default'
+                    : 'text-r-green-default'
                 )}
+              >
+                {closedPnl.isGreaterThanOrEqualTo(0) ? '+' : '-'}$
+                {splitNumberByStep(closedPnl.abs().toFixed(2))}
               </div>
-            </section>
-          </>
-        ) : newPosition ? (
-          <>
-            <section className="mb-[12px]">
-              <div className="text-[13px] leading-[16px] text-rb-neutral-foot font-medium mb-[8px]">
-                {t('page.perpsPro.userInfo.positionInfo.newPosition')}
+            ) : (
+              <div
+                className={clsx(
+                  'font-medium text-r-neutral-title-1 text-[12px] leading-[14px]'
+                )}
+              >
+                -
               </div>
-              <PerpsPositionCard
-                position={newPosition}
-                marketData={marketData}
-                isShowPnl={false}
-              />
-            </section>
-            <section className="space-y-[8px]">
-              <div className="flex items-center justify-between">
-                <div className="text-r-neutral-foot text-[12px] leading-[14px] font-medium">
-                  {t('page.perpsDetail.PerpsEditMarginPopup.liqPrice')}
-                </div>
-                <div
-                  className={clsx(
-                    'font-medium text-rb-neutral-title-1 text-[12px] leading-[14px]'
-                  )}
-                >
-                  ${splitNumberByStep(reverseEstimatedLiquidationPrice)}
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="text-r-neutral-foot text-[12px] leading-[14px] font-medium">
-                  {t('page.perpsDetail.PerpsEditMarginPopup.liqDistance')}
-                </div>
-                <div
-                  className={clsx(
-                    'font-medium flex items-center flex-row text-[12px] leading-[14px] gap-4',
-                    'text-rb-neutral-title-1'
-                  )}
-                >
-                  <RcIconAlarmCC className="text-rb-neutral-info" />
-                  {formatPerpsPct(liquidationDistance)}
-                </div>
-              </div>
-            </section>
-          </>
-        ) : null}
+            )}
+          </div>
+        </section>
       </div>
 
-      <div className="bottom-0 left-0 right-0 border-t-[0.5px] border-solid border-rabby-neutral-line px-20 py-16 bg-r-neutral-bg2">
+      <div className="bottom-0 left-0 right-0 border-t border-solid border-rabby-neutral-line px-20 py-16 bg-rb-neutral-bg-0">
         <div className="flex items-center gap-[16px]">
           <Button
             block
@@ -539,7 +744,7 @@ const ClosePositionModalContent: React.FC<Omit<Props, 'visible'>> = ({
             className="h-[44px] text-15 font-medium"
             disabled={!validation.isValid}
             loading={loading}
-            onClick={runSubmit}
+            onClick={handleSubmitClick}
           >
             {validation.error ? validation.error : btnText}
           </Button>
@@ -573,8 +778,10 @@ export const ClosePositionModal: React.FC<Props> = ({
         backdropFilter: 'blur(8px)',
         backgroundColor: 'rgba(0, 0, 0, 0.3)',
       }}
-      className="modal-support-darkmode"
-      closeIcon={<RcIconCloseCC className="w-[20px] h-[20px]" />}
+      className={clsx('modal-support-darkmode', 'desktop-perps-modal-surface')}
+      closeIcon={
+        <RcIconCloseCC className="w-[20px] h-[20px] text-rb-neutral-body" />
+      }
     >
       <ClosePositionModalContent
         onCancel={onCancel}

@@ -218,6 +218,9 @@ import Logo1inch from 'ui/assets/swap/1inch.svg';
 import LogoOdos from 'ui/assets/swap/odos.png';
 import LogoParaswap from 'ui/assets/swap/paraswap.png';
 import LogoMagpie from 'ui/assets/swap/magpie.png';
+import LogoSushi from 'ui/assets/swap/sushi.png';
+import LogoUniswap from 'ui/assets/swap/uniswap.png';
+import LogoPancakeSwap from 'ui/assets/swap/pancakeswap.png';
 
 import RabbyChainLogo from '@/ui/assets/rabby-chain-logo.png';
 import LogoBinance from 'ui/assets/swap/binance.png';
@@ -525,8 +528,6 @@ export const INTERNAL_REQUEST_SESSION = {
 
 export const INITIAL_OPENAPI_URL = 'https://api.rabby.io';
 
-export const INITIAL_TESTNET_OPENAPI_URL = 'https://api.testnet.rabby.io';
-
 export const EVENTS = {
   BRIDGE_HISTORY_UPDATED: 'BRIDGE_HISTORY_UPDATED',
   broadcastToUI: 'broadcastToUI',
@@ -563,6 +564,9 @@ export const EVENTS = {
   },
   LOCK_WALLET: 'LOCK_WALLET',
   UNLOCK_WALLET: 'UNLOCK_WALLET',
+  // Boot/lock state changed out of band. Unlike LOCK_WALLET this carries no
+  // navigation intent, so the page that triggered the change keeps its route.
+  WALLET_STATUS_CHANGED: 'WALLET_STATUS_CHANGED',
   RELOAD_TX: 'RELOAD_TX',
   SIGN_BEGIN: 'SIGN_BEGIN',
   SIGN_WAITING_AMOUNTED: 'SIGN_WAITING_AMOUNTED',
@@ -572,12 +576,16 @@ export const EVENTS = {
     LOG_IN: 'LOG_IN',
     LOG_OUT: 'LOG_OUT',
     CLOSE_WINDOW: 'CLOSE_WINDOW',
+    DISCOVERY_UPDATED: 'DISCOVERY_UPDATED',
   },
   PERPS: {
     LOG_OUT: 'PERPS_LOG_OUT',
     HANDLE_CLICK_PRICE: 'PERPS_HANDLE_CLICK_PRICE',
     SWITCH_LIMIT_FILL_PRICE: 'SWITCH_LIMIT_FILL_PRICE',
     USER_INFO_HISTORY_TAB_CHANGED: 'PERPS_USER_INFO_HISTORY_TAB_CHANGED',
+    WIDGET_ACCOUNT_CHANGED: 'PERPS_WIDGET_ACCOUNT_CHANGED',
+    WIDGET_ENABLED_CHANGED: 'PERPS_WIDGET_ENABLED_CHANGED',
+    WIDGET_BLOCKED_HOSTS_CHANGED: 'PERPS_WIDGET_BLOCKED_HOSTS_CHANGED',
   },
   INNER_HISTORY_ITEM_PENDING: 'INNER_HISTORY_ITEM_PENDING',
   INNER_HISTORY_ITEM_COMPLETE: 'INNER_HISTORY_ITEM_COMPLETE',
@@ -591,10 +599,7 @@ export const EVENTS = {
   },
 
   RELOAD_APPROVAL: 'RELOAD_APPROVAL',
-  INNER_DAPP_CHANGE: {
-    ACCOUNT_CHANGED: 'INNER_DAPP_ACCOUNT_CHANGED',
-    DAPP_CHANGED: 'INNER_DAPP_DAPP_CHANGED',
-  },
+  APPROVAL_CREATED: 'APPROVAL_CREATED',
 };
 
 export const EVENTS_IN_BG = {
@@ -1404,9 +1409,15 @@ export const ARB_LIKE_L2_CHAINS = [CHAINS_ENUM.ARBITRUM, CHAINS_ENUM.AURORA];
 
 export const CAN_NOT_SPECIFY_INTRINSIC_GAS_CHAINS = [...L2_ENUMS];
 
+// Scroll-derived L2s: same getL1Fee(bytes) ABI, but the predeploy address differs per chain
+export const SCROLL_STYLE_L1_GAS_ORACLE: Record<string, string> = {
+  [CHAINS_ENUM.SCRL]: '0x5300000000000000000000000000000000000002',
+  MORPH: '0x530000000000000000000000000000000000000f',
+};
+
 export const CAN_ESTIMATE_L1_FEE_CHAINS = [
   ...OP_STACK_ENUMS,
-  CHAINS_ENUM.SCRL,
+  ...Object.keys(SCROLL_STYLE_L1_GAS_ORACLE),
   ...ARB_LIKE_L2_CHAINS,
   CHAINS_ENUM.PZE,
   CHAINS_ENUM.ERA,
@@ -1570,7 +1581,7 @@ export const DEX = {
   [DEX_ENUM.OPENOCEAN]: {
     id: DEX_ENUM.OPENOCEAN,
     logo: LogoOpenOcean,
-    name: 'OpenOcean',
+    name: 'De¹',
     chains: DEX_SUPPORT_CHAINS[DEX_ENUM.OPENOCEAN],
   },
   [DEX_ENUM.KYBERSWAP]: {
@@ -1602,6 +1613,24 @@ export const DEX = {
     logo: LogoMagpie,
     name: 'Fly',
     chains: DEX_SUPPORT_CHAINS[DEX_ENUM.MAGPIE],
+  },
+  [DEX_ENUM.SUSHI]: {
+    id: DEX_ENUM.SUSHI,
+    logo: LogoSushi,
+    name: 'Sushi',
+    chains: DEX_SUPPORT_CHAINS[DEX_ENUM.SUSHI],
+  },
+  [DEX_ENUM.UNI]: {
+    id: DEX_ENUM.UNI,
+    logo: LogoUniswap,
+    name: 'Uniswap',
+    chains: DEX_SUPPORT_CHAINS[DEX_ENUM.UNI],
+  },
+  [DEX_ENUM.PANCAKESWAP]: {
+    id: DEX_ENUM.PANCAKESWAP,
+    logo: LogoPancakeSwap,
+    name: 'PancakeSwap',
+    chains: DEX_SUPPORT_CHAINS[DEX_ENUM.PANCAKESWAP],
   },
 };
 
@@ -1696,3 +1725,4 @@ export const SELF_HOST_SAFE_NETWORKS = [
   '10',
   '8453',
 ];
+export const CUSTOM_RPC_ENABLED = true;

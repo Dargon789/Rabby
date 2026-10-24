@@ -1,20 +1,16 @@
-import { ReactComponent as RcIconHistory } from '@/ui/assets/swap/history.svg';
+import { ReactComponent as RcIconHistory } from '@/ui/assets/swap/history-cc.svg';
+import { ReactComponent as RcIconHistoryPending } from '@/ui/assets/bridge/IconHistoryPendingCC.svg';
 
 import { PageHeader } from '@/ui/component';
-import React, { useCallback, useEffect, useState } from 'react';
-import {
-  usePollBridgePendingNumber,
-  useSetSettingVisible,
-  useSettingVisible,
-} from '../hooks';
+import React, { useCallback, useEffect } from 'react';
+import { useSetSettingVisible, useSettingVisible } from '../hooks';
 import { BridgeTxHistory } from './BridgeHistory';
 import { useTranslation } from 'react-i18next';
 import { useRabbyDispatch } from '@/ui/store';
-import { PendingTx } from './PendingTx';
 import { RabbyFeePopup } from '../../Swap/Component/RabbyFeePopup';
-import { getUiType, openInternalPageInTab } from '@/ui/utils';
+import { getUiType } from '@/ui/utils';
 import { useHistory } from 'react-router-dom';
-import { ReactComponent as RcIconFullscreen } from '@/ui/assets/fullscreen-cc.svg';
+import { RcIconJumpBoldCC } from '@/ui/assets/dashboard';
 const isTab = getUiType().isTab;
 const isDesktop = getUiType().isDesktop;
 
@@ -29,11 +25,13 @@ export const Header = ({
   noShowHeader,
   historyVisible,
   setHistoryVisible,
+  showPending = false,
 }: {
   onOpenInTab?(): void;
   noShowHeader: boolean;
   historyVisible: boolean;
   setHistoryVisible: (visible: boolean) => void;
+  showPending?: boolean;
 }) => {
   const feePopupVisible = useSettingVisible();
   const setFeePopupVisible = useSetSettingVisible();
@@ -72,16 +70,23 @@ export const Header = ({
             <div className="flex items-center gap-[16px] absolute top-[50%] translate-y-[-50%] right-0">
               {isTab ? null : (
                 <div
-                  className="text-r-neutral-title1 cursor-pointer relative hit-slop-8"
+                  className="text-r-neutral-title1 hover:text-r-blue-default cursor-pointer relative hit-slop-8"
                   onClick={() => {
                     onOpenInTab?.();
                   }}
                 >
-                  <RcIconFullscreen />
+                  <RcIconJumpBoldCC />
                 </div>
               )}
-              <div className="relative hit-slop-8" onClick={openHistory}>
-                <RcIconHistory className="cursor-pointer" />
+              <div
+                className="relative hit-slop-8 cursor-pointer text-r-neutral-title1 hover:text-r-blue-default"
+                onClick={openHistory}
+              >
+                {showPending ? (
+                  <RcIconHistoryPending className="block [&_[data-pending-ring]]:animate-spin [&_[data-pending-ring]]:[animation-duration:1.5s]" />
+                ) : (
+                  <RcIconHistory />
+                )}
               </div>
             </div>
           }

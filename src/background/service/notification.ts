@@ -22,6 +22,60 @@ import { isManifestV3 } from '@/utils/env';
 type IApprovalComponents = typeof import('@/ui/views/Approval/components');
 type IApprovalComponent = IApprovalComponents[keyof IApprovalComponents];
 
+// 'Unlock' is a real approval type (see rpcFlow.ts) not rendered through the
+// Approval/components dispatch table, so it can't be derived from IApprovalComponents.
+export type ApprovalKind = keyof IApprovalComponents | 'Unlock';
+
+// Runtime mirror of ApprovalKind (type-only, erased at compile time). Keep in sync
+// with the components barrel + 'Unlock' — checked by approvalIdentityStatic.test.ts.
+export const KNOWN_APPROVAL_KINDS = new Set<ApprovalKind>([
+  'Unlock',
+  'SignText',
+  'SignTx',
+  'SignTypedData',
+  'Connect',
+  'WatchAddressWaiting',
+  'CoinbaseWaiting',
+  'AddChain',
+  'SwitchChain',
+  'QRHardWareWaiting',
+  'LedgerHardwareWaiting',
+  'CommonWaiting',
+  'PrivatekeyWaiting',
+  'AddAsset',
+  'GetPublicKey',
+  'Decrypt',
+  'ETHSign',
+  'ImportAddress',
+  'ImKeyHardwareWaiting',
+]);
+
+// Identity a settlement call must present — both required, no fallback to "whatever is currently pending".
+export type ApprovalRef = Readonly<{
+  id: string;
+  component: ApprovalKind;
+}>;
+
+export type ApprovalSettleFailureReason =
+  | 'INVALID_APPROVAL_REF'
+  | 'NO_CURRENT_APPROVAL'
+  | 'APPROVAL_ID_MISMATCH'
+  | 'APPROVAL_COMPONENT_MISMATCH';
+
+export type ApprovalSettleResult =
+  | { accepted: true }
+  | { accepted: false; reason: ApprovalSettleFailureReason };
+
+function isValidApprovalRef(ref: unknown): ref is ApprovalRef {
+  if (!ref || typeof ref !== 'object') return false;
+  const { id, component } = ref as Partial<ApprovalRef>;
+  if (typeof id !== 'string' || id.length === 0) return false;
+  if (typeof component !== 'string' || !KNOWN_APPROVAL_KINDS.has(component)) {
+    return false;
+  }
+  return true;
+}
+
 export interface Approval {
   id: string;
   taskId: number | null;
@@ -30,7 +84,7 @@ export interface Approval {
     params?: import('react').ComponentProps<IApprovalComponent>['params'];
     account: Account;
     origin?: string;
-    approvalComponent: keyof IApprovalComponents;
+    approvalComponent: ApprovalKind;
     requestDefer?: Promise<any>;
     approvalType?: string;
   };
@@ -39,7 +93,7 @@ export interface Approval {
   reject?(err: EthereumProviderError<any>): void;
 }
 
-const QUEUE_APPROVAL_COMPONENTS_WHITELIST = [
+const QUEUE_APPROVAL_COMPONENTS_WHITELIST: ApprovalKind[] = [
   'Unlock',
   'SignTx',
   'SignText',
@@ -85,6 +139,7 @@ class NotificationService extends Events {
   >();
   _approvals: Approval[] = [];
   notifiWindowId: null | number = null;
+  private openingNotification?: Promise<void>;
   isLocked = false;
   currentRequestDeferFn?: (retry?: boolean) => void;
   statsData: StatsData | undefined;
@@ -114,10 +169,6 @@ class NotificationService extends Events {
   constructor() {
     super();
 
-    winMgr.event.on('closeNotification', () => {
-      this.notifiWindowId = null;
-    });
-
     winMgr.event.on(
       'windowRemoved',
       (winId: number, isManuallyClosed: boolean) => {
@@ -138,13 +189,21 @@ class NotificationService extends Events {
       }
 
       if (this.notifiWindowId !== null && winId !== this.notifiWindowId) {
+        const current = this.currentApproval;
         if (
-          this.currentApproval &&
+          current &&
           !QUEUE_APPROVAL_COMPONENTS_WHITELIST.includes(
-            this.currentApproval.data.approvalComponent
+            current.data.approvalComponent
           )
         ) {
-          this.rejectApproval();
+          // Window lost focus: capture the ref now and settle through the same strict path as any other caller.
+          this.rejectApprovalFor({
+            approval: {
+              id: current.id,
+              component: current.data.approvalComponent,
+            },
+            isInternal: false,
+          });
         }
       }
     });
@@ -163,15 +222,15 @@ class NotificationService extends Events {
         return;
       }
 
-      if (this.approvals.length < 0) return;
+      if (this.approvals.length <= 0) return;
 
       const approval = this.approvals[0];
       this.currentApproval = approval;
       this.openNotification(approval.winProps, true);
     } catch (e) {
-      Sentry.captureException(
-        new Error('activeFirstApproval failed: ' + JSON.stringify(e))
-      );
+      Sentry.captureException(e, {
+        tags: { function: 'activeFirstApproval' },
+      });
       this.clear();
     }
   };
@@ -187,63 +246,122 @@ class NotificationService extends Events {
 
   getApproval = () => this.currentApproval;
 
-  resolveApproval = async (
-    data?: any,
+  closeNotificationWindow = async (winId: number): Promise<boolean> => {
+    // The UI can finish loading before windows.create has returned its id.
+    if (this.openingNotification) await this.openingNotification;
+    // An untracked/stale UI may close itself, but must not touch a newer window.
+    if (winId !== this.notifiWindowId) return true;
+
+    // SortHat's empty snapshot may already be obsolete. Let it reload the
+    // approval instead of closing the window that the next request reused.
+    if (this.currentApproval || this.approvals.length > 0) return false;
+
+    // Detach synchronously before removal. A request arriving during the
+    // browser call must open a new window; old onRemoved cannot cancel it.
+    this.notifiWindowId = null;
+    this.unLock();
+    await winMgr.remove(winId);
+    return true;
+  };
+
+  /**
+   * The only entry points that settle a single approval — no overload falls back to
+   * "whatever is currentApproval now". Validation and consumption happen in the same
+   * synchronous span, so a concurrent resolve/reject/duplicate call settles it at most once.
+   */
+  resolveApprovalFor = ({
+    approval,
+    data,
     forceReject = false,
-    approvalId?: string
-  ) => {
-    if (approvalId && approvalId !== this.currentApproval?.id) return;
-    if (forceReject) {
-      this.currentApproval?.reject &&
-        this.currentApproval?.reject(
-          new EthereumProviderError(4001, 'User Cancel')
-        );
-    } else {
-      this.currentApproval?.resolve && this.currentApproval?.resolve(data);
+  }: {
+    approval: ApprovalRef;
+    data?: any;
+    forceReject?: boolean;
+  }): ApprovalSettleResult => {
+    if (!isValidApprovalRef(approval)) {
+      return { accepted: false, reason: 'INVALID_APPROVAL_REF' };
+    }
+    const current = this.currentApproval;
+    if (!current) {
+      return { accepted: false, reason: 'NO_CURRENT_APPROVAL' };
+    }
+    if (current.id !== approval.id) {
+      return { accepted: false, reason: 'APPROVAL_ID_MISMATCH' };
+    }
+    if (current.data.approvalComponent !== approval.component) {
+      return { accepted: false, reason: 'APPROVAL_COMPONENT_MISMATCH' };
     }
 
-    const approval = this.currentApproval;
+    // --- validated: from here `current` can no longer be re-consumed ---
+    if (forceReject) {
+      current.reject?.(new EthereumProviderError(4001, 'User Cancel'));
+    } else {
+      current.resolve?.(data);
+    }
 
     this.clearLastRejectDapp();
-    this.deleteApproval(approval);
-
-    if (this.approvals.length > 0) {
-      this.currentApproval = this.approvals[0];
-    } else {
-      this.currentApproval = null;
-    }
+    this.deleteApproval(current);
+    this.currentApproval = this.approvals.length > 0 ? this.approvals[0] : null;
 
     this.emit('resolve', data);
+    return { accepted: true };
   };
 
-  rejectApproval = async (err?: string, stay = false, isInternal = false) => {
+  rejectApprovalFor = async ({
+    approval,
+    error,
+    stay = false,
+    isInternal = false,
+  }: {
+    approval: ApprovalRef;
+    error?: string;
+    stay?: boolean;
+    isInternal?: boolean;
+  }): Promise<ApprovalSettleResult> => {
+    if (!isValidApprovalRef(approval)) {
+      return { accepted: false, reason: 'INVALID_APPROVAL_REF' };
+    }
+    const current = this.currentApproval;
+    if (!current) {
+      return { accepted: false, reason: 'NO_CURRENT_APPROVAL' };
+    }
+    if (current.id !== approval.id) {
+      return { accepted: false, reason: 'APPROVAL_ID_MISMATCH' };
+    }
+    if (current.data.approvalComponent !== approval.component) {
+      return { accepted: false, reason: 'APPROVAL_COMPONENT_MISMATCH' };
+    }
+
+    // --- validated: from here `current` can no longer be re-consumed ---
     this.addLastRejectDapp();
-    const approval = this.currentApproval;
-    if (this.approvals.length <= 1) {
-      await this.clear(stay); // TODO: FIXME
-    }
-
     if (isInternal) {
-      approval?.reject && approval?.reject(ethErrors.rpc.internal(err));
+      current.reject?.(ethErrors.rpc.internal(error));
     } else {
-      approval?.reject &&
-        approval?.reject(ethErrors.provider.userRejectedRequest<any>(err));
+      current.reject?.(ethErrors.provider.userRejectedRequest<any>(error));
     }
 
-    if (approval?.signingTxId) {
-      transactionHistoryService.removeSigningTx(approval.signingTxId);
+    if (current.signingTxId) {
+      transactionHistoryService.removeSigningTx(current.signingTxId);
     }
 
-    if (approval && this.approvals.length > 1) {
-      this.deleteApproval(approval);
+    if (this.approvals.length > 1) {
+      this.deleteApproval(current);
       this.currentApproval = this.approvals[0];
-    } else {
-      await this.clear(stay);
+      this.emit('reject', error);
+      return { accepted: true };
     }
-    this.emit('reject', err);
+
+    // Only cleanup (closing the window) remains async — the approval was already consumed above.
+    await this.clear(stay);
+    this.emit('reject', error);
+    return { accepted: true };
   };
 
-  requestApproval = async (data, winProps?): Promise<any> => {
+  requestApproval = async (
+    data,
+    winProps?,
+    options?: { onCurrent?: (approval: ApprovalRef) => void }
+  ): Promise<any> => {
     const origin = this.getOrigin(data);
     if (origin) {
       const dapp = this.dappManager.get(origin);
@@ -348,6 +466,21 @@ class NotificationService extends Events {
         }
       }
 
+      // TODO: queued approvals currently drop onCurrent, so preparation only
+      // starts for the approval that is current when requestApproval runs.
+      if (this.currentApproval === approval) {
+        try {
+          options?.onCurrent?.({
+            id: approval.id,
+            component: approval.data.approvalComponent,
+          });
+        } catch (e) {
+          Sentry.captureException(
+            new Error('onCurrent failed: ' + JSON.stringify(e))
+          );
+        }
+      }
+
       if (
         this.notifiWindowId !== null &&
         QUEUE_APPROVAL_COMPONENTS_WHITELIST.includes(data.approvalComponent)
@@ -365,12 +498,14 @@ class NotificationService extends Events {
     this.approvals = [];
     this.currentApproval = null;
     if (this.notifiWindowId !== null && !stay) {
+      const winId = this.notifiWindowId;
+      this.notifiWindowId = null;
+      this.unLock();
       try {
-        await winMgr.remove(this.notifiWindowId);
+        await winMgr.remove(winId);
       } catch (e) {
         // ignore error
       }
-      this.notifiWindowId = null;
     }
   };
 
@@ -396,6 +531,9 @@ class NotificationService extends Events {
   };
 
   openNotification = (winProps, ignoreLock = false) => {
+    // Flow completion may unlock while windows.create is still pending.
+    // Even explicit recovery must share that in-flight creation.
+    if (this.openingNotification) return;
     // Only use ignoreLock flag when approval exist but no notification window exist
     if (!ignoreLock) {
       if (this.isLocked) return;
@@ -405,9 +543,28 @@ class NotificationService extends Events {
       winMgr.remove(this.notifiWindowId);
       this.notifiWindowId = null;
     }
-    winMgr.openNotification(winProps).then((winId) => {
-      this.notifiWindowId = winId!;
-    });
+    this.openingNotification = winMgr
+      .openNotification(winProps)
+      .then((winId) => {
+        if (winId == null) {
+          if (this.notifiWindowId === null) {
+            this.unLock();
+          }
+          return;
+        }
+        this.notifiWindowId = winId;
+      })
+      .catch((e) => {
+        if (this.notifiWindowId === null) {
+          this.unLock();
+        }
+        Sentry.captureException(e, {
+          tags: { function: 'openNotification' },
+        });
+      })
+      .finally(() => {
+        this.openingNotification = undefined;
+      });
   };
 
   updateNotificationWinProps = (winProps: Windows.UpdateUpdateInfoType) => {

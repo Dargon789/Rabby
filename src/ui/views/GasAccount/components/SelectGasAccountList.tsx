@@ -1,22 +1,37 @@
 import { Account } from '@/background/service/preference';
 import { KEYRING_CLASS } from '@/constant';
-import { openapi } from '@/ui/models/openapi';
 import { useRabbySelector } from '@/ui/store';
-import { formatUsdValue, useAlias, useWallet } from '@/ui/utils';
+import { formatUsdValue, useAlias } from '@/ui/utils';
 import { sortAccountsByBalance } from '@/ui/utils/account';
-import { GasAccountInfo } from '@rabby-wallet/rabby-api/dist/types';
-import { useRequest } from 'ahooks';
-import { sortBy } from 'lodash';
-import React from 'react';
-import { ReactNode, useMemo } from 'react';
+import React, { ReactNode, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import AddressItem from '../../AddressManagement/AddressItem';
 import { useBrandIcon } from '@/ui/hooks/useBrandIcon';
 import { AddressViewer, Item } from '@/ui/component';
 import { Virtuoso } from 'react-virtuoso';
-import { IDisplayedAccountWithBalance } from '@/ui/models/accountToDisplay';
+import { IDisplayedAccountWithBalance } from '@/ui/state/accountToDisplay';
 import { CopyChecked } from '@/ui/component/CopyChecked';
 import clsx from 'clsx';
+import { useGasAccountSign } from '../hooks';
+
+const getGasAccountListItemKey = (account: {
+  address: string;
+  type: string;
+  brandName: string;
+}) =>
+  `${account.address.toLowerCase()}-${account.type}-${(
+    account.brandName || ''
+  ).toLowerCase()}`;
+
+const getGasAccountListFallbackKey = (account: {
+  address: string;
+  type: string;
+}) => `${account.address.toLowerCase()}-${account.type}`;
+
+type GasAccountListRow = {
+  account: IDisplayedAccountWithBalance;
+  /** undefined outside gas account mode, where no balance column is shown */
+  gasBalance?: number;
+};
 
 export const SelectGasAccountList = ({
   onChange,
@@ -34,6 +49,7 @@ export const SelectGasAccountList = ({
   isGasAccount?: boolean;
 }) => {
   const { t } = useTranslation();
+  const { accountsWithGasAccountBalance } = useGasAccountSign();
 
   const accounts = useRabbySelector((s) => s.accountToDisplay.accountsList);
 
@@ -48,54 +64,52 @@ export const SelectGasAccountList = ({
     [accounts]
   );
 
-  const wallet = useWallet();
-
-  const { data: gasAccountBalanceDict } = useRequest(
-    async () => {
-      if (!isGasAccount) {
-        return;
-      }
-      const res = await Promise.all(
-        _list.map((item) => {
-          return wallet.openapi
-            .getGasAccountInfoV2({
-              id: item.address,
-            })
-            .catch(() => null);
-        })
-      );
-      const dict: Record<string, GasAccountInfo> = {};
-      res.forEach((item) => {
-        if (item?.account) {
-          dict[item.account.id.toLowerCase()] = item.account;
-        }
-      });
-      return dict;
-    },
-    {
-      cacheKey: 'batch-fetch-gas-account-info',
-      staleTime: 1000 * 15,
-    }
+  const gasAccountListItemMap = useMemo(
+    () => new Map(_list.map((item) => [getGasAccountListItemKey(item), item])),
+    [_list]
   );
+  const gasAccountListFallbackMap = useMemo(() => {
+    const map = new Map<string, IDisplayedAccountWithBalance>();
 
-  const list = useMemo(() => {
-    if (!isGasAccount || !gasAccountBalanceDict) {
-      return _list;
-    }
-    return sortBy(_list, (item) => {
-      const info = gasAccountBalanceDict[item.address.toLowerCase()];
-      if (!info) {
-        return 2;
+    _list.forEach((item) => {
+      const key = getGasAccountListFallbackKey(item);
+
+      if (!map.has(key)) {
+        map.set(key, item);
       }
-      return !info.balance ? (info.no_register ? 1 : 0) : -info.balance;
     });
-  }, [_list, gasAccountBalanceDict, isGasAccount]);
+
+    return map;
+  }, [_list]);
+
+  const list = useMemo<GasAccountListRow[]>(() => {
+    if (!isGasAccount) {
+      return _list.map((account) => ({ account }));
+    }
+    return accountsWithGasAccountBalance
+      .map((item): GasAccountListRow | undefined => {
+        const account =
+          gasAccountListItemMap.get(getGasAccountListItemKey(item)) ??
+          gasAccountListFallbackMap.get(getGasAccountListFallbackKey(item));
+
+        // discovery already fetched this balance; reusing it saves one request
+        // per row every time the picker opens
+        return account ? { account, gasBalance: item.balance } : undefined;
+      })
+      .filter((row): row is GasAccountListRow => !!row);
+  }, [
+    _list,
+    accountsWithGasAccountBalance,
+    gasAccountListFallbackMap,
+    gasAccountListItemMap,
+    isGasAccount,
+  ]);
 
   return (
     <>
       <div className="w-full flex justify-between px-20 mb-8 text-r-neutral-foot">
         <div>{t('page.gasAccount.gasAccountList.address')}</div>
-        <div>{t('page.gasAccount.gasAccountList.gasAccountBalance')}</div>
+        <div>{t('page.gasAccount.gasBalance')}</div>
       </div>
       <div className="w-full flex flex-1 flex-col px-20 overflow-auto">
         <Virtuoso
@@ -104,18 +118,16 @@ export const SelectGasAccountList = ({
           totalCount={list.length}
           fixedItemHeight={56 + 12}
           itemContent={React.useCallback(
-            (_, account) => {
+            (_, row: GasAccountListRow) => {
               return (
                 <AccountItem
                   onChange={onChange}
-                  account={account}
-                  gasAccount={
-                    gasAccountBalanceDict?.[account.address.toLowerCase()]
-                  }
+                  account={row.account}
+                  gasBalance={row.gasBalance}
                 />
               );
             },
-            [list, gasAccountBalanceDict]
+            [onChange]
           )}
           components={{
             Footer: () => <div className="h-[36px] w-full" />,
@@ -126,23 +138,24 @@ export const SelectGasAccountList = ({
   );
 };
 
-const GasAccountBalance = ({ account }: { account?: GasAccountInfo }) => {
-  if (!account || account.no_register) {
+/** the gas account balance, not the account's on-chain balance */
+const GasAccountBalance = ({ gasBalance }: { gasBalance?: number }) => {
+  if (!gasBalance) {
     return null;
   }
   return (
     <div className="text-13 font-medium text-r-neutral-title1">
-      {account?.balance ? formatUsdValue(account?.balance) : '$0'}
+      {formatUsdValue(gasBalance)}
     </div>
   );
 };
 
 function AccountItem(props: {
   account: IDisplayedAccountWithBalance;
-  gasAccount?: GasAccountInfo;
+  gasBalance?: number;
   onChange?: (account: Account) => void;
 }) {
-  const { account, gasAccount } = props;
+  const { account, gasBalance } = props;
   const addressTypeIcon = useBrandIcon({
     address: account.address,
     brandName: account.brandName,
@@ -158,12 +171,12 @@ function AccountItem(props: {
       }}
       px={16}
       py={0}
-      bgColor="var(--r-neutral-card2, #F2F4F7);"
+      bgColor="var(--r-neutral-card1, #F2F4F7);"
       className="h-[56px] rounded-[6px] mb-12"
       left={<img src={addressTypeIcon} className={'w-[24px] h-[24px]'} />}
       right={
         <div className="ml-auto">
-          <GasAccountBalance account={gasAccount} />
+          <GasAccountBalance gasBalance={gasBalance} />
         </div>
       }
     >

@@ -103,6 +103,12 @@ export const EditCustomTestnetModal = ({
           errors: [res.error.message],
         },
       ]);
+      requestAnimationFrame(() => {
+        form.scrollToField(res.error.key, {
+          behavior: 'smooth',
+          block: 'center',
+        });
+      });
       if (!isEdit && res.error.status === 'alreadySupported') {
         setIsShowModifyRpcModal(true);
         setFormValues(form.getFieldsValue());

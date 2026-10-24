@@ -25,6 +25,7 @@ import { useRepeatImportConfirm } from '@/ui/utils/useRepeatImportConfirm';
 import { UI_TYPE } from '@/constant/ui';
 import { action } from 'webextension-polyfill';
 import qs from 'qs';
+import { WALLETCONNECT_CLOCK_SKEW } from '@/utils/walletconnect-error';
 
 const WalletConnectName = WALLET_BRAND_CONTENT['WALLETCONNECT']?.name;
 
@@ -36,7 +37,9 @@ const WalletConnectTemplate: React.FC<{
 }> = ({ isInModal, onBack, onNavigate, state }) => {
   const { t } = useTranslation();
   const history = useHistory();
-  const location = useLocation<{ brand: any }>();
+  const location = useLocation<{ brand: any; approvalId?: string }>();
+  // See ImportGnosisAddress/index.tsx for why this is read/forwarded.
+  const approvalId = state?.approvalId || location.state?.approvalId;
   const wallet = useWallet();
   const [result, setResult] = useState('');
   const [walletconnectUri, setWalletconnectUri] = useState('');
@@ -56,7 +59,7 @@ const WalletConnectTemplate: React.FC<{
 
   const getCurrentSite = useCallback(async () => {
     const tab = await getCurrentTab();
-    if (!tab.id || !tab.url) return;
+    if (tab?.id == null || !tab.url) return;
     const domain = getOriginFromUrl(tab.url);
     const current = await wallet.getCurrentSite(tab.id, domain);
     siteRef.current = current;
@@ -72,6 +75,7 @@ const WalletConnectTemplate: React.FC<{
           editing: true,
           title: t('page.newAddress.walletConnect.connectedSuccessfully'),
           importedAccount: true,
+          approvalId,
         });
       } else {
         history.replace({
@@ -83,6 +87,7 @@ const WalletConnectTemplate: React.FC<{
             editing: true,
             title: t('page.newAddress.walletConnect.connectedSuccessfully'),
             importedAccount: true,
+            approvalId,
           },
         });
       }
@@ -194,7 +199,8 @@ const WalletConnectTemplate: React.FC<{
   }, [bridgeURL]);
 
   useEffect(() => {
-    const alertTransportError = () => {
+    const alertTransportError = (data: { code?: string } | undefined) => {
+      if (data?.code === WALLETCONNECT_CLOCK_SKEW) return;
       if (
         sessionStatus === 'BRAND_NAME_ERROR' ||
         sessionStatus === 'ADDRESS_DUPLICATE'
@@ -209,7 +215,10 @@ const WalletConnectTemplate: React.FC<{
     );
 
     return () => {
-      eventBus.removeAllEventListeners(EVENTS.WALLETCONNECT.TRANSPORT_ERROR);
+      eventBus.removeEventListener(
+        EVENTS.WALLETCONNECT.TRANSPORT_ERROR,
+        alertTransportError
+      );
     };
   }, [sessionStatus]);
 

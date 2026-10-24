@@ -4,19 +4,25 @@ import { CHAINS_ENUM } from '@debank/common';
 import { GasLevel, TokenItem, Tx } from '@rabby-wallet/rabby-api/dist/types';
 import {
   DEX_ENUM,
-  DEX_ROUTER_WHITELIST,
-  DEX_SPENDER_WHITELIST,
-  WrapTokenAddressMap,
+  getRouter as getSwapRouter,
+  getSpender,
+  verifySdk,
 } from '@rabby-wallet/rabby-swap';
 import { QuoteResult, getQuote } from '@rabby-wallet/rabby-swap/dist/quote';
 import BigNumber from 'bignumber.js';
 import React, { useRef } from 'react';
 import pRetry from 'p-retry';
 import { useRabbySelector } from '@/ui/store';
+import { useSwapStore } from '@/ui/state/swap';
 import stats from '@/stats';
-import { verifySdk } from './verify';
 import { findChainByEnum } from '@/utils/chain';
 import { ChainGas } from '@/background/service/preference';
+import {
+  getSwapChainId,
+  getSwapNativeTokenAddress,
+  isSwapWrapToken,
+} from '../utils';
+import { reportSwapSdkVerification } from './swapReport';
 
 export interface validSlippageParams {
   chain: CHAINS_ENUM;
@@ -75,6 +81,7 @@ export const useQuoteMethods = () => {
       // receiveRawAmount,
       slippage,
       dexId,
+      feeRate,
       txId,
       quote,
       tx,
@@ -90,6 +97,7 @@ export const useQuoteMethods = () => {
           slippage: new BigNumber(slippage).div(100).toNumber(),
         },
         dex_id: dexId,
+        fee_rate: Number(feeRate),
         tx_id: txId,
         tx,
       }),
@@ -126,10 +134,15 @@ export const useQuoteMethods = () => {
         return [true, false];
       }
 
+      const spender = getSpender(dexId, chain);
+      if (!spender) {
+        return [true, false];
+      }
+
       const allowance = await walletController.getERC20Allowance(
         chainInfo.serverId,
         payToken.id,
-        getSpender(dexId, chain)
+        spender
       );
 
       const tokenApproved = new BigNumber(allowance).gte(
@@ -317,32 +330,26 @@ export const useQuoteMethods = () => {
       ]);
 
       const getGasPrice = () => {
-        let gasPrice = 0;
         if (
           lastTimeGas?.lastTimeSelect === 'gasPrice' &&
           lastTimeGas.gasPrice
         ) {
-          // use cached gasPrice if exist
-          gasPrice = lastTimeGas.gasPrice;
-        } else if (
-          lastTimeGas?.lastTimeSelect &&
-          lastTimeGas?.lastTimeSelect === 'gasLevel'
-        ) {
-          const target = gasMarket.find(
-            (item) => item.level === lastTimeGas?.gasLevel
-          )!;
-          if (target) {
-            gasPrice = target.price;
-          } else {
-            gasPrice =
-              gasMarket.find((item) => item.level === 'normal')?.price || 0;
-          }
-        } else {
-          // no cache, use the fast level in gasMarket
-          gasPrice =
-            gasMarket.find((item) => item.level === 'normal')?.price || 0;
+          return lastTimeGas.gasPrice;
         }
-        return gasPrice;
+
+        if (lastTimeGas?.lastTimeSelect === 'gasLevel') {
+          const targetGasLevel = gasMarket.find(
+            (item) => item.level === lastTimeGas.gasLevel
+          );
+          if (targetGasLevel) {
+            return targetGasLevel.price;
+          }
+        }
+
+        const normalGasLevel = gasMarket.find(
+          (item) => item.level === 'normal'
+        );
+        return normalGasLevel?.price || 0;
       };
 
       const gasPrice = getGasPrice();
@@ -352,6 +359,7 @@ export const useQuoteMethods = () => {
         .div(10 ** nativeToken.decimals)
         .times(nativeToken.price)
         .toString(10);
+      const gasUsd = formatUsdValue(gasUsdValue);
 
       return {
         shouldApproveToken: !tokenApproved,
@@ -359,7 +367,7 @@ export const useQuoteMethods = () => {
         gasPrice,
         gasUsed,
         gasUsdValue,
-        gasUsd: formatUsdValue(gasUsdValue),
+        gasUsd,
       };
     },
     [
@@ -392,7 +400,6 @@ export const useQuoteMethods = () => {
         recommendNonceTask?: Promise<string>;
       };
     }): Promise<TDexQuoteData> => {
-      const isOpenOcean = dexId === DEX_ENUM.OPENOCEAN;
       const chainInfo = findChainByEnum(chain)!;
       const recommendNonceTask = !inSufficient
         ? sharedTasks?.recommendNonceTask ??
@@ -424,12 +431,9 @@ export const useQuoteMethods = () => {
                 .toFixed(0, 1),
               userAddress,
               slippage: Number(slippage),
-              feeRate:
-                feeAfterDiscount === '0' && isOpenOcean
-                  ? undefined
-                  : Number(feeAfterDiscount) || 0,
+              feeRate: Number(feeAfterDiscount),
               chain,
-              fee: true,
+              fee: Number(feeAfterDiscount) > 0,
               chainServerId: chainInfo.serverId,
               nativeTokenAddress: chainInfo.nativeTokenAddress,
               insufficient: inSufficient,
@@ -439,7 +443,6 @@ export const useQuoteMethods = () => {
 
         const data = await getData();
 
-        console.log('log swapQuoteResult');
         stats.report('swapQuoteResult', {
           dex: dexId,
           chain,
@@ -450,7 +453,7 @@ export const useQuoteMethods = () => {
 
         let preExecResult;
         if (data) {
-          const { isSdkDataPass } = verifySdk({
+          const sdkResult = verifySdk({
             chain,
             dexId,
             slippage,
@@ -462,8 +465,41 @@ export const useQuoteMethods = () => {
                 .toFixed(0, 1),
               toToken: receiveToken?.id,
             },
-            payToken,
-            receiveToken,
+            payTokenId: payToken.id,
+            receiveTokenId: receiveToken.id,
+            userAddress,
+            nativeTokenAddress: getSwapNativeTokenAddress(chain),
+            chainId: getSwapChainId(chain),
+          });
+
+          const {
+            isSdkDataPass,
+            routerPass,
+            spenderPass,
+            callDataPass,
+            receiverPass,
+          } = sdkResult;
+          const skipCalldataValidation =
+            dexId === DEX_ENUM.UNI || dexId === DEX_ENUM.MAGPIE;
+          // Keep contract whitelists enforced; Uni/Magpie calldata and recipient
+          // failures are logged without blocking the quote.
+          const effectiveSdkPass = skipCalldataValidation
+            ? routerPass && spenderPass
+            : isSdkDataPass;
+          if (skipCalldataValidation && (!callDataPass || !receiverPass)) {
+            console.warn(
+              '[swap-calldata-check]',
+              `${dexId} | ${chain}: calldata validation failed (ignored)`,
+              { sdkResult, quote: data }
+            );
+          }
+
+          reportSwapSdkVerification({
+            chain,
+            dexId,
+            payTokenId: payToken.id,
+            receiveTokenId: receiveToken.id,
+            result: sdkResult,
           });
 
           if (inSufficient) {
@@ -476,7 +512,7 @@ export const useQuoteMethods = () => {
                 gasPrice: 0,
                 gasUsed: 0,
                 gasUsdValue: '0',
-                isSdkPass: isSdkDataPass,
+                isSdkPass: effectiveSdkPass,
                 shouldApproveToken: false,
                 shouldTwoStepApprove: false,
               },
@@ -548,7 +584,7 @@ export const useQuoteMethods = () => {
               }
             );
 
-            preExecResult.isSdkPass = isSdkDataPass;
+            preExecResult.isSdkPass = effectiveSdkPass;
           } catch (error) {
             const quote: TDexQuoteData = {
               data,
@@ -603,12 +639,13 @@ export const useQuoteMethods = () => {
     ]
   );
 
-  const supportedDEXList = useRabbySelector((s) => s.swap.supportedDEXList);
+  const supportedDEXList = useSwapStore((s) => s.supportedDEXList);
 
-  const getAllQuotes = React.useCallback(
+  const _getAllQuotes = React.useCallback(
     async (
       params: Omit<getDexQuoteParams, 'dexId'> & {
-        setQuote: (quote: TDexQuoteData) => void;
+        setQuote?: (quote: TDexQuoteData) => void;
+        dexId?: DEX_ENUM;
       }
     ) => {
       recommendNonceTaskCache.current = undefined;
@@ -660,8 +697,12 @@ export const useQuoteMethods = () => {
         });
       }
 
+      const dexList = params.dexId
+        ? ([params.dexId] as DEX_ENUM[])
+        : (supportedDEXList.filter((e) => DEX[e]) as DEX_ENUM[]);
+
       return Promise.all([
-        ...(supportedDEXList.filter((e) => DEX[e]) as DEX_ENUM[]).map((dexId) =>
+        ...dexList.map((dexId) =>
           getDexQuote({
             ...params,
             dexId,
@@ -684,6 +725,28 @@ export const useQuoteMethods = () => {
     ]
   );
 
+  const getAllQuotes = React.useCallback(
+    async (
+      params: Omit<getDexQuoteParams, 'dexId'> & {
+        setQuote: (quote: TDexQuoteData) => void;
+      }
+    ) => {
+      const quotes = await _getAllQuotes(params);
+      return quotes;
+    },
+    [_getAllQuotes]
+  );
+
+  const getSingleQuote = React.useCallback(
+    async (
+      params: getDexQuoteParams & { setQuote?: (quote: TDexQuoteData) => void }
+    ) => {
+      const quotes = await _getAllQuotes(params);
+      return Array.isArray(quotes) ? quotes[0] : quotes;
+    },
+    [_getAllQuotes]
+  );
+
   return {
     validSlippage,
     getSwapList,
@@ -693,6 +756,7 @@ export const useQuoteMethods = () => {
     getPreExecResult: getPreEstimateGasUsed,
     getDexQuote,
     getAllQuotes,
+    getSingleQuote,
     supportedDEXList,
   };
 };
@@ -704,6 +768,7 @@ export interface postSwapParams {
   // receiveRawAmount: string;
   slippage: string;
   dexId: string;
+  feeRate: string;
   txId: string;
   quote: QuoteResult;
   tx: Tx;
@@ -715,19 +780,13 @@ interface getTokenParams {
   tokenId: string;
 }
 
-export const getRouter = (dexId: DEX_ENUM, chain: CHAINS_ENUM) => {
-  const list = DEX_ROUTER_WHITELIST[dexId as keyof typeof DEX_ROUTER_WHITELIST];
-  return list[chain as keyof typeof list];
-};
+export { getSpender, isSwapWrapToken };
 
-export const getSpender = (dexId: DEX_ENUM, chain: CHAINS_ENUM) => {
-  if (dexId === DEX_ENUM.WRAPTOKEN) {
-    return '';
-  }
-  const list =
-    DEX_SPENDER_WHITELIST[dexId as keyof typeof DEX_SPENDER_WHITELIST];
-  return list[chain as keyof typeof list];
-};
+export const getRouter = (
+  dexId: DEX_ENUM,
+  chain: CHAINS_ENUM,
+  payTokenId: string
+) => getSwapRouter(dexId, chain, payTokenId, getSwapNativeTokenAddress(chain));
 
 const INTERNAL_REQUEST_ORIGIN = window.location.origin;
 
@@ -767,24 +826,6 @@ export type TDexQuoteData = {
   loading?: boolean;
   isBest?: boolean;
 };
-
-export function isSwapWrapToken(
-  payTokenId: string,
-  receiveId: string,
-  chain: CHAINS_ENUM
-) {
-  const wrapTokens = [
-    WrapTokenAddressMap[chain as keyof typeof WrapTokenAddressMap],
-    findChainByEnum(chain)!.nativeTokenAddress,
-  ];
-  return (
-    !!payTokenId &&
-    !!receiveId &&
-    payTokenId !== receiveId &&
-    !!wrapTokens.find((token) => isSameAddress(payTokenId, token)) &&
-    !!wrapTokens.find((token) => isSameAddress(receiveId, token))
-  );
-}
 
 export type QuoteProvider = {
   name: string;

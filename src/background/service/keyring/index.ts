@@ -33,7 +33,7 @@ import {
   KEYRING_TYPE,
   EVENTS,
   KEYRING_CLASS,
-  HARDWARE_KEYRING_TYPES,
+  WALLETCONNECT_STATUS_MAP,
 } from 'consts';
 import DisplayKeyring from './display';
 import eventBus from '@/eventBus';
@@ -53,6 +53,89 @@ import {
 } from 'background/utils/password';
 import uninstalledMetricService from '../uninstalled';
 import { isEmpty } from 'lodash';
+import { sanitizeUnencryptedKeyringData } from './sanitizeUnencryptedKeyringData';
+import { SigningAttempt, withSigningDiagnostics } from './signing-diagnostics';
+import {
+  clearWalletConnectTransportError,
+  reportWalletConnectTransportError,
+} from '@/background/utils/walletconnectTransportError';
+
+class PrivateKeyKeyring extends SimpleKeyring {
+  signingDiagnosticsProvider = 'private_key';
+}
+
+class MnemonicKeyring extends HdKeyring {
+  signingDiagnosticsProvider = 'mnemonic';
+}
+
+class WalletConnectDiagnosticsKeyring extends WalletConnectKeyring {
+  signingDiagnosticsProvider = 'walletconnect';
+}
+
+class CoinbaseDiagnosticsKeyring extends CoinbaseKeyring {
+  signingDiagnosticsProvider = 'coinbase';
+}
+
+class TrezorDiagnosticsKeyring extends TrezorKeyring {
+  signingDiagnosticsProvider = 'trezor';
+}
+
+const withWalletConnectStatusRejection = (
+  keyring: any,
+  signingAddress: string | undefined,
+  sign: () => Promise<any>
+) => {
+  if (
+    keyring?.type !== KEYRING_CLASS.WALLETCONNECT ||
+    typeof keyring.on !== 'function'
+  ) {
+    return sign();
+  }
+
+  return new Promise((resolve, reject) => {
+    const onStatusChange = (data: any) => {
+      const status = data?.status;
+      if (
+        status !== WALLETCONNECT_STATUS_MAP.REJECTED &&
+        status !== WALLETCONNECT_STATUS_MAP.FAILED
+      ) {
+        return;
+      }
+      const statusAddress = data?.account?.address;
+      if (
+        !statusAddress ||
+        !signingAddress ||
+        statusAddress.toLowerCase() !== signingAddress.toLowerCase()
+      ) {
+        return;
+      }
+      cleanup();
+      const payload = data?.payload;
+      reject(
+        payload instanceof Error
+          ? payload
+          : Object.assign(new Error('WalletConnect signing rejected'), {
+              cause: payload,
+            })
+      );
+    };
+    const cleanup = () =>
+      keyring.removeListener?.('statusChange', onStatusChange);
+    keyring.on('statusChange', onStatusChange);
+    Promise.resolve()
+      .then(sign)
+      .then(
+        (value) => {
+          cleanup();
+          resolve(value);
+        },
+        (error) => {
+          cleanup();
+          reject(error);
+        }
+      );
+  });
+};
 
 const UNENCRYPTED_IGNORE_KEYRING = [
   KEYRING_TYPE.SimpleKeyring,
@@ -60,19 +143,19 @@ const UNENCRYPTED_IGNORE_KEYRING = [
 ];
 
 export const KEYRING_SDK_TYPES = {
-  SimpleKeyring,
-  HdKeyring,
+  SimpleKeyring: PrivateKeyKeyring,
+  HdKeyring: MnemonicKeyring,
   BitBox02Keyring,
-  TrezorKeyring,
+  TrezorKeyring: TrezorDiagnosticsKeyring,
   LedgerBridgeKeyring,
   OnekeyKeyring,
   WatchKeyring,
-  WalletConnectKeyring,
+  WalletConnectKeyring: WalletConnectDiagnosticsKeyring,
   GnosisKeyring,
   LatticeKeyring,
   KeystoneKeyring,
   CoboArgusKeyring,
-  CoinbaseKeyring,
+  CoinbaseKeyring: CoinbaseDiagnosticsKeyring,
   EthImKeyKeyring,
 };
 
@@ -80,6 +163,11 @@ export type KeyringSerializedData<T = any> = {
   type: string;
   data: T;
 };
+
+const sanitizeKeyringDataForUnencryptedStore = (
+  item: KeyringSerializedData
+): KeyringSerializedData =>
+  sanitizeUnencryptedKeyringData(item, KEYRING_CLASS.HARDWARE.GRIDPLUS);
 
 interface MemStoreState {
   isUnlocked: boolean;
@@ -789,6 +877,40 @@ export class KeyringService extends EventEmitter {
   // SIGNING METHODS
   //
 
+  private signWithPairingCredsPersistence = async (
+    keyring: any,
+    operation: Parameters<typeof withSigningDiagnostics>[1],
+    sign: (attempt: SigningAttempt) => Promise<any>,
+    signingAddress?: string
+  ) => {
+    return withSigningDiagnostics(
+      keyring,
+      operation,
+      async (attempt) => {
+        if (keyring?.type === KEYRING_CLASS.WALLETCONNECT) {
+          attempt.setStage('preflight');
+        }
+        try {
+          return await withWalletConnectStatusRejection(
+            keyring,
+            signingAddress,
+            () => {
+              return sign(attempt);
+            }
+          );
+        } finally {
+          if (
+            keyring?.type === KEYRING_CLASS.HARDWARE.GRIDPLUS &&
+            keyring?.consumePairingCredsRefreshed?.()
+          ) {
+            await this.persistAllKeyrings();
+          }
+        }
+      },
+      signingAddress
+    );
+  };
+
   /**
    * Sign Ethereum Transaction
    *
@@ -801,7 +923,12 @@ export class KeyringService extends EventEmitter {
    */
   signTransaction(keyring, ethTx, _fromAddress, opts = {}) {
     const fromAddress = normalizeAddress(_fromAddress);
-    return keyring.signTransaction(fromAddress, ethTx, opts);
+    return this.signWithPairingCredsPersistence(
+      keyring,
+      'transaction',
+      (attempt) => keyring.signTransaction(fromAddress, ethTx, opts, attempt),
+      fromAddress
+    );
   }
 
   signEip7702Authorization(
@@ -813,17 +940,23 @@ export class KeyringService extends EventEmitter {
     opts = {}
   ) {
     const address = normalizeAddress(authParams.from);
-    if (!keyring.signEip7702Authorization) {
-      return Promise.reject(
-        new Error(
-          `Keyring ${keyring.type} doesn't support signEip7702Authorization operation`
-        )
-      );
-    }
-    return keyring.signEip7702Authorization(
-      address,
-      authParams.authorization,
-      opts
+    return this.signWithPairingCredsPersistence(
+      keyring,
+      'eip7702_authorization',
+      (attempt) => {
+        if (!keyring.signEip7702Authorization) {
+          throw new Error(
+            `Keyring ${keyring.type} doesn't support signEip7702Authorization operation`
+          );
+        }
+        return keyring.signEip7702Authorization(
+          address,
+          authParams.authorization,
+          opts,
+          attempt
+        );
+      },
+      address
     );
   }
 
@@ -838,7 +971,13 @@ export class KeyringService extends EventEmitter {
   signMessage(msgParams, opts = {}) {
     const address = normalizeAddress(msgParams.from);
     return this.getKeyringForAccount(address).then((keyring) => {
-      return keyring.signMessage(address, msgParams.data, opts);
+      return this.signWithPairingCredsPersistence(
+        keyring,
+        'personal_message',
+        (attempt) =>
+          keyring.signMessage(address, msgParams.data, opts, attempt),
+        address
+      );
     });
   }
 
@@ -853,7 +992,13 @@ export class KeyringService extends EventEmitter {
    */
   signPersonalMessage(keyring, msgParams, opts = {}) {
     const address = normalizeAddress(msgParams.from);
-    return keyring.signPersonalMessage(address, msgParams.data, opts);
+    return this.signWithPairingCredsPersistence(
+      keyring,
+      'personal_message',
+      (attempt) =>
+        keyring.signPersonalMessage(address, msgParams.data, opts, attempt),
+      address
+    );
   }
 
   /**
@@ -865,7 +1010,13 @@ export class KeyringService extends EventEmitter {
    */
   signTypedMessage(keyring, msgParams, opts = { version: 'V1' }) {
     const address = normalizeAddress(msgParams.from);
-    return keyring.signTypedData(address, msgParams.data, opts);
+    return this.signWithPairingCredsPersistence(
+      keyring,
+      'typed_data',
+      (attempt) =>
+        keyring.signTypedData(address, msgParams.data, opts, attempt),
+      address
+    );
   }
 
   /**
@@ -965,7 +1116,7 @@ export class KeyringService extends EventEmitter {
     const unencryptedKeyringData = serializedKeyrings
       .map(({ type, data }) => {
         if (!UNENCRYPTED_IGNORE_KEYRING.includes(type as any)) {
-          return { type, data };
+          return sanitizeKeyringDataForUnencryptedStore({ type, data });
         }
 
         // maybe empty keyring
@@ -996,6 +1147,29 @@ export class KeyringService extends EventEmitter {
     });
 
     return true;
+  }
+
+  sanitizeUnencryptedKeyringDataInStore() {
+    const { unencryptedKeyringData } = this.store.getState();
+
+    if (!Array.isArray(unencryptedKeyringData)) {
+      return;
+    }
+
+    const sanitized = unencryptedKeyringData.map(
+      sanitizeKeyringDataForUnencryptedStore
+    );
+    const changed = sanitized.some((item, index) => {
+      return item !== unencryptedKeyringData[index];
+    });
+
+    if (!changed) {
+      return;
+    }
+
+    this.store.updateState({
+      unencryptedKeyringData: sanitized,
+    });
   }
 
   /**
@@ -1079,22 +1253,14 @@ export class KeyringService extends EventEmitter {
         );
       });
       (keyring as WalletConnectKeyring).on('inited', (uri) => {
+        clearWalletConnectTransportError();
         eventBus.emit(EVENTS.broadcastToUI, {
           method: EVENTS.WALLETCONNECT.INITED,
           params: { uri },
         });
       });
 
-      keyring.on('transport_error', (data) => {
-        Sentry.captureException(
-          new Error('Transport error: ' + JSON.stringify(data))
-        );
-
-        eventBus.emit(EVENTS.broadcastToUI, {
-          method: EVENTS.WALLETCONNECT.TRANSPORT_ERROR,
-          params: data,
-        });
-      });
+      keyring.on('transport_error', reportWalletConnectTransportError);
       keyring.on('statusChange', (data) => {
         if (!preference.getPopupOpen() && hasWalletConnectPageStateCache()) {
           setPageStateCacheWhenPopupClose(data);

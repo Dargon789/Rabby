@@ -25,14 +25,14 @@ export const judgeIsSmallUsdTx = (item: TxHistoryItemRow) => {
     return false;
   }
 
-  const receives = item.receives;
+  const transfers = [...(item.receives || []), ...(item.sends || [])];
 
-  if (!receives || !receives.length) {
+  if (!transfers.length) {
     return true;
   }
   let allUsd = 0;
 
-  for (const i of receives) {
+  for (const i of transfers) {
     const token = i.token;
     const tokenIsNft = i.token_id?.length === 32;
     if (tokenIsNft) {
@@ -45,8 +45,8 @@ export const judgeIsSmallUsdTx = (item: TxHistoryItemRow) => {
       }
     }
     const isCore = token?.is_core || token?.is_verified;
-    const price = isCore ? token?.price || token?.price || 0 : 0; // is not core token price to 0
-    const usd = token.amount * price;
+    const price = isCore ? i?.price || token?.price || 0 : 0; // is not core token price to 0
+    const usd = i.amount * price;
     allUsd += usd;
   }
 
@@ -113,5 +113,30 @@ export const transformToHistory = ({
     res.is_small_tx = judgeIsSmallUsdTx(res);
 
     return res;
+  });
+};
+
+export const getGasDepositTxKey = (chainId: number, hash: string) =>
+  `${chainId}:${hash.toLowerCase()}`;
+
+// getChainId is injected so this module stays free of chain-list imports;
+// it is loaded by the db layer.
+export const markGasDepositTxs = <T extends { chain: string; id: string }>(
+  list: T[],
+  gasDepositTxKeys: ReadonlySet<string> | undefined,
+  getChainId: (serverId: string) => number | undefined
+): (T & { isGasDeposit?: boolean })[] => {
+  if (!gasDepositTxKeys?.size) {
+    return list;
+  }
+  return list.map((item) => {
+    const chainId = getChainId(item.chain);
+    if (
+      !chainId ||
+      !gasDepositTxKeys.has(getGasDepositTxKey(chainId, item.id))
+    ) {
+      return item;
+    }
+    return { ...item, isGasDeposit: true };
   });
 };

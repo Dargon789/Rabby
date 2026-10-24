@@ -1,0 +1,269 @@
+jest.mock(
+  '@ledgerhq/device-management-kit',
+  () => ({
+    DeviceStatus: {
+      CONNECTED: 'CONNECTED',
+      LOCKED: 'LOCKED',
+      BUSY: 'BUSY',
+      NOT_CONNECTED: 'NOT CONNECTED',
+    },
+    DeviceSessionStateType: {
+      Connected: 0,
+      ReadyWithoutSecureChannel: 1,
+      ReadyWithSecureChannel: 2,
+    },
+    DeviceActionStatus: {},
+    DeviceManagementKitBuilder: jest.fn(),
+    CloseAppCommand: jest.fn(),
+    GetAppAndVersionCommand: jest.fn(),
+    OpenAppDeviceAction: jest.fn(),
+    isSuccessCommandResult: jest.fn(),
+  }),
+  { virtual: true }
+);
+
+jest.mock(
+  '@ledgerhq/device-transport-kit-web-hid',
+  () => ({
+    webHidIdentifier: 'webhid',
+    webHidTransportFactory: jest.fn(),
+  }),
+  { virtual: true }
+);
+
+jest.mock(
+  '@ledgerhq/context-module',
+  () => ({
+    ContextModuleBuilder: jest.fn(),
+    ContextModuleChainID: {
+      Ethereum: 'ethereum',
+    },
+  }),
+  { virtual: true }
+);
+
+jest.mock(
+  '@ledgerhq/device-signer-kit-ethereum',
+  () => ({
+    SignerEthBuilder: jest.fn(),
+  }),
+  { virtual: true }
+);
+
+jest.mock('@/utils/transaction', () => ({
+  is1559Tx: jest.fn(),
+}));
+
+jest.mock('@/background/utils', () => ({
+  isSameAddress: (a: string, b: string) => a.toLowerCase() === b.toLowerCase(),
+}));
+
+jest.mock('@/utils/env', () => ({
+  isManifestV3: true,
+}));
+
+import LedgerBridgeKeyring, {
+  getLedgerErrorMessage,
+} from 'background/service/keyring/eth-ledger-keyring';
+
+describe('getLedgerErrorMessage', () => {
+  it('extracts readable DMK object errors without losing status codes', () => {
+    const err = {
+      name: 'UserRejected',
+      message: {
+        statusCode: '0x6985',
+        message: 'Condition of use not satisfied',
+      },
+    };
+
+    const message = getLedgerErrorMessage(err, 'Ledger: Unknown error');
+
+    expect(message).toContain('UserRejected');
+    expect(message).toContain('0x6985');
+    expect(message).toContain('Condition of use not satisfied');
+    expect(message).not.toContain('[object Object]');
+  });
+
+  it('extracts DMK device-action tags and original errors', () => {
+    const err = {
+      _tag: 'RefusedByUserDAError',
+      originalError: new Error('Ledger device rejected with status 0x6985'),
+    };
+
+    const message = getLedgerErrorMessage(err, 'Ledger: Unknown error');
+
+    expect(message).toContain('RefusedByUserDAError');
+    expect(message).toContain('0x6985');
+    expect(message).toContain('Ledger device rejected');
+    expect(message).not.toContain('[object Object]');
+  });
+
+  it('maps bare DMK user rejection tags to the legacy Ledger status word', () => {
+    const message = getLedgerErrorMessage(
+      {
+        _tag: 'RefusedByUserDAError',
+      },
+      'Ledger: Unknown error'
+    );
+
+    expect(message).toContain('RefusedByUserDAError');
+    expect(message).toContain('0x6985');
+  });
+
+  it('exposes structured provider diagnostics without parsing Sentry text', () => {
+    const keyring = new LedgerBridgeKeyring();
+    const diagnostics = keyring.getLedgerSigningDiagnostics({
+      statusCode: '0x6a80',
+    });
+
+    expect(diagnostics).toMatchObject({
+      wallet_provider: 'ledger',
+      transport: 'webhid',
+      provider_code: '0x6a80',
+      error_category: 'unknown',
+    });
+    expect(diagnostics).not.toHaveProperty('signing_original_error');
+  });
+
+  it('finds a Ledger status word through nested signing wrappers', () => {
+    const keyring = new LedgerBridgeKeyring();
+    const diagnostics = keyring.getLedgerSigningDiagnostics({
+      cause: {
+        cause: {
+          statusCode: '0x6a80',
+        },
+      },
+    });
+
+    expect(diagnostics).toMatchObject({
+      provider_code: '0x6a80',
+      error_category: 'unknown',
+    });
+  });
+
+  it('reports a bare 0x6985 as unknown instead of assuming user cancellation', () => {
+    const keyring = new LedgerBridgeKeyring();
+    const diagnostics = keyring.getLedgerSigningDiagnostics({
+      statusCode: '0x6985',
+    });
+
+    expect(diagnostics).toMatchObject({
+      provider_code: '0x6985',
+      error_category: 'unknown',
+    });
+  });
+
+  it('preserves the allowlisted DMK error tag', () => {
+    const keyring = new LedgerBridgeKeyring();
+    const diagnostics = keyring.getLedgerSigningDiagnostics({
+      _tag: 'EthAppCommandError',
+      errorCode: '6985',
+    });
+
+    expect(diagnostics).toMatchObject({
+      provider_code: '0x6985',
+      provider_error_tag: 'EthAppCommandError',
+    });
+    expect(
+      keyring.getLedgerSigningDiagnostics({ _tag: 'UnexpectedError' })
+    ).not.toHaveProperty('provider_error_tag');
+  });
+
+  it('classifies Rabby-generated device readiness errors', () => {
+    const keyring = new LedgerBridgeKeyring();
+
+    expect(
+      keyring.getLedgerSigningDiagnostics(
+        new Error('Ledger: Device is locked 0x5515')
+      )
+    ).toMatchObject({
+      provider_code: '0x5515',
+      error_category: 'device_locked',
+      provider_reason: 'device_locked',
+    });
+
+    expect(
+      keyring.getLedgerSigningDiagnostics(
+        new Error('Ledger: Device disconnected')
+      )
+    ).toMatchObject({
+      error_category: 'disconnected',
+      provider_reason: 'device_disconnected',
+    });
+  });
+
+  it('classifies a DMK disconnect during an APDU as disconnected', () => {
+    const keyring = new LedgerBridgeKeyring();
+
+    expect(
+      keyring.getLedgerSigningDiagnostics(
+        Object.assign(new Error('DeviceDisconnectedWhileSendingError'), {
+          cause: { _tag: 'DeviceDisconnectedWhileSendingError' },
+        })
+      )
+    ).toMatchObject({
+      error_category: 'disconnected',
+      provider_reason: 'device_disconnected',
+      provider_error_tag: 'DeviceDisconnectedWhileSendingError',
+    });
+  });
+
+  it('classifies an explicit DMK user rejection as user cancellation', () => {
+    const keyring = new LedgerBridgeKeyring();
+    const diagnostics = keyring.getLedgerSigningDiagnostics({
+      _tag: 'RefusedByUserDAError',
+    });
+
+    expect(diagnostics).toMatchObject({
+      provider_code: '0x6985',
+      error_category: 'user_cancelled',
+    });
+  });
+
+  it('uses the explicit signing attempt when a shared unlock error is reused', () => {
+    const keyring = new LedgerBridgeKeyring();
+    const firstAttempt = {
+      operation: 'transaction',
+      startedAt: 1,
+      stage: 'sign',
+      setStage: jest.fn(),
+    } as any;
+    const secondAttempt = {
+      operation: 'transaction',
+      startedAt: 2,
+      stage: 'sign',
+      setStage: jest.fn(),
+    } as any;
+    const firstState = keyring.beginSigningAttempt(
+      'transaction',
+      undefined,
+      firstAttempt
+    ) as any;
+    const secondState = keyring.beginSigningAttempt(
+      'transaction',
+      undefined,
+      secondAttempt
+    ) as any;
+    firstState.steps.push(
+      'first-attempt',
+      'signer.eth.steps.blindSignTransactionFallback'
+    );
+    firstState.last_required_user_interaction = 'sign-transaction';
+    secondState.steps.push('second-attempt');
+
+    const sharedError = new Error('Ledger: Device disconnected');
+    keyring.endSigningAttempt(firstState, sharedError);
+    keyring.endSigningAttempt(secondState, sharedError);
+
+    const metadata = keyring.getLedgerSigningDiagnostics(
+      sharedError,
+      firstAttempt
+    ).provider_metadata as any;
+    expect(metadata).toMatchObject({
+      device_action_steps:
+        'first-attempt>signer.eth.steps.blindSignTransactionFallback',
+      last_required_user_interaction: 'sign-transaction',
+      used_fallback: true,
+    });
+  });
+});

@@ -20,6 +20,7 @@ import { Trans, useTranslation } from 'react-i18next';
 import { clearClipboard } from '@/ui/utils/clipboard';
 
 import { ReactComponent as RcIconArrowCC } from '@/ui/assets/import/arrow-cc.svg';
+import { UI_TYPE } from '@/constant/ui';
 
 const ITEM_H = 52;
 const ROW_COUNT = 3;
@@ -320,8 +321,8 @@ const DFLT_FOCUSING = { index: -1, visible: false };
 const DFLT_HOVERING = { index: -1, isHovering: false };
 type IMnemonicsCount = 12 | 15 | 18 | 21 | 24;
 const MNEMONICS_COUNTS: IMnemonicsCount[] = [12, 15, 18, 21, 24];
-const DISPLAYED_MNEMONICS_COUNTS: IMnemonicsCount[] = [12, 24];
-const MORE_MNEMONICS_COUNTS: IMnemonicsCount[] = [15, 18, 21];
+const DISPLAYED_MNEMONICS_COUNTS: IMnemonicsCount[] = [12, 15, 18, 21, 24];
+const MORE_MNEMONICS_COUNTS: IMnemonicsCount[] = [];
 const NEED_PASSPHRASE_MNEMONICS_COUNTS: IMnemonicsCount[] = [
   12,
   15,
@@ -572,7 +573,12 @@ function MnemonicsInputs({
           onVisibleChange={handleDropdownVisibleChange}
           getPopupContainer={() => dropdownTriggerRef.current || document.body}
           overlay={
-            <Menu className="mnemonics-input-menu py-8px rounded-[8px] bg-r-neutral-bg-1">
+            <Menu
+              className={clsx(
+                'mnemonics-input-menu py-8px rounded-[8px] bg-r-neutral-bg-1',
+                UI_TYPE.isPop && 'max-h-[334px] overflow-y-auto'
+              )}
+            >
               {(showAllMenuOptions
                 ? [...DISPLAYED_MNEMONICS_COUNTS, ...MORE_MNEMONICS_COUNTS]
                 : DISPLAYED_MNEMONICS_COUNTS
@@ -591,7 +597,7 @@ function MnemonicsInputs({
                         i18nKey="page.newAddress.seedPhrase.wordPhrase"
                         values={{ count }}
                       >
-                        I have a
+                        My seed phrase has
                         <b
                           style={{
                             color: 'var(--r-blue-default, #7084ff)',
@@ -599,7 +605,7 @@ function MnemonicsInputs({
                         >
                           {{ count } as any}
                         </b>
-                        -word phrase
+                        words
                       </Trans>
                     </div>
                   </Menu.Item>
@@ -626,7 +632,7 @@ function MnemonicsInputs({
                             i18nKey="page.newAddress.seedPhrase.wordPhraseAndPassphrase"
                             values={{ count }}
                           >
-                            I have a
+                            My seed phrase has
                             <b
                               style={{
                                 color: 'var(--r-blue-default, #7084ff)',
@@ -634,7 +640,7 @@ function MnemonicsInputs({
                             >
                               {{ count } as any}
                             </b>
-                            -word phrase and Passphrase
+                            with password
                           </Trans>
                         </div>
                       </Menu.Item>
@@ -655,21 +661,34 @@ function MnemonicsInputs({
                         }}
                       >
                         <div className="text-wrapper whitespace-nowrap">
-                          <Trans
-                            t={t}
-                            i18nKey={
-                              passphrase
-                                ? 'page.newAddress.seedPhrase.slip39SeedPhraseWithPassphrase'
-                                : 'page.newAddress.seedPhrase.slip39SeedPhrase'
-                            }
-                            values={{ SLIP39: 'SLIP 39' }}
-                          >
-                            <b
-                              style={{
-                                color: 'var(--r-blue-default, #7084ff)',
-                              }}
-                            ></b>
-                          </Trans>
+                          {passphrase ? (
+                            <Trans
+                              t={t}
+                              i18nKey="page.newAddress.seedPhrase.slip39SeedPhraseWithPassphrase"
+                              values={{ SLIP39: 'SLIP 39' }}
+                            >
+                              My seed phrase is
+                              <b
+                                style={{
+                                  color: 'var(--r-blue-default, #7084ff)',
+                                }}
+                              ></b>
+                              with password
+                            </Trans>
+                          ) : (
+                            <Trans
+                              t={t}
+                              i18nKey="page.newAddress.seedPhrase.slip39SeedPhrase"
+                              values={{ SLIP39: 'SLIP 39' }}
+                            >
+                              My seed phrase is
+                              <b
+                                style={{
+                                  color: 'var(--r-blue-default, #7084ff)',
+                                }}
+                              ></b>
+                            </Trans>
+                          )}
                         </div>
                       </Menu.Item>
                     );
@@ -710,8 +729,8 @@ function MnemonicsInputs({
                   t={t}
                   i18nKey={
                     needPassphrase
-                      ? 'page.newAddress.seedPhrase.wordPhraseAndPassphrase'
-                      : 'page.newAddress.seedPhrase.wordPhrase'
+                      ? 'page.newAddress.seedPhrase.wordPhraseAndPassphraseSelected'
+                      : 'page.newAddress.seedPhrase.wordPhraseSelected'
                   }
                   values={{ count: mnemonicsCount }}
                 >
@@ -735,7 +754,12 @@ function MnemonicsInputs({
                   }
                   values={{ SLIP39: 'SLIP 39' }}
                 >
-                  <span />
+                  My seed phrase is
+                  <b
+                    style={{
+                      color: 'var(--r-blue-default, #7084ff)',
+                    }}
+                  />
                 </Trans>
               )}
             </span>

@@ -84,7 +84,6 @@ const PoolItem = ({
 
 const ProtocolItemWrapper = styled.div`
   background: var(--r-neutral-card-1, #f2f4f7);
-  margin-bottom: 8px;
   border-radius: 8px;
 
   .title {
@@ -221,8 +220,7 @@ export const ProtocolItem = ({
           className={clsx(
             'group flex items-center justify-start',
             'title border border-solid bg-r-neutral-card1 border-transparent rounded-[8px] h-[48px] pr-14',
-            'hover:bg-blue-light',
-            'hover:bg-opacity-10',
+            'hover:bg-blue-light/10',
             'hover:border-blue-light'
           )}
           onClick={onClickTitle}
@@ -243,12 +241,19 @@ export const ProtocolItem = ({
             )}
             onClick={(evt) => {
               evt.stopPropagation();
-              openInTab(
-                protocol.id === 'hyperliquid' && isShowPerpsInvite
-                  ? PERPS_INVITE_URL
-                  : protocol.site_url,
-                false
-              );
+              if (protocol.id === 'hyperliquid') {
+                wallet.setPerpsCurrentAccount(currentAccount);
+                wallet.switchDesktopPerpsAccount(currentAccount!);
+                wallet.openInDesktop('/desktop/perps');
+                window.close();
+              } else {
+                openInTab(
+                  protocol.id === 'hyperliquid' && isShowPerpsInvite
+                    ? PERPS_INVITE_URL
+                    : protocol.site_url,
+                  false
+                );
+              }
             }}
           >
             <span className="name items-center truncate min-w-0">
@@ -261,7 +266,7 @@ export const ProtocolItem = ({
                   chain: protocol.name,
                 })}
               >
-                <div className="text-r-neutral-foot ml-[4px] mr-[2px] flex-shrink-0">
+                <div className="text-r-neutral-foot ml-[4px] mr-[2px] shrink-0">
                   <RcIconInfoCC />
                 </div>
               </Tooltip>
@@ -324,6 +329,9 @@ interface Props {
 
 const ProtocolListWrapper = styled.div`
   margin-top: 20px;
+  gap: 8px;
+  display: flex;
+  flex-direction: column;
 `;
 
 const ProtocolList = ({
@@ -348,7 +356,7 @@ const ProtocolList = ({
     return list?.filter((item) => currentList?.indexOf(item) === -1);
   }, [currentList, list]);
 
-  if (!list) return null;
+  if (!list?.length) return null;
 
   return (
     <ProtocolListWrapper className={className}>

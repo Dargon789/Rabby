@@ -1,17 +1,41 @@
 import { ethers, Contract } from 'ethers';
 import { getContractFactory, predeploys } from '@eth-optimism/contracts';
 import buildUnserializedTransaction from '@/utils/optimism/buildUnserializedTransaction';
-import { CHAINS_ENUM, OP_STACK_ENUMS } from 'consts';
+import {
+  CHAINS_ENUM,
+  OP_STACK_ENUMS,
+  SCROLL_STYLE_L1_GAS_ORACLE,
+} from 'consts';
 import BigNumber from 'bignumber.js';
+import { findChain } from './chain';
+
+const ensureL1FeeTxParamsChainId = (txParams: any, chain: CHAINS_ENUM) => {
+  const chainInfo = findChain({ enum: chain });
+  const chainId = Number(txParams?.chainId);
+
+  if (!chainInfo) {
+    return txParams;
+  }
+
+  if (Number.isInteger(chainId) && chainId > 0) {
+    return txParams;
+  }
+
+  return {
+    ...txParams,
+    chainId: chainInfo.id,
+  };
+};
 
 // https://docs.scroll.io/en/developers/transaction-fees-on-scroll/#calculating-the-l1-data-fee-with-gas-oracle
 export const scrollL1FeeEstimate = async (
   provider: ethers.providers.Web3Provider,
-  txParams: any
+  txParams: any,
+  chain: CHAINS_ENUM = CHAINS_ENUM.SCRL
 ) => {
   const signer = provider.getSigner();
   const oracleContract = new Contract(
-    '0x5300000000000000000000000000000000000002',
+    SCROLL_STYLE_L1_GAS_ORACLE[chain],
     [
       {
         type: 'constructor',
@@ -94,13 +118,15 @@ export const estimateL1Fee = ({
   chain: CHAINS_ENUM;
   provider: ethers.providers.Web3Provider;
 }): Promise<string> => {
+  const normalizedTxParams = ensureL1FeeTxParamsChainId(txParams, chain);
+
   if (chain.toLowerCase() === 'citrea') {
-    return citreaL1FeeEstimate(provider, txParams);
+    return citreaL1FeeEstimate(provider, normalizedTxParams);
   }
   if (OP_STACK_ENUMS.includes(chain)) {
-    return opStackL1FeeEstimate(provider, txParams);
-  } else if (chain === CHAINS_ENUM.SCRL) {
-    return scrollL1FeeEstimate(provider, txParams);
+    return opStackL1FeeEstimate(provider, normalizedTxParams);
+  } else if (SCROLL_STYLE_L1_GAS_ORACLE[chain]) {
+    return scrollL1FeeEstimate(provider, normalizedTxParams, chain);
   }
   return Promise.resolve('0x0');
 };

@@ -34,16 +34,14 @@ import { createGlobalStyle } from 'styled-components';
 import IconAlertRed from 'ui/assets/alert-red.svg';
 import { ReactComponent as RcIconEco } from 'ui/assets/dashboard/icon-eco.svg';
 import { ReactComponent as RcIconGift } from 'ui/assets/gift-14.svg';
+import { RcIconJumpCC } from '@/ui/assets/dashboard';
 
 import {
   RcIconApprovalsCC,
   RcIconBridgeCC,
   RcIconDappsCC,
-  RcIconGasAccountCC,
-  RcIconLampCC,
   RcIconManageCC,
   RcIconMobileSyncCC,
-  RcIconNftCC,
   RcIconPerpsCC,
   RcIconPointsCC,
   RcIconReceiveCC,
@@ -52,19 +50,17 @@ import {
   RcIconSettingCC,
   RcIconSwapCC,
   RcIconTransactionsCC,
-  RcIconAaveLendingCC,
-  RcIconSparkLendingCC,
-  RcIconVenusLendingCC,
+  RcIconConvertDustCC,
+  RcIconStakingCC,
 } from 'ui/assets/dashboard/panel';
 
-import { RcIconExternal1CC } from '@/ui/assets/dashboard';
 import { useThemeMode } from '@/ui/hooks/usePreference';
 import { usePerpsDefaultAccount } from '@/ui/views/Perps/hooks/usePerpsDefaultAccount';
 import { useMemoizedFn, useMount, useScroll } from 'ahooks';
 import { isEqual } from 'lodash';
 import {
-  formatGasAccountUsdValueV2,
   formatUsdValue,
+  openInTab,
   openInternalPageInTab,
   splitNumberByStep,
   useWallet,
@@ -73,20 +69,15 @@ import { ClaimRabbyFreeGasBadgeModal } from '../ClaimRabbyBadgeModal/freeGasBadg
 import { EcologyPopup } from '../EcologyPopup';
 import { RabbyPointsPopup } from '../RabbyPointsPopup';
 import { RecentConnectionsPopup } from '../RecentConnections';
-import { useCheckBridgePendingItem } from '@/ui/views/Bridge/hooks/history';
-import { RcIconLeadingCC } from '@/ui/assets/desktop/nav';
-import { INNER_DAPP_IDS, INNER_DAPP_LIST } from '@/constant/dappIframe';
-import { loadAppChainList } from '@/ui/utils/portfolio/utils';
-import { getOriginFromUrl } from '@/utils';
-import { useSceneAccount } from '@/ui/hooks/backgroundState/useAccount';
-import { getHealthStatusColor } from '@/ui/views/DesktopLending/utils';
-import { getHealthFactorText } from '@/ui/views/DesktopLending/utils/health';
-import { HF_COLOR_GOOD_THRESHOLD } from '@/ui/views/DesktopLending/utils/constant';
-import { fetchLendingHealthFactorForDashboard } from '@/ui/views/DesktopLending/hooks';
-import { CustomMarket } from '@/ui/views/DesktopLending/config/market';
 import BigNumber from 'bignumber.js';
 
 export const DragOverlayContext = createContext(false);
+
+const SCROLLBAR_TRACK_HEIGHT = 80;
+const SCROLLBAR_THUMB_HEIGHT = 50;
+const SCROLLBAR_THUMB_MAX_OFFSET =
+  SCROLLBAR_TRACK_HEIGHT - SCROLLBAR_THUMB_HEIGHT;
+const SCROLLBAR_HIT_AREA_WIDTH = 13;
 
 const GlobalStyle = createGlobalStyle`
   .rabby-dashboard-panel-container {
@@ -113,6 +104,37 @@ const GlobalStyle = createGlobalStyle`
 
       &:hover {
         background: var(--r-blue-light1, #edf0ff);
+      }
+
+      &:has(.panel-item-jump-button:hover) {
+        background: var(--r-neutral-card1, #fff);
+      }
+
+      &-jump-button {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        z-index: 1;
+
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 5px;
+
+        color: var(--r-neutral-title1, #192945);
+        background: var(--r-neutral-card3, #f7fafc);
+        border: 0;
+        border-radius: 4px;
+        cursor: pointer;
+
+        &:hover {
+          color: var(--r-blue-default, #4c65ff);
+          background: var(--r-blue-light1, #edf0ff);
+        }
+      }
+
+      &:hover > .panel-item-jump-button {
+        display: flex;
       }
 
       &-icon {
@@ -196,6 +218,7 @@ type IPanelItem = {
   iconClassName?: string;
   subContent?: React.ReactNode;
   isFullscreen?: boolean;
+  onOpenInDesktop?: () => void;
 };
 
 const SortablePanelItem: React.FC<{
@@ -260,6 +283,21 @@ const SortablePanelItem: React.FC<{
           }}
           className="panel-item group"
         >
+          {item.onOpenInDesktop && (
+            <button
+              type="button"
+              className="panel-item-jump-button"
+              aria-label={t('page.dashboard.assets.openInTabV2')}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                item.onOpenInDesktop?.();
+              }}
+            >
+              <RcIconJumpCC width={12} height={12} />
+            </button>
+          )}
           {item.showAlert && (
             <ThemeIcon src={IconAlertRed} className="icon icon-alert" />
           )}
@@ -314,9 +352,13 @@ export const DashboardPanel: React.FC<{ onSettingClick?(): void }> = ({
   usePerpsDefaultAccount({
     isPro: false,
   });
-  // useCheckBridgePendingItem();
 
   const wallet = useWallet();
+
+  const openPanelInDesktop = useMemoizedFn((path: string) => {
+    wallet.openInDesktop(path);
+    window.close();
+  });
 
   const [badgeModalVisible, setBadgeModalVisible] = useState(false);
 
@@ -381,31 +423,12 @@ export const DashboardPanel: React.FC<{ onSettingClick?(): void }> = ({
     iconClassName?: string;
     subContent?: React.ReactNode;
     isFullscreen?: boolean;
+    onOpenInDesktop?: () => void;
   };
-
-  const giftUsdValue = useRabbySelector((s) => s.gift.giftUsdValue);
-  const hasClaimedGift = useRabbySelector((s) => s.gift.hasClaimedGift);
-
-  const hasGiftEligibility = useMemo(() => {
-    return giftUsdValue > 0 && !hasClaimedGift;
-  }, [giftUsdValue, hasClaimedGift]);
-
-  const lendingId = useRabbySelector((state) => state.innerDappFrame.lending);
-
-  const IconLending = useMemo(() => {
-    if (lendingId === 'venus') {
-      return RcIconVenusLendingCC;
-    }
-    if (lendingId === 'spark') {
-      return RcIconSparkLendingCC;
-    }
-    return RcIconAaveLendingCC;
-  }, [lendingId]);
 
   const IconPerps = RcIconPerpsCC;
 
-  // --- Perps data lifting (from PerpsSubContent) ---
-  const perpsId = useRabbySelector((s) => s.innerDappFrame.perps);
+  const hiddenBalance = useRabbySelector((s) => s.preference.hiddenBalance);
 
   const {
     availableBalance,
@@ -414,94 +437,19 @@ export const DashboardPanel: React.FC<{ onSettingClick?(): void }> = ({
     positionPnl,
   } = usePerpsHomePnl();
 
-  const lighterAccount = useRabbySelector((s) => {
-    const url = INNER_DAPP_LIST.PERPS.find(
-      (e) => e.id === INNER_DAPP_IDS.LIGHTER
-    )?.url;
-    if (url?.startsWith('https://')) {
-      const LighterOrigin = getOriginFromUrl(url || '');
-      return s.innerDappFrame.innerDappAccounts[LighterOrigin];
-    }
-    return undefined;
-  });
-
   const perpsSubContentNode = useMemo<React.ReactNode>(() => {
-    if (perpsId === 'hyperliquid') {
-      if (perpsFetching) {
-        return (
-          <div className="absolute bottom-[6px] text-[11px] font-medium">
-            <Skeleton.Button
-              active={true}
-              className="h-[10px] block rounded-[2px]"
-              style={{ width: 42 }}
-            />
-          </div>
-        );
-      }
-      if (perpsPositionInfo?.assetPositions?.length) {
-        return (
-          <div
-            className={clsx(
-              'absolute bottom-[6px] text-[11px] leading-[13px] font-medium',
-              positionPnl && positionPnl > 0
-                ? 'text-r-green-default'
-                : 'text-r-red-default'
-            )}
-          >
-            {positionPnl && positionPnl >= 0 ? '+' : '-'}$
-            {splitNumberByStep(Math.abs(positionPnl || 0).toFixed(2))}
-          </div>
-        );
-      }
-      if (Number(availableBalance) > 0) {
-        return (
-          <div
-            className={clsx(
-              'absolute bottom-[6px] text-[11px] leading-[13px] font-medium text-r-neutral-foot'
-            )}
-          >
-            {formatUsdValue(availableBalance || 0, BigNumber.ROUND_DOWN)}
-          </div>
-        );
-      }
+    if (hiddenBalance) {
+      return (
+        <div
+          className={clsx(
+            'absolute bottom-[6px] text-[11px] leading-[13px] font-medium text-r-neutral-foot'
+          )}
+        >
+          *****
+        </div>
+      );
     }
-    return null;
-  }, [
-    perpsId,
-    perpsFetching,
-    availableBalance,
-    perpsPositionInfo,
-    positionPnl,
-    lighterAccount,
-  ]);
-
-  // --- Lending data lifting (from LendingSubContent) ---
-  const [lendingAccount] = useSceneAccount({ scene: 'lending' });
-
-  const { value: hfRaw, loading: lendingLoading } = useAsync(async () => {
-    if (lendingId !== 'aave') return '';
-    const address = lendingAccount?.address;
-    if (!address) return '';
-    const marketKey =
-      (await wallet.getLastSelectedLendingChain()) ||
-      CustomMarket.proto_mainnet_v3;
-    return fetchLendingHealthFactorForDashboard(
-      wallet,
-      address,
-      marketKey,
-      lendingAccount
-        ? {
-            address: lendingAccount.address,
-            type: lendingAccount.type,
-            brandName: lendingAccount.brandName,
-          }
-        : undefined
-    );
-  }, [lendingId, lendingAccount?.address]);
-
-  const lendingSubContentNode = useMemo<React.ReactNode>(() => {
-    if (lendingId !== 'aave') return null;
-    if (lendingLoading) {
+    if (perpsFetching) {
       return (
         <div className="absolute bottom-[6px] text-[11px] font-medium">
           <Skeleton.Button
@@ -512,21 +460,37 @@ export const DashboardPanel: React.FC<{ onSettingClick?(): void }> = ({
         </div>
       );
     }
-    const hfNumber = Number(hfRaw);
-    if (!hfRaw || hfRaw === '-1' || !Number.isFinite(hfNumber)) return null;
-    if (hfNumber >= HF_COLOR_GOOD_THRESHOLD) return null;
-    const colorInfo = getHealthStatusColor(hfNumber);
+    if (perpsPositionInfo?.assetPositions?.length) {
+      return (
+        <div
+          className={clsx(
+            'absolute bottom-[6px] text-[11px] leading-[13px] font-medium',
+            positionPnl && positionPnl > 0
+              ? 'text-r-green-default'
+              : 'text-r-red-default'
+          )}
+        >
+          {positionPnl && positionPnl >= 0 ? '+' : '-'}$
+          {splitNumberByStep(Math.abs(positionPnl || 0).toFixed(2))}
+        </div>
+      );
+    }
     return (
       <div
         className={clsx(
-          'absolute bottom-[6px] text-[11px] leading-[13px] font-medium'
+          'absolute bottom-[6px] text-[11px] leading-[13px] font-medium text-r-neutral-foot'
         )}
-        style={{ color: colorInfo.color }}
       >
-        {getHealthFactorText(hfRaw)}
+        {formatUsdValue(availableBalance || 0, BigNumber.ROUND_DOWN)}
       </div>
     );
-  }, [lendingId, lendingLoading, hfRaw]);
+  }, [
+    hiddenBalance,
+    perpsFetching,
+    availableBalance,
+    perpsPositionInfo,
+    positionPnl,
+  ]);
 
   const panelItems = {
     swap: {
@@ -536,6 +500,9 @@ export const DashboardPanel: React.FC<{ onSettingClick?(): void }> = ({
       onClick: () => {
         history.push('/dex-swap?rbisource=dashboard');
       },
+      onOpenInDesktop: () => {
+        openPanelInDesktop('/desktop/profile?action=swap&rbisource=dashboard');
+      },
     } as IPanelItem,
     send: {
       icon: RcIconSendCC,
@@ -544,6 +511,9 @@ export const DashboardPanel: React.FC<{ onSettingClick?(): void }> = ({
       onClick: () => {
         history.push('/send-token?rbisource=dashboard');
       },
+      onOpenInDesktop: () => {
+        openPanelInDesktop('/desktop/profile?action=send&rbisource=dashboard');
+      },
     } as IPanelItem,
     bridge: {
       icon: RcIconBridgeCC,
@@ -551,6 +521,11 @@ export const DashboardPanel: React.FC<{ onSettingClick?(): void }> = ({
       content: t('page.dashboard.home.panel.bridge'),
       onClick: () => {
         history.push('/bridge');
+      },
+      onOpenInDesktop: () => {
+        openPanelInDesktop(
+          '/desktop/profile?action=bridge&rbisource=dashboard'
+        );
       },
     } as IPanelItem,
     receive: {
@@ -577,36 +552,32 @@ export const DashboardPanel: React.FC<{ onSettingClick?(): void }> = ({
       onClick: () => {
         history.push('/history');
       },
+      onOpenInDesktop: () => {
+        openPanelInDesktop('/desktop/profile/transactions');
+      },
     } as IPanelItem,
     security: {
       icon: RcIconApprovalsCC,
       eventKey: 'Approvals',
       content: t('page.dashboard.home.panel.approvals'),
       onClick: async (evt) => {
+        history.push('/revoke-approvals');
         // openInternalPageInTab('approval-manage');
-        await wallet.openInDesktop('/desktop/profile/approvals');
-        window.close();
+        // await wallet.openInDesktop('/desktop/profile/approvals');
+        // window.close();
       },
       badge: approvalRiskAlert,
       badgeAlert: approvalRiskAlert > 0,
       isFullscreen: true,
+      onOpenInDesktop: () => {
+        openPanelInDesktop('/desktop/manage-approvals');
+      },
     } as IPanelItem,
     more: {
       icon: RcIconSettingCC,
       eventKey: 'More',
       content: t('page.dashboard.home.panel.settings'),
       onClick: onSettingClick,
-    } as IPanelItem,
-    nft: {
-      icon: RcIconNftCC,
-      eventKey: 'NFT',
-      content: t('page.dashboard.home.panel.nft'),
-      onClick: async () => {
-        // history.push('/nft');
-        await wallet.openInDesktop('/desktop/profile/nft');
-        window.close();
-      },
-      isFullscreen: true,
     } as IPanelItem,
     ecology: {
       icon: RcIconEco,
@@ -616,29 +587,7 @@ export const DashboardPanel: React.FC<{ onSettingClick?(): void }> = ({
         setIsShowEcologyModal(true);
       },
     } as IPanelItem,
-    gasAccount: {
-      icon: RcIconGasAccountCC,
-      eventKey: 'GasAccount',
-      content: t('page.dashboard.home.panel.gasAccount'),
-      onClick: () => {
-        history.push('/gas-account');
-      },
-      subContent: hasGiftEligibility ? (
-        <div className="absolute top-[6px] right-[6px]">
-          <div
-            className={clsx(
-              'text-r-green-default text-[10px] leading-[12px] font-medium',
-              'flex items-center px-[3px] py-[2px] rounded-[4px] bg-r-green-light'
-            )}
-          >
-            <RcIconGift viewBox="0 0 14 14" />
-            {Number.isInteger(giftUsdValue)
-              ? '$' + splitNumberByStep(giftUsdValue)
-              : formatGasAccountUsdValueV2(giftUsdValue)}
-          </div>
-        </div>
-      ) : null,
-    } as IPanelItem,
+
     points: {
       icon: RcIconPointsCC,
       eventKey: 'Rabby Points',
@@ -667,6 +616,9 @@ export const DashboardPanel: React.FC<{ onSettingClick?(): void }> = ({
         history.push('/perps');
         // window.close();
       },
+      onOpenInDesktop: () => {
+        openPanelInDesktop('/desktop/perps');
+      },
       // isFullscreen: true,
     } as IPanelItem,
     searchDapp: {
@@ -694,16 +646,24 @@ export const DashboardPanel: React.FC<{ onSettingClick?(): void }> = ({
         history.push('/settings/address');
       },
     } as IPanelItem,
-    lending: {
-      icon: IconLending,
-      eventKey: 'Lending',
-      subContent: lendingSubContentNode,
-      content: t('page.dashboard.home.panel.lending'),
+    convertDust: {
+      icon: RcIconConvertDustCC,
+      eventKey: 'Convert Dust',
+      content: t('page.dashboard.home.panel.convertDust'),
       onClick: async () => {
-        await wallet.openInDesktop('/desktop/lending');
-        window.close();
+        openInTab('desktop.html#/desktop/small-swap', true);
+        // await wallet.openInDesktop('/desktop/small-swap');
+        // window.close();
       },
       isFullscreen: true,
+    } as IPanelItem,
+    staking: {
+      icon: RcIconStakingCC,
+      eventKey: 'Staking',
+      content: t('page.dashboard.home.panel.staking'),
+      onClick: () => {
+        history.push('/staking');
+      },
     } as IPanelItem,
   };
 
@@ -716,13 +676,11 @@ export const DashboardPanel: React.FC<{ onSettingClick?(): void }> = ({
       'transactions',
       'security',
       'perps',
-      'lending',
-      'points',
+      'staking',
       'mobile',
-      'nft',
-      'gasAccount',
-      'searchDapp',
       'dapps',
+      'convertDust',
+      'points',
     ];
   }, []);
 
@@ -742,6 +700,10 @@ export const DashboardPanel: React.FC<{ onSettingClick?(): void }> = ({
   const pickedPanelKeys = useMemo(() => {
     return getPanelKeys();
   }, [dashboardPanelOrder]);
+
+  const placeholderCount = useMemo(() => {
+    return (3 - (pickedPanelKeys.length % 3)) % 3;
+  }, [pickedPanelKeys.length]);
 
   const setPickedPanelKeys = useMemoizedFn(
     (keys: (keyof typeof panelItems)[]) => {
@@ -804,14 +766,114 @@ export const DashboardPanel: React.FC<{ onSettingClick?(): void }> = ({
   }, [activeId, panelItems]);
 
   const ref = useRef<HTMLDivElement | null>(null);
+  const scrollbarTrackRef = useRef<HTMLDivElement | null>(null);
+  const scrollbarThumbRef = useRef<HTMLDivElement | null>(null);
+  const scrollbarDragOffsetRef = useRef(SCROLLBAR_THUMB_HEIGHT / 2);
+  const isScrollbarDraggingRef = useRef(false);
+  const [isScrollbarDragging, setIsScrollbarDragging] = useState(false);
   const scroll = useScroll(ref);
   const scrollRatio = useMemo(() => {
     const top = scroll?.top ?? 0;
-    const height = ref.current?.getBoundingClientRect()?.height ?? 0;
-    const scrollHeight = ref.current?.scrollHeight ?? 440;
-    const ratio = top / (scrollHeight - height);
-    return ratio > 1 ? 1 : ratio;
+    const height = ref.current?.clientHeight ?? 0;
+    const scrollHeight = ref.current?.scrollHeight ?? 0;
+    const maxScrollTop = scrollHeight - height;
+
+    if (maxScrollTop <= 0) {
+      return 0;
+    }
+
+    const ratio = top / maxScrollTop;
+    return Math.min(Math.max(ratio, 0), 1);
   }, [scroll?.top]);
+
+  const scrollPanelFromScrollbar = useMemoizedFn((clientY: number) => {
+    const scrollContainer = ref.current;
+    const track = scrollbarTrackRef.current;
+
+    if (!scrollContainer || !track) {
+      return;
+    }
+
+    const maxScrollTop =
+      scrollContainer.scrollHeight - scrollContainer.clientHeight;
+
+    if (maxScrollTop <= 0 || SCROLLBAR_THUMB_MAX_OFFSET <= 0) {
+      return;
+    }
+
+    const trackTop = track.getBoundingClientRect().top;
+    const nextThumbOffset = Math.min(
+      Math.max(clientY - trackTop - scrollbarDragOffsetRef.current, 0),
+      SCROLLBAR_THUMB_MAX_OFFSET
+    );
+
+    scrollContainer.scrollTop =
+      (nextThumbOffset / SCROLLBAR_THUMB_MAX_OFFSET) * maxScrollTop;
+  });
+
+  const handleScrollbarPointerDown = useMemoizedFn(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const scrollContainer = ref.current;
+      const track = scrollbarTrackRef.current;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (
+        !scrollContainer ||
+        !track ||
+        scrollContainer.scrollHeight <= scrollContainer.clientHeight
+      ) {
+        return;
+      }
+
+      const trackTop = track.getBoundingClientRect().top;
+      const isThumbTarget =
+        scrollbarThumbRef.current?.contains(event.target as Node) ?? false;
+
+      if (isThumbTarget) {
+        const currentThumbOffset = scrollRatio * SCROLLBAR_THUMB_MAX_OFFSET;
+        scrollbarDragOffsetRef.current = Math.min(
+          Math.max(event.clientY - trackTop - currentThumbOffset, 0),
+          SCROLLBAR_THUMB_HEIGHT
+        );
+      } else {
+        scrollbarDragOffsetRef.current = SCROLLBAR_THUMB_HEIGHT / 2;
+      }
+
+      isScrollbarDraggingRef.current = true;
+      setIsScrollbarDragging(true);
+      event.currentTarget.setPointerCapture(event.pointerId);
+      scrollPanelFromScrollbar(event.clientY);
+    }
+  );
+
+  const handleScrollbarPointerMove = useMemoizedFn(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!isScrollbarDraggingRef.current) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      scrollPanelFromScrollbar(event.clientY);
+    }
+  );
+
+  const handleScrollbarPointerEnd = useMemoizedFn(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!isScrollbarDraggingRef.current) {
+        return;
+      }
+
+      isScrollbarDraggingRef.current = false;
+      setIsScrollbarDragging(false);
+
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    }
+  );
 
   const { isDarkTheme } = useThemeMode();
 
@@ -868,6 +930,15 @@ export const DashboardPanel: React.FC<{ onSettingClick?(): void }> = ({
                     />
                   );
                 })}
+                {Array.from({ length: placeholderCount }).map((_, index) => (
+                  <div
+                    key={`dashboard-panel-placeholder-${index}`}
+                    className="bg-r-neutral-bg-2"
+                    aria-hidden="true"
+                  >
+                    <div className="panel-item pointer-events-none" />
+                  </div>
+                ))}
               </div>
             </SortableContext>
             <DragOverlay
@@ -952,15 +1023,39 @@ export const DashboardPanel: React.FC<{ onSettingClick?(): void }> = ({
           </DndContext>
         </div>
       </div>
-      <div className="absolute right-[8px] top-[50%] translate-y-[-50%]">
-        <div className="w-[3px] h-[80px] rounded-full relative">
+      <div className="absolute right-[3px] top-[50%] translate-y-[-50%] h-[92px] w-[13px]">
+        <div
+          ref={scrollbarTrackRef}
+          className={clsx(
+            'absolute right-0 top-[6px] h-[80px] cursor-pointer select-none',
+            isScrollbarDragging && 'cursor-grabbing'
+          )}
+          style={{
+            touchAction: 'none',
+            width: SCROLLBAR_HIT_AREA_WIDTH,
+          }}
+          onPointerDown={handleScrollbarPointerDown}
+          onPointerMove={handleScrollbarPointerMove}
+          onPointerUp={handleScrollbarPointerEnd}
+          onPointerCancel={handleScrollbarPointerEnd}
+          onLostPointerCapture={() => {
+            isScrollbarDraggingRef.current = false;
+            setIsScrollbarDragging(false);
+          }}
+        >
           <div
-            className="w-[3px] h-[50px] bg-r-blue-default rounded-full relative z-10"
+            ref={scrollbarThumbRef}
+            className={clsx(
+              'absolute right-[5px] top-0 z-10 h-[50px] w-[3px] rounded-full bg-r-blue-default',
+              isScrollbarDragging ? 'cursor-grabbing' : 'cursor-grab'
+            )}
             style={{
-              transform: `translateY(${scrollRatio * 30}px)`,
+              transform: `translateY(${
+                scrollRatio * SCROLLBAR_THUMB_MAX_OFFSET
+              }px)`,
             }}
           ></div>
-          <div className="rounded-full absolute top-0 left-0 right-0 bottom-0 bg-r-blue-disable opacity-50"></div>
+          <div className="absolute bottom-0 right-[5px] top-0 w-[3px] rounded-full bg-r-blue-disable opacity-50"></div>
         </div>
       </div>
 

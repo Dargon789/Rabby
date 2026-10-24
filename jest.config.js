@@ -9,6 +9,7 @@ const IGNORE_MODULES = [
   'nanoid',
   'uuid',
   '@ethereumjs',
+  'dom-align',
 ].join('|');
 /*
  * For a detailed explanation regarding each configuration property and type check, visit:
@@ -24,6 +25,8 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^ui/(.*)$': '<rootDir>/src/ui/$1',
     '^background/(.*)$': '<rootDir>/src/background/$1',
+    '^@rabby-wallet/staking-sdk$':
+      '<rootDir>/node_modules/@rabby-wallet/staking-sdk/dist/index.js',
   },
 
   // A list of paths to directories that Jest should use to search for files in
@@ -31,6 +34,7 @@ module.exports = {
 
   // The paths to modules that run some code to configure or set up the testing environment before each test
   setupFiles: ['<rootDir>/__tests__/setupTests.ts'],
+  setupFilesAfterEnv: ['<rootDir>/__tests__/setupTestsAfterEnv.ts'],
 
   // The test environment that will be used for testing
   testEnvironment: 'jest-environment-jsdom',
@@ -43,6 +47,7 @@ module.exports = {
 
   // A map from regular expressions to paths to transformers
   transform: {
+    '^.+\\.tsx$': ['ts-jest', { tsconfig: { jsx: 'react' }, useESM: true }],
     '^.+\\.[tj]s$': [
       'ts-jest',
       {

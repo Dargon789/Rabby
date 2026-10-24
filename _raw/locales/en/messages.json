@@ -4,7 +4,9 @@
       "title": "Transactions",
       "empty": {
         "title": "No transactions",
-        "desc": " No transactions found on <1>supported chains</1>"
+        "desc": " No transactions found on <1>supported chains</1>",
+        "noTxInThreeMonth": "No Transaction history in 90 Days",
+        "descThreeMonths": "No Transaction history in 90 Days on <2>supported chains</2>"
       },
       "explain": {
         "approve": "Approve {{amount}} {{symbol}} for {{project}}",
@@ -37,6 +39,191 @@
       "title": "{{count}} chains Integrated",
       "mainnet": "Mainnets",
       "testnet": "Testnets"
+    },
+    "desktopSmallSwap": {
+      "title": "Convert Dust",
+      "description": "Convert low-value tokens into gas token to simplify your asset list !",
+      "receiveTitle": "You Receive",
+      "expectedToReceive": "Expected to receive",
+      "completedTitle": "Dust Converted !",
+      "done": "Done",
+      "conversionProgress": "Conversion progress",
+      "slippageTolerance": "Slippage tolerance",
+      "singleTransactionGasLimit": "Single Transaction Gas Limit",
+      "startConvert": "Start convert",
+      "unsupportedWalletType": "This address type is not supported",
+      "stop": "Stop",
+      "selectLowValueTokens": "Select Low-Value Tokens",
+      "tokenColumn": "Token",
+      "amountColumn": "Amount",
+      "valueColumn": "Value",
+      "statusColumn": "Status",
+      "noLowValueTokensFound": "No low-value tokens found",
+      "selectedTokens": "Selected Tokens",
+      "totalValue": "Total value",
+      "moreChains": "+{{count}} chains",
+      "failReason": {
+        "missingRequiredParams": "Missing required parameters",
+        "quoteUnavailable": "Fail to fetch quote",
+        "gasCostTooHigh": "Exceed gas fee limit",
+        "priceImpactTooHigh": "High price impact",
+        "buildSwapTxsFailed": "Failed to build swap txs",
+        "sendSwapTxFailed": "Failed to send swap tx",
+        "transactionFailed": "Transaction failed",
+        "submitFailed": "Fail to submit transactions",
+        "gasNotEnough": "Insufficient Gas"
+      },
+      "stopTaskModal": {
+        "title": "Stop the current swaps?",
+        "description": "If you stop now, any remaining swaps will not be completed. Please note completed swaps cannot be reversed.",
+        "continueSwap": "Continue swap",
+        "stop": "Stop swap"
+      },
+      "swapFailed": "Swap failed, {{reason}}",
+      "status": {
+        "pending": "Swapping",
+        "idle": "Waiting to swap",
+        "success": "Swap successful"
+      },
+      "completedTips": "Ongoing swap will continue processing",
+      "priceImpact": "Price Impact Cap",
+      "LedgerBtn": {
+        "start": "Start with Ledger",
+        "confirm": "Please confirm with Ledger",
+        "continue": "Continue",
+        "send": "Sending signing request"
+      }
+    },
+    "staking": {
+      "__skip_translation": [
+        "metrics.tvl",
+        "metrics.apr",
+        "metrics.apy",
+        "metrics.lp",
+        "metrics.v2",
+        "metrics.v3"
+      ],
+      "title": "Staking",
+      "searchToken": "Search Token",
+      "myHolding": "My Holding",
+      "holding": "Holding",
+      "protocol": "Protocol",
+      "actions": {
+        "deposit": "Deposit",
+        "withdraw": "Withdraw",
+        "claim": "Claim",
+        "max": "Max",
+        "retry": "Retry"
+      },
+      "filter": {
+        "allProtocol": "All Protocols",
+        "allChains": "All Chains",
+        "selectProtocol": "Select Protocol",
+        "selectChain": "Select Chain",
+        "searchByName": "Search by Name",
+        "searchProtocol": "Search protocol",
+        "searchChain": "Search chain",
+        "all": "All",
+        "clearFilter": "Clear {{filter}}"
+      },
+      "empty": {
+        "noPoolsFound": "No pools found",
+        "noHoldingsFound": "You currently holding no positions.",
+        "noStakingPoolsFound": "No staking pools found",
+        "noProtocols": "No protocols",
+        "noChains": "No chains"
+      },
+      "error": {
+        "failedLoadData": "Failed to load staking data",
+        "failedLoadPools": "Failed to load staking pools",
+        "failedLoadPool": "Failed to load staking pool",
+        "failedLoadChart": "Failed to load staking chart",
+        "failedLoadPosition": "Failed to load position",
+        "transactionFailed": "Staking transaction failed"
+      },
+      "metrics": {
+        "tvl": "TVL",
+        "apr": "APR",
+        "apy": "APY",
+        "yield": "Yield",
+        "lp": "LP",
+        "v2": "V2",
+        "v3": "V3"
+      },
+      "tabs": {
+        "portfolio": "Portfolio",
+        "about": "About",
+        "security": "Security"
+      },
+      "detail": {
+        "poolNotFound": "Staking pool not found",
+        "unsupportedAction": "Unsupported staking action.",
+        "noChartData": "No chart data"
+      },
+      "about": {
+        "pool": "Pool",
+        "address": "Address",
+        "poolAddress": "Pool Address",
+        "uptime": "Uptime",
+        "days": "{{count}} days",
+        "token": "Token",
+        "token1": "Token1",
+        "token2": "Token2",
+        "tokenAddress": "Token address",
+        "token1Address": "Token1 address",
+        "token2Address": "Token2 address",
+        "aboutProtocol": "About {{protocol}}",
+        "noDescription": "No protocol description available.",
+        "showMore": "Show more",
+        "showLess": "Show less",
+        "officialWebsite": "Official Website",
+        "twitter": "X(Twitter)"
+      },
+      "security": {
+        "certifications": "Certifications",
+        "certifiedBy": "Certified by",
+        "certifiedOn": "Certified on",
+        "action": "Action",
+        "view": "View",
+        "noCertificationData": "No certification data"
+      },
+      "portfolio": {
+        "pending": "Pending",
+        "succeed": "Succeeded",
+        "failed": "Failed",
+        "supplied": "Supplied",
+        "rewards": "Rewards",
+        "rewardsWithCount": "Rewards ({{count}})",
+        "priceRange": "Price Range",
+        "noSuppliedAssets": "No supplied assets",
+        "noRewards": "No rewards right now"
+      },
+      "actionModal": {
+        "receive": "Receive",
+        "setPriceRange": "Set Price Range",
+        "range": "Range",
+        "unused": "Unused",
+        "unsupportedPool": "Unsupported pool",
+        "unsupportedErc4626Pool": "Unsupported ERC4626 pool",
+        "unsupportedLpPool": "Unsupported LP pool",
+        "unsupportedChain": "Unsupported chain",
+        "unavailable": "Unavailable",
+        "tokenFallback": "token",
+        "insufficientBalance": "Insufficient {{symbols}} balance",
+        "noWithdrawablePosition": "No withdrawable position",
+        "noClaimableRewards": "No claimable rewards",
+        "submitted": "{{action}} submitted",
+        "submitFailed": "Failed to submit {{action}}",
+        "confirmPoolPriceDifference": "Confirm pool price difference",
+        "poolPriceWarning": "A 10% price impact cap creates arbitrage risks.",
+        "poolPriceTitle": "Pool price: 1 {{token0}} = {{poolPrice}} {{token1}}; Market price: 1 {{token0}} = {{marketPrice}} {{token1}}",
+        "singleAssetDepositOnly": "The market price is outside your specified price range. Single-asset deposit only.",
+        "failedResolveV2Pool": "Failed to resolve V2 pool",
+        "failedResolveV3Pool": "Failed to resolve V3 pool",
+        "noLpPositionToWithdraw": "No LP position to withdraw",
+        "v2RewardsUnsupported": "V2 rewards are not supported",
+        "selectV3PositionToWithdraw": "Select a V3 position to withdraw"
+      }
     },
     "signTx": {
       "nftIn": "NFT in",
@@ -303,7 +490,7 @@
       "safeTx": {
         "selfHostConfirm": {
           "title": "Switch to Rabby's Safe Service",
-          "content": "Safe API is unavailable. Switch to the Safe service deployed by Rabby to keep your Safe functional. <strong>All Safe signers must use Rabby Wallet to authorize transactions.<strong>",
+          "content": "Safe API is unavailable. Switch to the Safe service deployed by Rabby to keep your Safe functional. <strong>All Safe signers must use Rabby Wallet to authorize transactions.</strong>",
           "button": "OK"
         }
       },
@@ -376,6 +563,10 @@
         "gasExceedsBlockGasLimit": "Gas exceeds block gas limit. Please adjust and try again.",
         "InvalidTx": "Invalid transaction.",
         "gasLimitTooLow": "Gas limit too low"
+      },
+      "signMessageTag": {
+        "contract": "Contract:",
+        "eoa": "EOA:"
       }
     },
     "signFooterBar": {
@@ -402,11 +593,12 @@
       },
       "gasAccount": {
         "customRPC": "Not supported when using custom RPC",
-        "notEnough": "GasAccount is not enough",
+        "notEnough": "Not enough gas. Gas Balance: {{usd}}",
         "useGasAccount": "Use GasAccount",
         "WalletConnectTips": "WalletConnect is not supported by GasAccount",
         "chainNotSupported": "This chain is not supported by GasAccount",
         "loginFirst": "Please log in to GasAccount first",
+        "signWithHardwareWalletToUse": "You need to sign with {{brand}} to use",
         "login": "Log in",
         "gotIt": "Got it",
         "deposit": "Deposit",
@@ -656,7 +848,10 @@
       "title": "Receive {{token}} on {{chain}}",
       "watchModeAlert1": "This is a Watch Mode address.",
       "watchModeAlert2": "Are you sure to use it to receive assets?",
-      "receiveOn": "Receive {{token}} on"
+      "receiveOn": "Receive {{token}} on",
+      "receiveTitle": "Receive {{token}}",
+      "addCustomNetwork": "Add custom network",
+      "supportedChain": "Supported chains"
     },
     "sendToken": {
       "addressNotInContract": "Not on address list. <1></1><2>Add to contacts</2>",
@@ -767,6 +962,8 @@
       "title": "Perps",
       "deposit": "Deposit",
       "withdraw": "Withdraw",
+      "transferToSpot": "Transfer to Spot",
+      "transferToPerps": "Transfer to Perps",
       "positions": "Positions",
       "openProModeInTab": "Open Pro Mode in Tab",
       "closeAll": "Close All",
@@ -776,9 +973,29 @@
       },
       "cancelAllOrdersPopup": {
         "title": "Confirm Cancel All Orders",
+        "cancelAllOrdersConfirmTitle": "Confirm Cancel ALL Orders",
+        "cancelAllOrdersConfirmMessage": "All your Limit Orders will be canceled",
         "description": "All your open orders will be cancelled."
       },
+      "limitOrders": "Limit Orders",
+      "cancelAll": "Cancel All",
+      "limitOrderDetail": {
+        "title": "Limit {{side}} {{pair}}",
+        "time": "Time",
+        "size": "Size",
+        "filled": "Filled",
+        "currentPrice": "Current Price",
+        "limitPrice": "Limit Price",
+        "marginUsage": "Margin Usage",
+        "cancelLimitOrder": "Cancel Limit Order",
+        "buy": "Buy",
+        "sell": "Sell"
+      },
       "toast": {
+        "cancelLimitOrderSuccess": "Limit order canceled",
+        "cancelLimitOrdersSuccess": "{{count}} limit orders canceled",
+        "cancelLimitOrderError": "Failed to cancel limit order",
+        "limitOrderPlaced": "Limit {{direction}} {{coin}}: Size {{size}} placed at ${{price}}",
         "deposit": "Deposit successful",
         "depositTip": "{{amount}} USDC deposited",
         "success": "Success",
@@ -832,6 +1049,27 @@
         "ytd": "YTD",
         "all": "ALL"
       },
+      "PerpsCard": {
+        "portfolioValue": "Portfolio Value",
+        "available": "Available",
+        "unifiedAccount": "Unified Account",
+        "unifiedAccountDesc": "Your account uses a single balance for each collateral asset, shared across Spot and cross-margin Perps using the same collateral.",
+        "manualAccount": "Manual Account",
+        "manualAccountDesc": "You manage separate balances across Spot and each Perps DEX, with independent cross margin per DEX.",
+        "portfolioMarginAccount": "Portfolio Margin",
+        "portfolioMarginAccountDesc": "Your account combines eligible Spot assets and Perps positions into a single portfolio for greater capital efficiency.",
+        "breakdownPerps": "Perps",
+        "breakdownSpot": "Spot",
+        "breakdownOtherAssets": "Other Assets",
+        "breakdownNetOtherAssets": "Net Other Assets",
+        "breakdownStaking": "Staking",
+        "period": {
+          "day": "1D",
+          "week": "1W",
+          "month": "1M",
+          "all": "All"
+        }
+      },
       "permissionTips": "Opening positions is not supported in your region",
       "newUserProcess": {
         "gotIt": "Got it",
@@ -849,6 +1087,15 @@
       },
       "historyDetail": {
         "date": "Date",
+        "amount": "Amount",
+        "asset": "Asset",
+        "action": "Action",
+        "value": "Value",
+        "buy": "Buy",
+        "sell": "Sell",
+        "transferDetailTitle": "Transfer",
+        "transferActionToSpot": "Transfer (from Perps to Spot)",
+        "transferActionToPerps": "Transfer (from Spot to Perps)",
         "price": "Price",
         "size": "Size",
         "tradeValue": "Trade Value",
@@ -874,8 +1121,70 @@
         "title": "Log Out Current Address",
         "desc": "You are logging out of your current Perps account. You can restore it anytime by logging in with this address."
       },
+      "PerpsDepositCard": {
+        "availableToTrade": "Available to trade: ",
+        "deposit": "Deposit",
+        "swap": "Swap"
+      },
+      "selectChainToWithdraw": "Select Chain to Withdraw",
+      "selectTokenToWithdraw": "Select Token to Withdraw",
+      "EnableUnifiedAccount": {
+        "title": "Enable Unified Account",
+        "desc": "Unified Account is the recommended account mode that simplifies the trading experience. Spot and Perps balances are merged for all tokens, and cross margin is supported on all available assets.",
+        "confirm": "Confirm",
+        "enable": "Enable",
+        "cancel": "Cancel",
+        "importantTips": "All USDC collateral will be used as cross margin once Unified Account is enabled.",
+        "important": "Important"
+      },
+      "PerpsSpotSwap": {
+        "title": "Swap Stablecoins",
+        "from": "From",
+        "to": "Swap To",
+        "balance": "Balance",
+        "estReceive": "Est.Receive",
+        "swapBtn": "Swap",
+        "insufficientBalance": "Insufficient balance",
+        "invalidAmount": "Please input a valid amount",
+        "minimumAmount": "The minimum swap amount is {{amount}}",
+        "max": "Max",
+        "toDeposit": "To Deposit →",
+        "swapBeforeTrading": "Swap USDC to {{quoteAsset}} before trading",
+        "enabledSuccess": "Unified Account enabled",
+        "enableFailed": "Enable Unified Account failed",
+        "swapFailed": "Swap failed",
+        "swapSuccess": "Swap completed successfully",
+        "estReceiveTooltip": "Estimated receive amount is subject to market price fluctuations.",
+        "buyAsset": "Buy {{asset}}",
+        "sellAsset": "Sell {{asset}}",
+        "toSwapEntry": "To Swap →",
+        "toDepositEntry": "To Deposit →"
+      },
+      "PerpsTransferToPerps": {
+        "title": "Transfer",
+        "from": "From",
+        "to": "To",
+        "spot": "Spot",
+        "perps": "Perps",
+        "balance": "Balance",
+        "amount": "Amount",
+        "max": "Max",
+        "submit": "Confirm",
+        "insufficientBalance": "Insufficient balance",
+        "invalidAmount": "Please input a valid amount"
+      },
+      "PerpsMultiBalance": {
+        "title": "Hyperliquid Balances",
+        "deposit": "Deposit",
+        "withdraw": "Withdraw"
+      },
+      "PerpsAbout": {
+        "title": "About"
+      },
       "depositAmountPopup": {
         "amount": "Amount",
+        "balance": "Balance",
+        "chain": "Chain",
         "payWith": "Pay With",
         "feeTip": "$1 Fee",
         "feeTipTooltip": "Withdrawal Fee charged by Hyperliquid: $1",
@@ -916,7 +1225,6 @@
       "balanceAvailable": "Balance: {{balance}}",
       "lastUsed": "Last used",
       "selectTokenToDeposit": "Select Token to Deposit",
-      "selectTokenToWithdraw": "Select Withdrawal Network",
       "tradePerps": "Trade Perps",
       "position": "Position",
       "yourPosition": "Your Position",
@@ -928,6 +1236,7 @@
       "marginIsolated": "Margin (Isolated)",
       "marginCross": "Margin (Cross)",
       "marginMode": "Margin Mode",
+      "marginModeSwitchFailed": "Failed to switch margin mode, please try again",
       "cannotChangeMarginModeWithOpenPositions": "Cannot change Margin Mode with open positions",
       "crossMargin": "Cross Margin",
       "crossMarginDesc": "All positions share the same margin. This reduces the chance of a single position being liquidated, but all cross-margin funds can be lost in extreme market moves.",
@@ -938,6 +1247,7 @@
       "currentPrice": "Current Price",
       "settings": "Settings",
       "details": "Details",
+      "info": "Info",
       "liquidationDistanceDown": "Going down <bold>{{percent}}</bold> will trigger liquidation",
       "liquidationDistanceUp": "Going up <bold>{{percent}}</bold> will trigger liquidation",
       "autoClose": "Auto Close",
@@ -967,8 +1277,7 @@
       "openPositionTips": "Trading perpetual contracts involves significant risk, including the potential for sudden and total loss of your investment and collateral due to high leverage and market volatility, and may not be suitable for all users. Prices may be influenced by funding rates and liquidity and you may be subject to automatic liquidations without notice. Market data provided by Hyperliquid.",
       "liquidationPriceTips": "The price at which your position is automatically closed by the exchange to prevent further losses when your margin falls below the maintenance margin level.",
       "sizeTips": "The total value or quantity of your trade, set by margin and leverage.",
-      "rabbyFeeTipsV2": "Rabby fee: 0.02%",
-      "rabbyFeeTipsZero": "Rabby fee: 0%",
+      "rabbyFeeTipsV2": "Rabby fee: 0.04%",
       "providerFeeTips": "Hyperliquid fee: {{fee}}",
       "timeAgo": "{{time}} ago",
       "takeProfitTipsLong": "Take profit price must be higher than current price",
@@ -987,6 +1296,9 @@
       "reviewOrder": "Review Order",
       "back": "Back",
       "estimatedLiquidationPrice": "Estimated Liquidation Price",
+      "expectedSlippage": "Estimated Slippage",
+      "lowLiquiditySwitchLimit": " Low liquidity, switch to Limit Order.",
+      "switchToLimit": "Switch",
       "fee": "Fee",
       "leverageRangeMaxError": "The maximum leverage is {{max}}x",
       "leverageRangeMinError": "The minimum leverage is {{min}}x",
@@ -1039,6 +1351,10 @@
         "empty": "No markets found",
         "hasPosition": "Position"
       },
+      "categories": {
+        "favorite": "Favorites",
+        "topVolume": "Top Volume"
+      },
       "fundingRate": "Funding Rate",
       "fundingGains": "Funding Gains",
       "close": "Close",
@@ -1046,6 +1362,14 @@
       "addFunds": "Add Funds",
       "newUserGuide": {
         "learnMore": "Learn More"
+      },
+      "perpsWidgetGuide": {
+        "title": "Your PNL Always in View",
+        "bulletViewPositions": "Track your top positions on any webpage.",
+        "bulletPrices": "Hover to view market data and PNL.",
+        "bulletToggle": "Turn it on or off anytime.",
+        "later": "Not Now",
+        "open": "Enable Widget"
       },
       "invitePopup": {
         "title": "Save on Hyperliquid Fees",
@@ -1073,7 +1397,11 @@
         "24hVol": "24h Vol",
         "volume": "Volume",
         "fundingCountdown": "Funding / Countdown",
-        "8hrFunding": "8h Funding"
+        "8hrFunding": "8h Funding",
+        "categoryAll": "ALL"
+      },
+      "topBar": {
+        "favoriteEmpty": "Your favorite list is empty"
       },
       "userInfo": {
         "tab": {
@@ -1118,7 +1446,17 @@
           "twap": "TWAP",
           "tradeHistory": "Trade History",
           "fundingHistory": "Funding History",
-          "orderHistory": "Order History"
+          "orderHistory": "Order History",
+          "assets": "Assets",
+          "about": "About"
+        },
+        "floatingWidget": {
+          "label": "Floating Widget",
+          "tooltip": "· Show your account PnL in a floating widget while\n  browsing other pages.\n· Hidden on the trading page and Hyperliquid.",
+          "enabledToastTitle": "Floating widget enabled",
+          "enabledToastDescription": "It will appear when you browse other pages.",
+          "disabledToastTitle": "Floating widget disabled",
+          "updateFailed": "Failed to update setting"
         },
         "emptyMessage": {
           "openOrders": "No open orders",
@@ -1128,7 +1466,19 @@
           "tradeHistory": "No trade history",
           "fillHistory": "No fill history",
           "fundingHistory": "No funding history",
-          "orderHistory": "No order history"
+          "orderHistory": "No order history",
+          "assets": "No assets"
+        },
+        "assets": {
+          "columnAsset": "Assets",
+          "columnTotal": "Total Balance",
+          "columnAvailable": "Available Balance",
+          "columnAction": "Action",
+          "swapStablecoins": "Swap Stablecoins",
+          "enableUnifiedAccount": "Enable Unified Account",
+          "transferToPerps": "Transfer to Perps",
+          "usdcSpot": "USDC(Spot)",
+          "usdcPerps": "USDC(Perps)"
         },
         "positionInfo": {
           "viewOrders": "View Orders",
@@ -1157,7 +1507,15 @@
           "marketCloseBtn": "Market Close",
           "dontShowAgain": "Don't show this again",
           "confirmCloseAllTitle": "Confirm Close All Positions",
-          "confirmCloseAllDesc": "All your open positions will be closed at market price and cancel all orders."
+          "confirmCloseAllDesc": "All your open positions will be closed at market price and cancel all orders.",
+          "positionSize": "Position Size",
+          "orderPrice": "Order Price",
+          "marketPrice": "Market Price",
+          "buy": "Buy",
+          "sell": "Sell",
+          "buyToSell": "Buy to sell",
+          "sellToBuy": "Sell to buy",
+          "reverseAction": "{{side}} {{size}} {{coin}} to Reverse"
         },
         "openOrders": {
           "__skip_translation": ["ro"],
@@ -1208,11 +1566,93 @@
       "statusBar": {
         "online": "Online",
         "offline": "Offline",
-        "sound": "Enable Sound"
+        "sound": "Enable Sound",
+        "settings": "Settings"
+      },
+      "orderConfirm": {
+        "buyLong": "Buy/Long",
+        "sellShort": "Sell/Short",
+        "closeLong": "Close Long",
+        "closeShort": "Close Short",
+        "dontShowAgain": "Don't show {{orderType}} confirmation again. You can change this anytime in Settings.",
+        "orderTypeName": {
+          "market": "Market Order",
+          "limit": "Limit Order",
+          "conditional": "Conditional Order",
+          "twap": "TWAP Order",
+          "closeMarket": "Close Market",
+          "closeLimit": "Close Limit",
+          "tpsl": "TP/SL"
+        },
+        "price": "Price",
+        "marketPrice": "Market Price",
+        "markPrice": "Mark Price",
+        "triggerPrice": "Trigger Price",
+        "amount": "Amount",
+        "estLiqPrice": "Est. Liq. Price",
+        "estLiqDistance": "Est. Liq. Distance",
+        "reduceOnly": "Reduce Only",
+        "yes": "Yes",
+        "no": "No",
+        "true": "True",
+        "false": "False",
+        "estPnl": "Est. Pnl",
+        "tpSl": "TP/SL",
+        "takeProfitMarket": "Take Profit Market",
+        "stopLossMarket": "Stop Loss Market",
+        "trigger": "Trigger",
+        "totalAmountApproximately": "Total Amount Approximately",
+        "totalSize": "Total Size",
+        "totalTime": "Total Time",
+        "lastPrice": "Last Price",
+        "tpslTitle": "Confirm Position TP/SL",
+        "symbol": "Symbol",
+        "entryPrice": "Entry Price",
+        "takeProfit": "Take Profit",
+        "stopLoss": "Stop Loss",
+        "totalEstimatedPnl": "Total Estimated PNL",
+        "orderPreview": "Order Preview",
+        "scaleSymbol": "Symbol",
+        "scaleOrderType": "Order Type",
+        "scaleAmount": "Amount",
+        "scalePrice": "Price",
+        "scaleLimit": "Limit",
+        "cost": "Cost"
+      },
+      "settings": {
+        "title": "Setting",
+        "accountType": "Account Type",
+        "orderConfirmations": "Order Confirmations",
+        "soundReminder": "Sound Reminder",
+        "popularTradings": "Popular Tradings",
+        "accountTypeTitle": "Account Type",
+        "orderConfirmationsTitle": "Order Confirmations",
+        "orderConfirmationRow": {
+          "limit": "Limit Order",
+          "market": "Market Order",
+          "conditional": "Conditional Order",
+          "twap": "TWAP Order",
+          "closeMarket": "Close Market",
+          "closeLimit": "Close Limit",
+          "tpsl": "TP/SL Order"
+        },
+        "accountTypeOption": {
+          "unifiedAccountLabel": "Unified Account (Recommend)",
+          "unifiedAccountShortLabel": "Unified Account",
+          "unifiedAccountDesc": "The default account setting where each collateral asset has a separate balance. Perps can only use the settlement asset as collateral, and margining is only shared across cross margin assets with the same collateral asset.",
+          "manualLabel": "Manual",
+          "manualDesc": "Only recommended for automated traders. All DEXs have separate balances and cross margin applies separately within each DEX.",
+          "portfolioMarginLabel": "Portfolio Margin",
+          "portfolioMarginDesc": "For advanced users who want greater flexibility and capital efficiency. All trading is unified across spot and perps. Eligible collateral assets such as HYPE and BTC can be used directly as collateral for perp positions without converting to the settlement asset. Collateral assets earn or pay interest depending on whether they are at rest or actively borrowed to open positions."
+        },
+        "accountTypeSwitchSuccess": "Account type changed to: {{type}}",
+        "accountTypeSwitchFailed": "Failed to update account type"
       },
       "tradingPanel": {
+        "swapStableCoins": "Swap Stablecoins",
         "bboTips": "Best Bid Offer (BBO) refers to the best-available ask price and the best-available bid price on the order book at any given time. BBO orders are always placed using the precise minimum tick size , ensuring granular and accurate pricing independent of display preferences.",
         "bboDisabledTooltip": "BBO is not supported when {{bboDisabledReason}} is enabled",
+        "bboPriceUnavailable": "No order book price available right now. Please try again.",
         "action": "Action",
         "orderCount": "Order Count",
         "buyTrigger": "Buy Trigger",
@@ -1244,6 +1684,7 @@
         "reduceOnly": "Reduce Only",
         "enableTrading": "Enable Trading",
         "addFundsToGetStarted": "Add funds to get started",
+        "notAvailableInRegion": "Not available in your region.",
         "startPrice": "Start Price",
         "endPrice": "End Price",
         "start": "Start",
@@ -1347,12 +1788,18 @@
         "configureMargin": "Configure Margin",
         "longLiquidationTips": "Going down {{percent}} will trigger liquidation",
         "shortLiquidationTips": "Going up {{percent}} will trigger liquidation",
-        "currentPosition": "Current Position"
+        "currentPosition": "Current Position",
+        "currentPrice": "Current Price"
       },
       "editTpSl": {
         "entryPrice": "Entry Price:",
         "markPrice": "Mark Price:",
-        "title": "Configure TP/SL",
+        "entryCurrentPrice": "Entry Price / Current Price",
+        "title": "TP/SL for entire position",
+        "takeProfit": "Take Profit",
+        "stopLoss": "Stop Loss",
+        "triggerPrice": "Trigger Price",
+        "estimatedPnlWillBe": "Your estimated PnL will be",
         "gain": "Gain",
         "loss": "Loss",
         "cancelTp": "Cancel TP",
@@ -1362,7 +1809,58 @@
         "currentPosition": "Current Position",
         "tp": "TP",
         "sl": "SL",
-        "confirm": "Confirm"
+        "confirm": "Confirm",
+        "triggerHigherThanLiquidation": "The trigger price should be higher than the liquidation price {{price}}",
+        "triggerLowerThanLiquidation": "The trigger price should be lower than the liquidation price {{price}}",
+        "tpTriggerInvalid": "The TP trigger price is invalid and will not be set",
+        "slTriggerInvalid": "The SL trigger price is invalid and will not be set"
+      },
+      "positionTpSl": {
+        "title": "TP/SL",
+        "addTitle": "Add TP/SL",
+        "modifyTitle": "Modify TP/SL",
+        "modifyPositionTitle": "Modify Position TP/SL",
+        "confirmTitle": "Confirm TP/SL",
+        "tabPartial": "TP/SL",
+        "tabPosition": "Position TP/SL",
+        "entryPrice": "Entry Price",
+        "markPrice": "Mark Price",
+        "estLiqPrice": "Est. Liq. Price",
+        "takeProfit": "Take Profit",
+        "stopLoss": "Stop Loss",
+        "tpTrigger": "TP Trigger",
+        "slTrigger": "SL Trigger",
+        "pnl": "PNL",
+        "roi": "ROI",
+        "estimatedPnlHint": "Your estimated PnL will be <value>{{pnl}} {{quoteAsset}} (ROI: {{roi}}%)</value>",
+        "invalidTriggerForMark": "Trigger price is invalid for the latest Mark Price",
+        "amount": "Amount",
+        "positionAmount": "Position Amount {{amount}} {{unit}}",
+        "introPartialTitle": "What is TP/SL?",
+        "introPartialDesc": "Set take profit and stop loss for a specific amount. This amount stays fixed even if your position size changes.",
+        "introPositionTitle": "What is Position TP/SL?",
+        "introPositionDesc": "Set take profit and stop loss for your entire position. The amount automatically adjusts as your position size changes.",
+        "gotIt": "Got it",
+        "whatIsPositionTpSl": "What is Position TP/SL ?",
+        "addTpSl": "Add TP/SL",
+        "cancelAll": "Cancel All",
+        "positionSizeCoverage": "{{percent}} Position Size",
+        "triggerPrice": "Trigger Price",
+        "estPnl": "Est. PnL ({{unit}})",
+        "price": "Price",
+        "market": "Market",
+        "unfilledAmt": "Unfilled Amount ({{unit}})",
+        "all": "All",
+        "modify": "Modify",
+        "cancel": "Cancel",
+        "add": "Add",
+        "volume": "Volume",
+        "estimatedPnl": "Estimated PNL",
+        "submitted": "TP/SL submitted",
+        "partialSubmitted": "Some TP/SL orders were submitted. The latest orders are shown after refresh.",
+        "contextChanged": "Position or Mark Price changed. Please review again.",
+        "noTp": "no TP",
+        "noSl": "no SL"
       },
       "accountInfo": {
         "available": "Available: ",
@@ -1376,11 +1874,35 @@
         "availableBalance": "Available Balance",
         "unrealizedPnl": "Unrealized P&L",
         "crossMarginRatio": "Cross Margin Ratio",
-        "crossMarginRatioTips": "Maintenance Margin / Portfolio Value. Your cross positions will be liquidated if Margin Ratio reaches 100%.",
+        "crossMarginRatioTips": "Maintenance Margin / Margin Balance. Your cross positions will be liquidated if Margin Ratio reaches 100%.",
         "crossAccountLeverage": "Cross Account Leverage",
         "crossAccountLeverageTips": "Cross Account Leverage = Total Cross Position Value / Cross Account Value.",
         "maintenanceMargin": "Maintenance margin",
-        "maintenanceMarginTips": "The minimum portfolio value required to keep your cross positions open"
+        "maintenanceMarginTips": "The minimum portfolio value required to keep your cross positions open",
+        "accountSummary": "Account Summary",
+        "unifiedAccountSummary": "Unified Account Summary",
+        "unifiedAccountRatio": "Unified Account Ratio",
+        "unifiedAccountRatioTips": "Represents the risk of portfolio liquidation. When the value is greater than 95%, your portfolio may be liquidated.",
+        "unifiedAccountLeverage": "Unified Account Leverage",
+        "unifiedAccountLeverageTips": "Unified Account Leverage = Total Cross Positions Value / Total Collateral Balance.",
+        "perpsMaintenanceMargin": "Perps Maintenance Margin",
+        "perpsPortfolioValue": "Perps Portfolio Value",
+        "perpsUnrealizedPnl": "Perps Unrealized PNL",
+        "perpsAccountSummary": "Perps Account Summary",
+        "portfolioMarginSummary": "Portfolio Margin Summary",
+        "portfolioMarginRatio": "Portfolio Margin Ratio",
+        "portfolioMarginRatioTips": "Maintenance Margin / LTV-adjusted Portfolio Value. When the value is greater than 95%, your portfolio may be liquidated.",
+        "marginBalance": "Margin Balance",
+        "marginBalanceTips": "Margin Balance = Wallet Balance + Unrealized PNL. Your positions will be liquidated once Margin Balance <= Maintenance Margin.",
+        "totalCollateralBalance": "Total Collateral Balance",
+        "totalCollateralBalanceTips": "Total value of the collateral backing your unified account.",
+        "ltvAdjustedPortfolioValue": "LTV-adjusted Portfolio Value",
+        "ltvAdjustedPortfolioValueTips": "Total portfolio value after each asset's LTV haircut; must stay above the maintenance requirement.",
+        "borrowCapUsed": "Borrow Cap Used",
+        "borrowCapUsedTips": "When this value is 100%, further collateral will not contribute to portfolio margin",
+        "portfolioValue": "Portfolio Value",
+        "portfolioValueUnifiedTips": "Portfolio Value includes the value of spot assets in your Unified Account.",
+        "portfolioValuePortfolioMarginTips": "Portfolio Value includes the value of spot assets in your Portfolio Margin Account."
       },
       "accountActions": {
         "pending": "Pending",
@@ -1395,13 +1917,18 @@
         "trades": "Trades",
         "price": "Price",
         "amount": "Amount",
+        "size": "Size",
+        "sum": "Sum",
         "total": "Total",
         "markPrice": "Mark Price",
         "time": "Time",
         "noTrades": "No trades",
         "viewBoth": "Both",
         "viewBids": "Bids",
-        "viewAsks": "Asks"
+        "viewAsks": "Asks",
+        "avgPrice": "Avg. Price",
+        "sumBase": "Sum {{base}}",
+        "sumUsd": "Sum USD"
       }
     },
     "perpsDetail": {
@@ -1415,6 +1942,9 @@
       },
       "PerpsOpenPositionPopup": {
         "newPosition": "Open Position",
+        "openCoinPosition": "Open {{coin}} Position",
+        "checkMarketOrder": "Check Market Order",
+        "checkLimitOrder": "Check Limit Order",
         "margin": "Margin",
         "long": "Long",
         "short": "Short",
@@ -1434,7 +1964,24 @@
         "minimumOrderSize": "The minimum order size is $10",
         "maximumOrderSize": "The maximum order size is {{amount}}",
         "minMargin": "Minimum margin is {{amount}}",
-        "maxMargin": "Maximum margin is {{amount}}"
+        "maxMargin": "Maximum margin is {{amount}}",
+        "orderType": "Order Type",
+        "currentPrice": "Current Price",
+        "check": "Check",
+        "orderTypeMarket": "Market",
+        "orderTypeLimit": "Limit",
+        "limitPrice": "Limit Price",
+        "mayExecuteImmediately": "This limit order may execute immediately",
+        "setLimitOrderBtn": "Set Limit Order"
+      },
+      "PerpEditLimitPriceTag": {
+        "setLimitBuyPrice": "Set Limit Buy Price",
+        "setLimitSellPrice": "Set Limit Sell Price",
+        "mid": "Mid",
+        "set": "Set",
+        "warning": "Limit price is 5%+ away from the market price",
+        "confirmTitle": "Review Limit Price",
+        "confirmMessage": "Limit price is 5%+ away from market price"
       },
       "PerpsEditMarginPopup": {
         "margin": "Margin",
@@ -1458,12 +2005,12 @@
         "liqDistance": "Liq. Distance"
       },
       "PerpsClosePositionPopup": {
-        "title": "Close Position",
+        "title": "Close {{coin}} Position",
         "amount": "Amount",
         "total": "Total",
         "minimumWarning": "Minimum close amount is {{percent}}%",
-        "receive": "Receive",
-        "closedPnl": "Closed PNL",
+        "receive": "Est. Receive",
+        "closedPnl": "Est. PNL",
         "fee": "Fee",
         "confirm": "Confirm"
       },
@@ -1479,6 +2026,8 @@
         "EntryAndCurrentPrice": "Entry: ${{entryPrice}} Current: ${{currentPrice}}",
         "priceAbove": "Price above",
         "priceBelow": "Price below",
+        "whenPriceAbove": "When Price Above",
+        "whenPriceBelow": "When Price Below",
         "youGain": "You gain",
         "youLoss": "You lose",
         "takeProfitExpectedPNL": "Take Profit Expected PNL",
@@ -1496,354 +2045,6 @@
         "cancel": "Cancel"
       },
       "needDepositFirst": "You need to deposit funds first."
-    },
-    "lending": {
-      "__skip_translation": [
-        "isolated",
-        "apy",
-        "marketSlot",
-        "market",
-        "maxLtv",
-        "tvl"
-      ],
-      "title": "Lending",
-      "isolate": "isolated",
-      "isolateTip": "This is an isolated market",
-      "noData": "No data",
-      "supplyApy": "Supply APY",
-      "borrowApy": "Borrow APY",
-      "supplyBalance": "Supply Balance",
-      "borrowBalance": "Borrow Balance",
-      "totalSupply": "Total Supply",
-      "totalBorrow": "Total Borrow",
-      "isolated": "isolated",
-      "apy": "APY",
-      "tvl": "TVL",
-      "maxLtv": "Max LTV",
-      "gotIt": "Got it",
-      "marketSlot": "{{market}} Market",
-      "submitted": "submitted",
-      "netWorth": "Net worth",
-      "totalBorrowed": "Total borrowed",
-      "totalSupplied": "Total supplied",
-      "netApy": "Net APY",
-      "supplied": "Supplied",
-      "borrowed": "Borrowed",
-      "estDailyEarning": "Est.Daily Earning",
-      "estNetApy": "Est. net APY",
-      "selectChain": "Select Chain",
-      "selectMarket": "Select Market",
-      "searchMarket": "Search Market",
-      "hf": "Health factor",
-      "hfTitle": "Health Factor",
-      "enterAmount": "Enter Amount",
-      "disabled": "DISABLED",
-      "availableCard": {
-        "canBorrow": "You can borrow based on your supplied collateral, up to the borrow cap.",
-        "needSupply": "To borrow, you need to supply assets as collateral.",
-        "isolated": "Borrowing power and assets are limited due to Isolation mode.",
-        "emode": "Some assets are unavailable to borrow in E-Mode. Exit E-Mode to access all assets.",
-        "singleAssetUnavailableForEmode": "Unavailable to borrow. Exit E-Mode to access.",
-        "emodeNoAssets": "We couldn't find any assets related to your search. Try again with a different category."
-      },
-      "list": {
-        "headers": {
-          "token": "Token",
-          "token_balance": "Token/Balance",
-          "my_balance": "My Balance",
-          "my_assets": "My Assets",
-          "token_tvl": "Token/TVL",
-          "myBorrows": "My borrows",
-          "totalBorrowed": "Total Borrowed",
-          "mySupplies": "My supplies"
-        },
-        "item": {
-          "__skip_translation": ["tvl"],
-          "tvl": "TVL",
-          "wrapperToken": "Wrapped token for {{name}}"
-        }
-      },
-      "repayDetail": {
-        "actions": "Repay",
-        "amountTitle": "Balance: ",
-        "approveAndRepay": "Approve and Repay",
-        "repayWith": "Repay with",
-        "tabs": {
-          "wallet": "Wallet balance",
-          "collateral": "Collateral"
-        }
-      },
-      "supplyDetail": {
-        "actions": "Supply",
-        "supplied": "Supplied",
-        "amountTitle": "Available: ",
-        "approveAndSupply": "Approve and Supply",
-        "availableToBorrow": "Available to borrow",
-        "supplyAPY": "Supply APY",
-        "supplyBalance": "Supply Balance",
-        "collateralization": "Collateralization",
-        "enabled": "Enabled",
-        "unavailable": "Unavailable",
-        "isolatedTips": "Your existing lending/borrowing assets are not supported."
-      },
-      "withdrawDetail": {
-        "actions": "Withdraw",
-        "remainingSupply": "Remaining supply",
-        "amountTitle": "Balance: "
-      },
-      "toggleCollateralDetail": {
-        "actions": "Toggle {{asset}} Collateral",
-        "enable": "Enable {{asset}} as Collateral",
-        "disable": "Disable {{asset}} as Collateral",
-        "error": "There is some error with the AAVE service. Please try again later."
-      },
-      "toggleCollateralModal": {
-        "openTitle": "Review Enabling",
-        "closeTitle": "Review Disabling",
-        "enableIsolationModeTitle": "Enable Isolation Mode",
-        "exitIsolationModeTitle": "Exit Isolation Mode",
-        "openDesc": "Enabling this asset as collateral increases your borrowing power and Health Factor. However, it can get liquidated if your health factor drops below 1.",
-        "closeDesc": "Disabling this asset as collateral affects your borrowing power and Health Factor.",
-        "enableIsolationModeDesc": "You are entering Isolation mode. In Isolation mode, you cannot supply other assets as collateral. A global debt ceiling limits the borrowing power of the isolated asset. To exit isolation mode disable CRV as collateral before borrowing another asset.",
-        "exitIsolationModeDesc": "You will exit Isolation mode and other tokens can now be used as collateral.",
-        "riskToLiquidationText": "You can not switch usage as collateral mode for this currency, because it will cause collateral call",
-        "toggleRiskTexts": {
-          "doNotHaveSuppliesInThisCurrency": "You do not have supplies in this currency",
-          "canNotUseThisCurrencyAsCollateral": "You can not use this currency as collateral",
-          "canNotSwitchUsageAsCollateralMode": "You can not switch usage as collateral mode for this currency, because it will cause collateral call",
-          "zeroLTVWithdrawBlocked": "Assets with zero LTV ({{assets}}) must be withdrawn or disabled as collateral to perform this action"
-        }
-      },
-      "borrowDetail": {
-        "actions": "Borrow",
-        "swapDebt": "Swap",
-        "amountTitle": "Available: ",
-        "borrowed": "Borrowed",
-        "approveAndBorrow": "Approve and Borrow",
-        "almostReachedWarning": "Protocol borrow cap is at 100% for this asset. Further borrowing unavailable.",
-        "almostReachedError": "Maximum amount available to borrow is limited because protocol borrow cap is nearly reached."
-      },
-      "popup": {
-        "amount": "Amount",
-        "available": "available",
-        "title": "Transaction Overview",
-        "liquidationAt": "Liquidation at < 1.0",
-        "remainingDebt": "Remaining debt"
-      },
-      "borrowOverview": {
-        "title": "Borrow Details",
-        "totalBorrowed": "Total Borrowed",
-        "borrowCap": "Borrow Cap",
-        "myBorrow": "My Borrow",
-        "availableToBorrow": "Available to borrow",
-        "liquidityPenalty": "Liquidation Penalty",
-        "reachCapTip": "This asset has reached the borrow cap. "
-      },
-      "supplyOverview": {
-        "title": "Supply Details",
-        "totalSupplied": "Total Supplied",
-        "mySupply": "My Supply",
-        "walletBalance": "Wallet Balance",
-        "availableToSupply": "Available to Supply",
-        "useAsCollateral": "Use as collateral",
-        "collateral": "Collateral",
-        "reachCap": "This asset has reached its supply cap. Nothing is available to be supplied from this market.",
-        "almostCap": "This asset has almost reached its borrow cap. There is only {{available}} available to be borrowed from this market.",
-        "noBalance": "No balance"
-      },
-      "risk": {
-        "warning": "Borrowing this amount will lower your Health Factor to a risky level for liquidation.",
-        "withdrawWarning": "Withdrawing this amount will lower your Health Factor to a risky level for liquidation.",
-        "toggleCollateralWarning": "Disabling this asset as collateral will lower your Health Factor to a risky level for liquidation.",
-        "checkbox": "I understand the alert and want to continue.",
-        "emodeBlockWarning": "Disabling E-mode will lower your Health Factor to a risky level for liquidation.",
-        "blockEmodeWarning": "You can not disable E-Mode because that could cause liquidation. To exit E-Mode supply or repay borrowed positions."
-      },
-      "lqDescription": {
-        "desc": "Liquidation value",
-        "risky": "Risky",
-        "introText": " Your Health Factor shows how safe your borrowing position is. If it drops too low, your collateral could be liquidated.",
-        "over3title": "Health factor > 3.0:",
-        "over3desc": "Your positions are safe",
-        "below1title": "Health Factor ≤ 1.0:",
-        "below1desc": "Your position is at risk of liquidation.",
-        "liquidationTitle": "Liquidation:",
-        "liquidation": "If your Health Factor falls below 1.0, part of your collateral may be automatically sold to repay the debt. A liquidation penalty will apply, resulting in a partial loss of your collateral.",
-        "warningText": "Your Health Factor is too low. To avoid liquidation:\n1. Repay part or all of your loan\n2. Add more collateral"
-      },
-      "modalDesc": {
-        "availableToBorrow": "Available to borrow",
-        "maxAmount": "This is the maximum amount you can borrow based on all your supplied collateral. Your total borrowing power is calculated by multiplying the market value of each collateral asset by its Max LTV, then summing the results.",
-        "lqDesc": "When a liquidation occurs, liquidators repay up to 50% of the outstanding borrowed amount on behalf of the borrower. In return, they can buy the collateral at a discount and keep the difference (liquidation penalty) as a bonus.",
-        "availableToBorrowDesc": "You can borrow based on your supplied collateral and until the borrow cap is reached.",
-        "isolatedTitle": "Asset cannot be used as collateral",
-        "isolatedDesc": "This asset can only be used as collateral in isolation mode, where you cannot supply other asset collateral for borrowing. Assets used as collateral in isolation mode can only be borrowed to a specific debt ceiling.",
-        "globalIsolatedDesc": "In Isolation mode, you cannot supply other assets as collateral. A global debt ceiling limits the borrowing power of the isolated asset. To exit isolation mode disable UNI as collateral before borrowing another asset. ",
-        "isolatedSupplyDesc": "Collateral usage is limited because of isolation mode.",
-        "maxLTV": "The Maximum LTV ratio represents the maximum borrowing power of a specific collateral. For example, if a collateral has an LTV of 75%, the user can borrow up to 0.75 worth of ETH in the principal currency for every 1 ETH worth of collateral."
-      },
-      "repayWithAToken": {
-        "title": "Select Repay Token",
-        "header": {
-          "assets": "Token",
-          "balance": "Balance"
-        },
-        "zeroLtvCollateralTips": "You have following LTV = 0 collaterals and thus can only repay with these collaterals first according to collateral repay rules. "
-      },
-      "manageEmode": {
-        "__skip_translation": ["emode"],
-        "emode": "E-Mode",
-        "title": "Manage E-Mode",
-        "disableTitle": "Disable",
-        "unavailable": "• Unavailable",
-        "unavailableTips": "Your existing lending/borrowing assets are not supported.",
-        "enabled": "• Enabled",
-        "description": "Enabling E-Mode allows you to maximize your borrowing power. However, borrowing is restricted to assets within the selected category.",
-        "actions": {
-          "enable": "Enable E-Mode",
-          "disable": "Disable E-Mode"
-        },
-        "guide": {
-          "title": "Efficiency mode (E-Mode)",
-          "description": "E-Mode increases your LTV for a selected category of assets.",
-          "buttonTitle": "Manage E-Mode"
-        },
-        "categorySelector": {
-          "label": "Asset category",
-          "header": {
-            "asset": "Assets"
-          },
-          "desc": "All borrow positions outside of this category must be closed to enable this category.",
-          "placeholder": "Select"
-        },
-        "debtSwapSelector": {
-          "title": "Select Borrow Token",
-          "header": {
-            "assets": "Token/Balance",
-            "apy": "APY",
-            "borrow": "My borrows"
-          }
-        },
-        "collateralSwapSelector": {
-          "title": "Select Collateral Token",
-          "header": {
-            "assets": "Token",
-            "collateral": "My collateral"
-          }
-        },
-        "overview": {
-          "title": "Asset category",
-          "row": {
-            "asset": "Asset",
-            "collateral": "Collateral",
-            "borrowable": "Borrowable"
-          }
-        }
-      },
-      "debtSwap": {
-        "entryTips": "One-click to swap your borrowed asset, reducing steps and fees.",
-        "title": "Swap Borrow Position",
-        "borrowBalance": "Borrowed",
-        "actions": {
-          "title": "Debt Swap",
-          "amount": "Amount",
-          "borrowed": "Borrowed",
-          "swapTo": "Swap to",
-          "select": "Select"
-        },
-        "overview": {
-          "title": "Transaction Overview",
-          "borrowAPY": "Borrow apy",
-          "borrowValueAfter": "Borrow balance after swap"
-        },
-        "button": {
-          "swap": "Swap"
-        },
-        "maxLtvWarning": "Insufficient collateral to cover new borrow position. Wallet must have borrowing power remaining to perform debt switch.",
-        "priceImpactTips": "High price impact ({{lostValue}}). This route may return more due to low liquidity or small order size.",
-        "lpRiskWarning": "Low health factor after swap. Your position will carry a higher risk of liquidation.",
-        "lpDangerWarning": "Your health factor after this swap will be critically low and may result in liquidation. Please choose a different asset or reduce the swap amount to stay safe."
-      },
-      "repayWithCollateral": {
-        "toRepay": "Expected amount to repay",
-        "repayWith": "Collateral to repay with",
-        "action": {
-          "title": "Repay with {{collateral}}"
-        },
-        "collateralNotEnough": "Your collateral balance is lower than the selected amount.",
-        "overview": {
-          "title": "Transaction Overview",
-          "borrowValueAfter": "Borrow balance after repay",
-          "collateralValueAfter": "Collateral balance after repay"
-        },
-        "button": {
-          "repay": "Repay"
-        }
-      },
-      "hfTips": {
-        "desc": "If it drops below 1.0, your collateral may be liquidated.",
-        "more": "More"
-      },
-      "disableBorrowTip": {
-        "desc": "No supply: To borrow you need to supply assets as collateral.",
-        "noSupply": "Supply assets first to enable borrowing."
-      },
-      "type": {
-        "supplied": "Supplied",
-        "borrowed": "Borrowed"
-      },
-      "actions": {
-        "supply": "Supply",
-        "withdraw": "Withdraw",
-        "borrow": "Borrow",
-        "repay": "Repay",
-        "swap": "Swap"
-      },
-      "summary": {
-        "netWorth": "Net Worth",
-        "totalBorrowed": "Total Borrowed",
-        "eMode": "E-Mode",
-        "totalSupplied": "Total Supplied",
-        "healthFactor": "Health Factor",
-        "healthFactorTip": "Health factor indicates the safety of your position",
-        "healthy": "Healthy",
-        "netApy": "Net APY",
-        "estDailyEarnings": "Est Daily Earnings",
-        "ethCorrelatedTip": "ETH correlated assets",
-        "empty": {
-          "title": "Earn Interest with your assets",
-          "description": "Powered by AAVE. Secure and zero fees.",
-          "endDesc": "You don’t have any deposits yet. Check out below recommended assets to start earning interest."
-        },
-        "lq": "If goes below 1, the liquidation might be triggered.",
-        "more": "More",
-        "risky": "Risky"
-      },
-      "market": {
-        "core": "Core Market",
-        "isolated": "Isolated Market"
-      },
-      "accountActions": {
-        "both": "Both",
-        "supply": "Supply",
-        "borrow": "Borrow"
-      },
-      "table": {
-        "token": "Token",
-        "type": "Type",
-        "apy": "APY",
-        "myAssets": "My assets",
-        "collateral": "Collateral",
-        "actions": "Actions"
-      },
-      "supplyList": {
-        "more": "More tokens to supply",
-        "collapse": "Collapse"
-      },
-      "borrowList": {
-        "more": "More tokens to borrow",
-        "collapse": "Collapse"
-      }
     },
     "sendPoly": {
       "title": "Send to",
@@ -2069,7 +2270,11 @@
         "ledgerSending": "Sending signing request ({{current}}/{{total}})",
         "ledgerAlert": "Please open Ethereum App on your Ledger device",
         "ledgerSigned": "Signed. Creating transaction ({{current}}/{{total}})",
-        "simulationFailed": "Simulation Failed"
+        "simulationFailed": "Simulation Failed",
+        "revokeWithOneKey": "Start revoke with OneKey",
+        "oneKeySended": "Please sign the request on OneKey ({{current}}/{{total}})",
+        "oneKeySending": "Sending signing request ({{current}}/{{total}})",
+        "oneKeySigned": "Signed. Creating transaction ({{current}}/{{total}})"
       }
     },
     "gasTopUp": {
@@ -2129,8 +2334,8 @@
       "hidden-no-quote-rates_other": "{{count}} rates unavailable",
       "Gas-fee-too-high": "Gas fee too high",
       "rabby-fee": "Rabby fee",
-      "preferMEV": "Prefer MEV Guarded",
-      "preferMEVTip": "Enable \"MEV Guarded\" feature for Ethereum swaps to reduce sandwich attack risks. Note: this feature is not supported if you use a custom RPC or wallet connect address",
+      "preferMEV": "MEV Protection",
+      "preferMEVTip": "Enable \"MEV Protection\" for Ethereum and BNB Chain swaps to reduce sandwich attack risks. Note: this feature is not supported if you use a custom RPC or wallet connect address",
       "minimum-received": "Minimum received",
       "there-is-no-fee-and-slippage-for-this-trade": "There is no slippage for this trade",
       "no-slippage-for-wrap": "No slippage for Wrap",
@@ -2151,6 +2356,8 @@
       "edit": "Edit",
       "tradingSettingTips": "{{viewCount}} exchanges offer quotes, and {{tradeCount}} enable trading",
       "the-following-swap-rates-are-found": "Found following rates",
+      "quotes": "Quotes",
+      "best-subtitle": "The best quote is determined by the lowest estimated total cost, including the exchange rate and gas fees.",
       "sort-with-gas": "Sort with gas",
       "est-payment": "Est. Payment:",
       "est-receiving": "Est. Receiving:",
@@ -2190,6 +2397,15 @@
       "no-quote-found": "No quote found",
       "source": "Source",
       "rabbyFee": {
+        "discountTitle": "Rabby Fee Discount",
+        "free": "Free",
+        "cases": {
+          "wrap": "Wrap/Unwrap Native Token",
+          "stablecoins": "Stablecoins",
+          "lstLrt": "LST/LRT Token",
+          "million": "Vol $1M+",
+          "hundredThousand": "Vol $100k - $1M"
+        },
         "title": "Rabby fee",
         "swapDesc": "Rabby Wallet will always find the best possible rate from top aggregators and verify the reliability of their offers. Rabby charges a 0.25% fee (0% for wrapping), which is automatically included in the quote.",
         "bridgeDesc": "Rabby Wallet will always find the best possible rate from top aggregators and verify the reliability of their offers. Rabby charges a 0.25% fee, which is automatically included in the quote.",
@@ -2238,9 +2454,22 @@
       "approve-and-bridge": "Approve and Bridge",
       "need-to-approve-token-before-bridge": "Need to approve token before bridge",
       "via-bridge": "via {{bridge}}",
+      "bridge": "Bridge",
+      "by": "by",
+      "timeLeft": "{{time}} left",
+      "refundIn": "Refunded in {{token}}",
+      "viewDetails": "View Details",
       "duration": "{{duration}} min",
+      "duration-sec": "{{duration}} s",
+      "duration-hour": "{{duration}} h",
+      "duration-hour-min": "{{hours}} h {{minutes}} min",
+      "duration-day": "{{duration}} d",
+      "duration-day-hour": "{{days}} d {{hours}} h",
+      "duration-day-min": "{{days}} d {{minutes}} min",
+      "duration-day-hour-min": "{{days}} d {{hours}} h {{minutes}} min",
       "estimated-value": "≈ {{value}} ",
       "best": "Best",
+      "best-subtitle": "The best quote is determined by a combination of estimated total cost (including gas fees) and delivery speed.",
       "bridge-cost": "Bridge cost",
       "rabby-fee": "Rabby fee",
       "bridge-via-x": "Bridge on {{name}}",
@@ -2286,7 +2515,30 @@
         "fromFailed": "Transaction didn’t go through. Try again.",
         "longTimeNoReceive": "Network is busy. This may take longer than usual. Please wait patiently.",
         "receivingTo": "Receiving on {{chain}}",
-        "estimatedTime": "Estimated time"
+        "estimatedTime": "Estimated time",
+        "bridgingEta": "Bridging, ETA: <time>{{time}}</time>",
+        "stillBridging": "Still Bridging",
+        "sourceFailed": "Bridge Failed, Your {{token}} not sent",
+        "refundedLead": "Refunded",
+        "popupProcessing": "Bridge Processing",
+        "popupPending": "Bridge Pending",
+        "popupFailed": "Bridge Failed",
+        "popupRefunded": "Bridge Refunded",
+        "popupCompleted": "Bridge Completed",
+        "popupBridgeDelayed": "Bridge Delayed",
+        "popupBridgeFailed": "Bridge failed",
+        "popupRefundedIn": "Refunded in {{token}}",
+        "processing": "Processing",
+        "refund": "Refunded",
+        "goBack": "Go back",
+        "contactSupport": "Contact Support",
+        "succeeded": "Succeeded",
+        "sendFrom": "Send from {{chain}}",
+        "receiveOn": "Receive on {{chain}}",
+        "refundOn": "Refunded on {{chain}}",
+        "waitingDestination": "waiting for destination transaction",
+        "sendFailed": "Send failed",
+        "tokenNotSent": "Your {{token}} not sent"
       },
       "tokenPairDrawer": {
         "title": "Select from supported token pair",
@@ -2374,8 +2626,9 @@
           "settings": "Settings",
           "perpsPositions_one": "{{count}} Position",
           "perpsPositions_other": "{{count}} Positions",
-          "lending": "Lending",
-          "dragTip": "Long-press feature to reorder"
+          "dragTip": "Long-press feature to reorder",
+          "convertDust": "Convert Dust",
+          "staking": "Staking"
         },
         "comingSoon": "Coming soon",
         "soon": "Soon",
@@ -2395,12 +2648,24 @@
           "count": "{{count}} in"
         },
         "whatsNew": "What's new",
+        "firstNotice": {
+          "title": "New Version Ready",
+          "gotIt": "OK"
+        },
         "importType": "Imported by {{type}}",
         "missingDataTooltip": "Balance may not be updated due to current network issues with {{text}}.",
         "chain": " chain, ",
         "chainEnd": " chain",
         "appChainTips": "Hyperliquid & Polymarket Account not included",
-        "slotAppChainTips": "{{appChainNames}} Account not included"
+        "slotAppChainTips": "{{appChainNames}} Account not included",
+        "stablecoinSwapPopup": {
+          "title": "0% Swap Fee For",
+          "supportPrefix": "Support",
+          "supportCount": "30+",
+          "supportSuffix": "Stablecoins on 40+ Chains",
+          "goToSwap": "Go to Swap",
+          "close": "Close"
+        }
       },
       "recentConnection": {
         "disconnected": "Disconnected",
@@ -2518,6 +2783,15 @@
         "disableWhitelistTip": "You can send assets to any address once disabled",
         "warning": "Warning",
         "clearWatchAddressContent": "Do you make sure to delete all Watch Mode address?",
+        "updateCard": {
+          "check": "Check",
+          "title": "New Version available",
+          "update": "Update",
+          "dismiss": "Dismiss update notice",
+          "error": "Failed to update extension",
+          "perps": "Enhanced the Perps trading experience.",
+          "screenshots": "Right-click screenshots to easily submit bug reports."
+        },
         "updateVersion": {
           "content": "A new update for Rabby Wallet is available. Click to check how to update manually.",
           "okText": "See Tutorial",
@@ -2541,6 +2815,8 @@
           "customRpc": "Modify RPC URL",
           "metamaskPreferredDapps": "MetaMask Preferred Dapps",
           "currentLanguage": "Current Language",
+          "currency": "Currency",
+          "searchCurrency": "Search currency",
           "enableTestnets": "Enable Testnets",
           "toggleThemeMode": "Theme Mode",
           "themeMode": "Theme Mode",
@@ -2550,7 +2826,15 @@
           "switchPasswordForNonWhitelistedTx": "Password for non-whitelisted transfers",
           "biometricUnlock": "Unlock with Biometrics",
           "biometricUnlockHint": "Use biometrics to unlock on this device.",
-          "biometricUnlockUnsupported": "This device does not support biometric unlock."
+          "biometricUnlockUnsupported": "This device does not support biometric unlock.",
+          "perpsFloatWidget": "Perps Floating Widget",
+          "dataAnalysis": "Data Analysis"
+        },
+        "removedToken": {
+          "title": "Removed Tokens",
+          "description": "Removed tokens will be hidden from your Portfolio across all your addresses, but still included in your balance calculation.",
+          "loadFailed": "Failed to load token",
+          "retry": "Retry"
         },
         "aboutUs": "About us",
         "currentVersion": "Current Version",
@@ -2593,9 +2877,22 @@
         "biometricUnlockUnsupported": "This device does not support biometric unlock",
         "biometricUnlockSetupTitle": "Enable Biometric Unlock",
         "biometricUnlockPasswordPlaceholder": "Enter Password",
-        "biometricUnlockSetupDesc": "Confirm your password to activate biometric unlock."
+        "biometricUnlockSetupDesc": "Confirm your password to activate biometric unlock.",
+        "clearPendingCheckbox": "Also reset my local nonce data and signature record"
       },
       "tokenDetail": {
+        "removed": {
+          "more": "More",
+          "removeToken": "Remove token",
+          "remove": "Remove",
+          "confirmTitle": "Remove this token?",
+          "portfolioNotice": "This token will no longer appear in your Portfolio after removal.",
+          "restoreNotice": "You can restore it anytime in “Settings >> Removed Tokens”.",
+          "warning": "Removed tokens will be hidden from your Portfolio across all your addresses, but still included in your balance calculation.",
+          "removeFailed": "Failed to remove token",
+          "restore": "Restore removed token",
+          "restoreFailed": "Failed to restore token"
+        },
         "noIssuer": "No issuer information available",
         "NoListedBy": "No listing information available",
         "NoSupportedExchanges": "No supported exchanges available",
@@ -2690,8 +2987,8 @@
         "noAssets": "No assets",
         "blockLinkText": "Search address to block token",
         "blockDescription": "Token blocked by you will be shown here",
-        "unfoldChain": "Unfold 1 chain",
-        "unfoldChainPlural": "Unfold {{moreLen}} chains",
+        "unfoldChain": "1 more chain",
+        "unfoldChainPlural": "{{moreLen}} more chains",
         "customButtonText": "Add custom token",
         "customDescription": "Custom token added by you will be shown here",
         "comingSoon": "Coming Soon...",
@@ -2722,8 +3019,10 @@
         "noTestnetAssets": "No Custom Network Assets",
         "addTokenEntryText": "Token",
         "openInTab": "Open in Rabby Tab",
+        "openInTabV2": "Open in Tab",
         "openProMode": "Open Pro Mode",
-        "searchTokenPlaceholder": "Search Token"
+        "searchTokenPlaceholder": "Search Token",
+        "addAssets": "Add assets"
       },
       "hd": {
         "howToConnectLedger": "How to Connect Ledger",
@@ -2786,6 +3085,11 @@
         "title": "Rabby Points",
         "desc": "Check your points in Rabby Mobile.",
         "downloadIntro": "Don’t have the app yet? Download now."
+      },
+      "noData": "No matched currency",
+      "ZeroAssets": {
+        "desc": "Fund your wallet to use Web3",
+        "addAssets": "Add assets"
       }
     },
     "nft": {
@@ -2808,7 +3112,7 @@
       "moreWallets": "More Wallets",
       "newSeedPhraseCreated": "New Seed Phrase Created",
       "newAddressAdded": "New Address Added",
-      "addMoreAddressesFromThisSeedPhrase": "Add more address from this seed phrase",
+      "addMoreAddressesFromThisSeedPhrase": "Add more addresses from this seed phrase",
       "importSeedPhrase": "Import Seed Phrase",
       "importPrivateKey": "Import Private Key",
       "privateKeyTab": "Private Key",
@@ -2882,10 +3186,12 @@
         "createdSuccessfully": "Created Successfully",
         "verifySeedPhrase": "Verify Seed Phrase",
         "fillInTheBackupSeedPhraseInOrder": "Fill in the backup seed phrase in order",
-        "wordPhrase": "I have a <1>{{count}}</1>-word phrase",
-        "wordPhraseAndPassphrase": "I have a <1>{{count}}</1>-word phrase with Passphrase",
-        "slip39SeedPhrase": "I have a <0>{{SLIP39}}</0> Seed Phrase",
-        "slip39SeedPhraseWithPassphrase": "I have a <0>{{SLIP39}}</0> Seed Phrase with Passphrase",
+        "wordPhrase": "My seed phrase has <1>{{count}}</1> words",
+        "wordPhraseSelected": "My seed phrase has <1>{{count}} words</1>",
+        "wordPhraseAndPassphrase": "My seed phrase has <1>{{count}}</1> words with password",
+        "wordPhraseAndPassphraseSelected": "My seed phrase has <1>{{count}} words</1> with password",
+        "slip39SeedPhrase": "My seed phrase is <1>{{SLIP39}}</1>",
+        "slip39SeedPhraseWithPassphrase": "My seed phrase is <1>{{SLIP39}}</1> with password",
         "slip39SeedPhrasePlaceholder_one": "Enter your {{count}}st seed phrase shares here",
         "slip39SeedPhrasePlaceholder_two": "Enter your {{count}}nd seed phrase shares here",
         "slip39SeedPhrasePlaceholder_few": "Enter your {{count}}rd seed phrase shares here",
@@ -2974,6 +3280,7 @@
         "haveOneKey": "Don't have a OneKey yet?"
       },
       "walletConnect": {
+        "clockSkewError": "WalletConnect cannot connect because your computer time is out of sync. Enable automatic date and time, then retry.",
         "connectYour": "Connect your",
         "viaWalletConnect": "via Wallet Connect",
         "connectedSuccessfully": "Connected successfully",
@@ -3676,7 +3983,8 @@
           "bridgeBtn": "Bridge",
           "mintNFT": "Mint DBK Genesis NFT",
           "mintNFTDesc": "Be a witness of DBK Chain",
-          "mintNFTBtn": "Mint"
+          "mintNFTBtn": "Mint",
+          "withdraw": "Withdraw from DBK chain"
         },
         "bridge": {
           "tabs": {
@@ -3748,19 +4056,39 @@
       "speedUpDesc": "Gas price increased {{percent}} for a faster speed up"
     },
     "gasAccount": {
+      "gasFee": "Gas fee",
       "title": "GasAccount",
+      "gasDeposit": "Gas Deposit",
       "gasToken": "Gas Token",
       "deposit": "Deposit",
+      "depositNow": "Deposit Now",
+      "signWithPendingHardwareToUse": "Sign with {{addressAlias}} to use",
+      "depositSubmitted": "Deposit Submitted",
       "withdraw": "Withdraw",
       "noBalance": "No balance",
       "gasExceed": "GasAccount balance cannot exceed $1000",
       "safeAddressDepositTips": "Multisig addresses are not supported for deposits.",
       "risk": "Your current address has been detected as risky, so this feature is unavailable.",
       "logout": "Log out current GasAccount",
-      "switchAccount": "Switch GasAccount",
+      "switchAccount": "Switch Wallet",
+      "claimFreeGas": "Claim {{usdValue}} Free Gas",
+      "depositFailed": "Deposit failed",
+      "lowBalance": "You don't have enough gas(＜$1.00). Deposit gas to ensure future transactions go smoothly.",
+      "gasBalance": "Gas Balance",
       "withdrawDisabledIAP": "Withdrawals are disabled because your balance includes fiat funds, which cannot be withdrawn. Contact support to withdraw your token balance",
+      "benefitCard": {
+        "title": "Pay Gas Fees on All chains",
+        "subtitle": "when you're out of gas",
+        "item1": "No Rabby Fee",
+        "desc1": "No extra fees to pay gas",
+        "item2": "Supports all networks",
+        "desc2": "Automatic gas payments on 80+ networks",
+        "item3": "Supports all transactions",
+        "desc3": "Swap, Bridge, Send, DApps, & more"
+      },
       "history": {
-        "noHistory": "No history"
+        "noHistory": "No history",
+        "noHistoryForPast30Days": "No history for the past 30 days."
       },
       "loginInTip": {
         "title": "Deposit USDC / USDT",
@@ -3789,7 +4117,7 @@
       },
       "gasAccountList": {
         "address": "Address",
-        "gasAccountBalance": "Gas Balance"
+        "gasAccountBalance": "Balance"
       },
       "logoutConfirmModal": {
         "title": "Log out current GasAccount",
@@ -3798,12 +4126,31 @@
       },
       "depositPopup": {
         "title": "Deposit",
+        "gasDepositTitle": "Gas Deposit",
         "desc": "Make a deposit to Rabby's DeBank L2 Account with no extra fees—withdraw anytime.",
+        "zeroInvalidAmount": "The amount cannot be zero",
         "invalidAmount": "Must be under 500",
+        "minAmountRequired": "Minimum deposit amount is ${{value}}",
         "amount": "Amount",
         "token": "Token",
         "selectToken": "Select Token to Deposit",
-        "paymentAddr": "Payment Address"
+        "paymentAddr": "Payment Wallet",
+        "paymentAddress": "Payment Wallet",
+        "balanceLabel": "Balance",
+        "insufficientBalanceLabel": "Insufficient Balance",
+        "unavailablePaymentWallet": "Selected payment wallet is unavailable",
+        "suggestedToken": "Suggested Tokens",
+        "bridgeLabel": "Bridge",
+        "estReceiveLabel": "Est.Receive: {{usd}}",
+        "estReceiveTip": "Service processed via {{name}}, may have slippage",
+        "depositSuccess": "Deposit successful",
+        "depositFailed": "Deposit failed, please retry",
+        "bridgeDepositFailed": "Bridge deposit failed, please retry",
+        "noAvailableToken": "No available token",
+        "InsufficientToken": "Insufficient Token Balance"
+      },
+      "depositPayPopup": {
+        "topUpPayTips": "Gas required: {{topUpUsd}}, Gas remaining est: {{balance}}"
       },
       "withdrawPopup": {
         "noEnoughValuetBalance": "Vault Balance insufficient. Switch chain or try again later.",
@@ -3841,7 +4188,10 @@
       "switchLoginAddressBeforeDeposit": {
         "title": "Switch address before deposit",
         "desc": "Please switch to your login address."
-      }
+      },
+      "loginSuccess": "Login Successful",
+      "loginFailed": "Login Failed",
+      "signTextInvalid": "Security check failed: the GasAccount sign-in message is invalid. Please try again later"
     },
     "safeMessageQueue": {
       "loading": "Loading messages",
@@ -3869,7 +4219,9 @@
         "title": "Import Private Key",
         "pasteCleared": "Pasted and clipboard cleared",
         "noWallet": "Don't have seed phrase or private key yet?",
-        "createWallet": "Create a wallet"
+        "createWallet": "Create a wallet",
+        "placeholder": "Input private key",
+        "required": "Please input Private key"
       },
       "PasswordCard": {
         "title": "Set Password",
@@ -4237,6 +4589,14 @@
           "rabbyFee": "Rabby fee (0%)",
           "totalEst": "Total est. proceeds",
           "acceptOffer": "Accept Offer"
+        },
+        "verifyError": {
+          "unsupportedChain": "NFT trading is not supported on this chain yet",
+          "currency": "Security check failed: the payment token doesn't match the expected token",
+          "nft": "Security check failed: the NFT in the order doesn't match the one you selected",
+          "amount": "Security check failed: the amount you'd receive doesn't match what's shown",
+          "recipient": "Security check failed: the proceeds would not be sent to your address",
+          "invalid": "Security check failed: the order data is invalid. Please try again later"
         }
       }
     },
@@ -4307,6 +4667,64 @@
       "networkErrorDescription": "{{site}} unexpectedly closed the connection. Please check your network.",
       "networkErrorDescriptionFallback": "The site unexpectedly closed the connection. Please check your network.",
       "reload": "Reload"
+    },
+    "manageBatchApprovals": {
+      "title": "Batch Revoke",
+      "cols": {
+        "asset": "Asset",
+        "revokeFrom": "Revoke From",
+        "gasFee": "Gas Fee"
+      },
+      "stopTheRevokeProcess": "Stop the revoke process?",
+      "leavingThisPageWillStopTheRevokeProcess": "Leaving this page will stop the revoke process.",
+      "startRevoke": "Start Revoke",
+      "continueRevoke": "Continue",
+      "pauseRevoke": "Pause",
+      "revokeCompleted": "Done",
+      "canStillRevoke": "Still Revoke"
+    },
+    "manageApprovals": {
+      "title": "Approvals",
+      "tabs": {
+        "contracts": "By Contracts",
+        "assets": "By Assets"
+      },
+      "revoke": "Revoke",
+      "approvals": "approvals",
+      "ApprovalCardContractPopup": {
+        "allApprovals": "All Approvals",
+        "contractAddress": "Contract Address"
+      },
+      "ApprovalContractPopup": {
+        "approvedAssetsAmountAndBalance": "Approved Assets Amount & Balance"
+      },
+      "unselectAll": "Unselect All",
+      "selectAll": "Select All",
+      "ApprovalCardAssetPopup": {
+        "allApprovals": "All Approvals",
+        "myBalance": "My Balance"
+      },
+      "ApprovalAssetPopup": {
+        "approvedContractsAndAmount": "Approved Contracts & Amount"
+      },
+      "EIP7702Panel": {
+        "unsupportedAddressType": "Unsupported Address Type",
+        "unsupportedAddressTypeDesc": "Revoking EIP-7702 delegations is only supported for private key                 or seed phrase addresses",
+        "supportedChains": "Supported Chains",
+        "delegatedAddressDesc": "Delegated Address",
+        "notMatched": "Not Matched",
+        "noApprovals": "No approvals"
+      },
+      "ListByAssets": {
+        "noApprovals": "No approvals",
+        "notMatched": "Not Matched"
+      },
+      "ListByContracts": {
+        "noApprovals": "No approvals",
+        "notMatched": "Not Matched"
+      },
+      "approvalsCount": "{{count}} approvals",
+      "approvalsCount_one": "{{count}} approval"
     }
   },
   "component": {
@@ -4520,11 +4938,11 @@
     "DesktopNav": {
       "portfolio": "Portfolio",
       "perps": "Perps",
-      "lending": "Lending",
       "comingSoon": "Coming Soon"
     },
     "DesktopSelectAccountList": {
-      "addAddresses": "Add address"
+      "addAddresses": "Add address",
+      "smallSwapDisabledTips": "This address type is not supported"
     },
     "LpTokenTag": {
       "title": "This is a liquidity provider(LP) token",
@@ -4536,6 +4954,20 @@
     },
     "DesktopAccountSelector": {
       "selectAddress": "Select Address"
+    },
+    "UnknownTag": {
+      "label": "Unknown",
+      "tooltip": "Unknown token, please do your own research."
+    },
+    "screenshotModal": {
+      "title": "Screenshot to Feedback",
+      "placeholder": "Describe the issue",
+      "placeholderRequired": "Describe the issue (required)"
+    },
+    "feedbackPopup": {
+      "title": "Response from Rabby Support",
+      "issueReported": "Here’s the issue you reported:",
+      "issueReplied": "Rabby Support has replied:"
     }
   },
   "global": {
@@ -4572,7 +5004,10 @@
     "Done": "Done",
     "Nonce": "Nonce",
     "tryAgain": "Try Again",
-    "notSupportTesntnet": "Not supported for custom network"
+    "notSupportTesntnet": "Not supported for custom network",
+    "collapse": "Collapse",
+    "Yes": "Yes",
+    "Submit": "Submit"
   },
   "background": {
     "error": {
@@ -4602,6 +5037,9 @@
       "txFailedMoreContent": "{{chain}} #{{nonce}} failed. Click to view more.",
       "completed": "Transaction completed",
       "failed": "Transaction failed"
+    },
+    "feedback": {
+      "screenshotContextMenuTitle": "Screenshot to feedback"
     },
     "alias": {
       "HdKeyring": "Seed Phrase",

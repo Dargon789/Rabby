@@ -52,7 +52,7 @@ export type TPSLInputMode = 'price' | 'percentage';
 export type TPSLSettingMode = 'price' | 'pnl' | 'roi';
 
 // Position size display unit
-export type SizeDisplayUnit = 'base' | 'usdc';
+export type SizeDisplayUnit = 'base' | 'usd';
 
 export interface TPSLConfigItem {
   settingMode: TPSLSettingMode;
@@ -103,6 +103,8 @@ export interface OrderSummaryData {
 // Dual-column info for both buy and sell sides
 export interface OrderSideInfo {
   liqPrice: string;
+  /** Numeric twin of `liqPrice`; null when there is no liquidation price. */
+  liqPriceNum: number | null;
   cost: string;
   max: string;
 }

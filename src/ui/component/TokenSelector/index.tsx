@@ -16,8 +16,8 @@ import { useAsync, useDebounce } from 'react-use';
 import TokenWithChain from '../TokenWithChain';
 import { TokenItem, TokenItemWithEntity } from 'background/service/openapi';
 import {
+  formatLargeTokenAmount,
   formatPrice,
-  formatTokenAmount,
   formatUsdValue,
 } from 'ui/utils/number';
 import { getTokenSymbol } from 'ui/utils/token';
@@ -45,12 +45,13 @@ import { useSearchTestnetToken } from '@/ui/hooks/useSearchTestnetToken';
 import { useHistory } from 'react-router-dom';
 import { ExchangeLogos } from './CexLogos';
 import { LpTokenSwitch } from '@/ui/views/DesktopProfile/components/TokensTabPane/components/LpTokenSwitch';
-import { isLpToken } from '@/ui/utils/portfolio/lpToken';
+import { isLpToken, isUnknownToken } from '@/ui/utils/portfolio/lpToken';
 import { LpTokenTag } from '@/ui/views/DesktopProfile/components/TokensTabPane/components/LpTokenTag';
 import { ChainFilterV2Line } from './ChainFilterV2Line';
-import { isNumber } from 'lodash';
+import { isNil, isNumber } from 'lodash';
 import { ExternalTokenRow } from './ExternalToken';
 import { getCexIds } from '@/ui/utils/portfolio/tokenUtils';
+import { UnknownTag } from '@/ui/component';
 
 const isTab = getUiType().isTab;
 
@@ -131,6 +132,7 @@ const TokenSelector = ({
   showLpTokenSwitch,
 }: TokenSelectorProps) => {
   const { t } = useTranslation();
+  const tokenListRef = React.useRef<HTMLUListElement>(null);
   const [query, setQuery] = useState('');
   const [isInputActive, setIsInputActive] = useState(false);
   const history = useHistory();
@@ -169,6 +171,12 @@ const TokenSelector = ({
   };
 
   const { selectedTab, onTabChange } = useSwitchNetTab();
+
+  useEffect(() => {
+    if (visible) {
+      tokenListRef.current?.scrollTo({ top: 0 });
+    }
+  }, [visible, chainServerId, lpTokenMode, selectedTab]);
 
   const {
     testnetTokenList: customTestnetTokenList,
@@ -526,7 +534,7 @@ const TokenSelector = ({
           )}
         >
           <Input
-            className={clsx({ active: isInputActive }, 'bg-r-neutral-card2')}
+            className={clsx({ active: isInputActive })}
             size="large"
             prefix={<img src={IconSearch} />}
             // Search by Name / Address
@@ -570,33 +578,21 @@ const TokenSelector = ({
           </div>
         )}
 
-        {selectedTab === 'mainnet' ? (
-          <ul className={clsx('token-list', { empty: isEmpty })}>
-            {isEmpty
-              ? NoDataUI
-              : displayList.map((token) => {
-                  return commonItemRender(
-                    token,
-                    type,
-                    undefined,
-                    disableItemCheck
-                  );
-                })}
-          </ul>
-        ) : (
-          <ul className={clsx('token-list', { empty: isEmpty })}>
-            {isEmpty
-              ? NoDataUI
-              : displayList.map((token) => {
-                  return commonItemRender(
-                    token,
-                    type,
-                    undefined,
-                    disableItemCheck
-                  );
-                })}
-          </ul>
-        )}
+        <ul
+          ref={tokenListRef}
+          className={clsx('token-list', { empty: isEmpty })}
+        >
+          {isEmpty
+            ? NoDataUI
+            : displayList.map((token) => {
+                return commonItemRender(
+                  token,
+                  type,
+                  undefined,
+                  disableItemCheck
+                );
+              })}
+        </ul>
       </Drawer>
       <TokenDetailPopup
         variant="add"
@@ -701,7 +697,7 @@ function CommonTokenItem(props: {
     );
   }, [isSwapTo, isBridgeTo, supportChains, chainItem]);
 
-  const { value, loading, error } = useAsync(async () => {
+  const { value: remoteValue, loading, error } = useAsync(async () => {
     if (updateToken && currentAccount?.address) {
       const data = await wallet.openapi.getToken(
         currentAccount?.address,
@@ -710,8 +706,12 @@ function CommonTokenItem(props: {
       );
       return data;
     }
-    return token;
+    return undefined;
   }, [currentAccount?.address, updateToken, token?.chain, token?.id]);
+
+  const value = useMemo(() => {
+    return remoteValue ? remoteValue : token;
+  }, [remoteValue, token]);
 
   const tips = useMemo(() => {
     return disabled ? t('component.TokenSelector.chainNotSupport') : undefined;
@@ -732,7 +732,7 @@ function CommonTokenItem(props: {
     onConfirm(value || token);
   }, [disabled, value, token, onConfirm]);
 
-  if (externalMode) {
+  if (externalMode && !hideUsdValue) {
     return (
       <Tooltip
         trigger={['click', 'hover']}
@@ -779,21 +779,24 @@ function CommonTokenItem(props: {
               width="32px"
               height="32px"
               hideConer
+              chainSize={hideUsdValue ? 16 : 14}
+              isShowChainTooltip
             />
             <div className="flex flex-col gap-2">
               {showExchangeLogos ? (
-                <div className="flex overflow-visible">
+                <div className="flex overflow-visible items-center">
                   <span
-                    className="symbol_click overflow-visible truncate flex-1"
+                    className="symbol_click overflow-hidden truncate flex-1"
                     onClick={onClickTokenSymbol}
                   >
                     {getTokenSymbol(token)}
                   </span>
+                  {isUnknownToken(token) && <UnknownTag className="ml-4" />}
                   {isLpToken(token) && (
                     <LpTokenTag
                       size={14}
                       inModal
-                      iconClassName="text-r-neutral-foot"
+                      iconClassName="text-r-neutral-foot shrink-0"
                       protocolName={token.protocol_id || ''}
                     />
                   )}
@@ -802,44 +805,53 @@ function CommonTokenItem(props: {
               ) : (
                 <div className="flex items-center gap-4">
                   <span
-                    className="symbol_click overflow-visible truncate"
+                    className="symbol_click overflow-hidden truncate"
                     onClick={onClickTokenSymbol}
                   >
                     {getTokenSymbol(token)}
                   </span>
+                  {isUnknownToken(token) && !isBridgeTo && <UnknownTag />}
                   {isLpToken(token) && (
                     <LpTokenTag
                       size={14}
                       inModal
-                      iconClassName="text-r-neutral-foot"
+                      iconClassName="text-r-neutral-foot shrink-0"
                       protocolName={token.protocol_id || ''}
                     />
                   )}
                 </div>
               )}
-              {isBridgeTo ? (
-                <div
-                  className={clsx(
-                    'flex items-center justify-center',
-                    'ml-10 py-2 px-8 rounded-full w-max',
-                    'font-medium',
-                    token.trade_volume_level === 'high'
-                      ? 'bg-r-green-light'
-                      : 'bg-r-orange-light',
-                    token.trade_volume_level === 'high'
-                      ? 'text-r-green-default'
-                      : 'text-r-orange-default'
-                  )}
-                >
-                  <span className="text-[11px] leading-[11px]">
-                    {token?.trade_volume_level === 'high'
-                      ? t('component.TokenSelector.bridge.high')
-                      : t('component.TokenSelector.bridge.low')}
-                  </span>
-                </div>
+              {hideUsdValue ? (
+                <span className="symbol text-13 font-normal text-r-neutral-foot mb-2 leading-[14px] truncate">
+                  {chainItem?.name}
+                </span>
+              ) : isBridgeTo ? (
+                isUnknownToken(token) ? (
+                  <UnknownTag className="ml-10 w-min" />
+                ) : (
+                  <div
+                    className={clsx(
+                      'flex items-center justify-center',
+                      'ml-10 py-2 px-8 rounded-[4px] w-max',
+                      'font-normal',
+                      token.trade_volume_level === 'high'
+                        ? 'bg-r-green-light'
+                        : 'bg-r-orange-light',
+                      token.trade_volume_level === 'high'
+                        ? 'text-r-green-default'
+                        : 'text-r-orange-default'
+                    )}
+                  >
+                    <span className="text-[11px] leading-[11px]">
+                      {token?.trade_volume_level === 'high'
+                        ? t('component.TokenSelector.bridge.high')
+                        : t('component.TokenSelector.bridge.low')}
+                    </span>
+                  </div>
+                )
               ) : (
                 <span className="symbol text-13 font-normal text-r-neutral-foot mb-2">
-                  {formatTokenAmount(value?.amount || 0)}
+                  {formatLargeTokenAmount(value?.amount || 0)}
                 </span>
               )}
             </div>
@@ -876,7 +888,7 @@ function CommonTokenItem(props: {
               </>
             ) : (
               <div className={clsx('token_usd_value')}>
-                {formatTokenAmount(value?.amount || 0)}
+                {formatLargeTokenAmount(value?.amount || 0)}
               </div>
             )}
           </div>

@@ -144,14 +144,14 @@ export const CustomTestnetTokenDetail = ({
               <div></div>
             </div>
             <div className="flex flex-row justify-between w-full">
-              <div className="flex flex-row gap-8 items-center">
+              <div className="flex flex-row gap-8 items-center w-full">
                 <Image
                   className="w-24 h-24 rounded-full"
                   src={token.logo || IconUnknown}
                   fallback={IconUnknown}
                   preview={false}
                 />
-                <div className="balance-value truncate">
+                <div className="balance-value truncate max-w-[280px]">
                   {splitNumberByStep((token.amount || 0)?.toFixed(8))}{' '}
                   {token.symbol}
                 </div>
@@ -209,7 +209,7 @@ export const CustomTestnetTokenDetail = ({
                 </span>
                 <ThemeIcon
                   src={RcIconExternal}
-                  className="w-14 cursor-pointer"
+                  className="w-14 cursor-pointer text-r-neutral-foot"
                   onClick={() => {
                     handleClickLink(token);
                   }}

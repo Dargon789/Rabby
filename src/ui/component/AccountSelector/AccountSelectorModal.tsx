@@ -3,7 +3,8 @@
 import { Drawer, DrawerProps, Input } from 'antd';
 import React, { ReactNode, useEffect, useMemo } from 'react';
 
-import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
+import { useRabbyDispatch } from '@/ui/store';
+import { useWhitelistStore } from '@/ui/state/whitelist';
 import clsx from 'clsx';
 import { KEYRING_TYPE } from 'consts';
 import IconSearch from 'ui/assets/search.svg';
@@ -11,7 +12,7 @@ import IconSearch from 'ui/assets/search.svg';
 import { Account } from '@/background/service/preference';
 import { useAccounts } from '@/ui/hooks/useAccounts';
 import useSyncStaleValue from '@/ui/hooks/useDebounceValue';
-import { IDisplayedAccountWithBalance } from '@/ui/models/accountToDisplay';
+import { IDisplayedAccountWithBalance } from '@/ui/state/accountToDisplay';
 import { isSameAccount } from '@/utils/account';
 import { flatten } from 'lodash';
 import { useTranslation } from 'react-i18next';
@@ -187,19 +188,13 @@ export const AccountSelectorModal = ({
     sortedAccountsList,
   ]);
 
-  const { whitelist } = useRabbySelector((s) => ({
-    whitelist: s.whitelist.whitelist,
-  }));
+  const whitelist = useWhitelistStore((state) => state.whitelists);
 
   useEffect(() => {
     fetchAllAccounts();
   }, [fetchAllAccounts]);
 
   const dispatch = useRabbyDispatch();
-  useEffect(() => {
-    dispatch.whitelist.getWhitelist();
-  }, [dispatch.whitelist]);
-
   useEffect(() => {
     if (!visible) {
       setSearchKeyword('');

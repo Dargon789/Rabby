@@ -2,7 +2,6 @@ import React, { useMemo, useState, useRef, useEffect } from 'react';
 
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
-import { DESKTOP_NAV_HEIGHT, DesktopNav } from '@/ui/component/DesktopNav';
 import { ProfileHeader } from './components/ProfileHeader';
 import { BackTop, Tabs } from 'antd';
 import { useHistory, useLocation } from 'react-router-dom';
@@ -11,11 +10,11 @@ import { DesktopSelectAccountList } from '@/ui/component/DesktopSelectAccountLis
 import { SwapTokenModal } from './components/SwapTokenModal';
 import { TransactionsTabPane } from './components/TransactionsTabPane';
 import { DesktopChainSelector } from '../DesktopChainSelector';
-import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
+import { useDesktopProfileStore } from '@/ui/state/desktopProfile';
 import { findChainByEnum } from '@/utils/chain';
 import { useCurrentAccount } from '@/ui/hooks/backgroundState/useAccount';
 import { useDesktopBalanceView } from './hooks/useDesktopBalanceView';
-import { useMemoizedFn } from 'ahooks';
+import { useMemoizedFn, useMount } from 'ahooks';
 import { SendNftModal } from './components/SendNftModal';
 import { ReceiveTokenModal } from './components/ReceiveTokenModal';
 import { SignatureRecordModal } from './components/SignatureRecordModal';
@@ -25,10 +24,11 @@ import { GnosisQueueModal } from './components/GnosisQueueModal';
 import { ApprovalsTabPane } from './components/ApprovalsTabPane';
 import { AddressDetailModal } from './components/AddressDetailModal';
 import { AddressBackupModal } from './components/AddressBackupModal';
-import { AddAddressModal } from './components/AddAddressModal';
-import { RcIconBackTopCC } from '@/ui/assets/desktop/profile';
-import { ReachedEnd } from './components/ReachedEnd';
-import ThemeIcon from '@/ui/component/ThemeMode/ThemeIcon';
+import {
+  RcIconBackTopCC,
+  RcIconQueueCC,
+  RcIconSpinCC,
+} from '@/ui/assets/desktop/profile';
 import TopShortcut, {
   PORTFOLIO_LIST_ID,
   TOP_SHORTCUT_SLOT_ID,
@@ -36,14 +36,16 @@ import TopShortcut, {
 import { AbstractProject } from '@/ui/utils/portfolio/types';
 import { NFTTabPane } from './components/NFTTabPane';
 import { useEventBusListener } from '@/ui/hooks/useEventBusListener';
-import { matomoRequestEvent } from '@/utils/matomo-request';
-import { ga4 } from '@/utils/ga4';
 import { DesktopPending } from './components/DesktopPending';
 import { TokenTab } from './components/TokensTabPane/TokenTab';
 import { DIFITab } from './components/TokensTabPane/DifiTab';
-import { useTokenAndDIFIData } from './components/TokensTabPane/hook';
+import { useTokenAndDefiData } from './components/TokensTabPane/hook';
 import { DesktopPageWrap } from '@/ui/component/DesktopPageWrap';
-import { SwitchThemeBtn } from './components/SwitchThemeBtn';
+import { reportWebPageView } from '@/ui/utils/ga-event';
+import { expiredNft } from '@/db/utils/expired';
+import { useHomeBalanceViewOuterPrefetch } from '../Dashboard/components/BalanceView/useHomeBalanceView';
+
+const DESKTOP_NAV_HEIGHT = 0;
 
 const StickyBorderTop = () => (
   <div className="sticky h-0 z-50" style={{ top: DESKTOP_NAV_HEIGHT }}>
@@ -67,23 +69,33 @@ const StickyBorderTop = () => (
   </div>
 );
 
-export const DesktopProfile: React.FC<{
+type DesktopProfileProps = {
   isActive?: boolean;
   style?: React.CSSProperties;
-}> = ({ isActive = true, style }) => {
+};
+
+const DesktopProfileContent: React.FC<DesktopProfileProps> = ({
+  isActive = true,
+  style,
+}) => {
   const { t } = useTranslation();
   const currentAccount = useCurrentAccount();
 
+  const isGnosis = useMemo(
+    () => currentAccount?.type === KEYRING_TYPE.GnosisKeyring,
+    [currentAccount?.type]
+  );
+
   const history = useHistory();
   const location = useLocation();
-  const dispatch = useRabbyDispatch();
+  const setActiveTab = useDesktopProfileStore((state) => state.setActiveTab);
   const activeTab = useMemo(() => {
     const match = location.pathname.match(/^\/desktop\/profile(?:\/([^/?]+))?/);
     return match?.[1] || 'tokens';
   }, [location.pathname]);
 
   const handleTabChange = (key: string) => {
-    dispatch.desktopProfile.setField({ activeTab: key });
+    setActiveTab(key);
     history.replace(`/desktop/profile/${key}`);
     const $scrollElement = scrollContainerRef.current;
     if (!$scrollElement) {
@@ -104,7 +116,8 @@ export const DesktopProfile: React.FC<{
       sendPageType: searchParams.get('sendPageType'),
     };
   }, [location.search]);
-  const chain = useRabbySelector((store) => store.desktopProfile.chain);
+  const chain = useDesktopProfileStore((state) => state.chain);
+  const setChain = useDesktopProfileStore((state) => state.setChain);
   const chainInfo = useMemo(() => findChainByEnum(chain), [chain]);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const {
@@ -113,9 +126,11 @@ export const DesktopProfile: React.FC<{
     curveChartData,
     isBalanceLoading,
     isCurveLoading,
+    isRefreshing,
     appChainIds,
     refreshBalance,
     refreshCurve,
+    refreshBalanceAndCurveIfExpired,
   } = useDesktopBalanceView({
     address: currentAccount?.address,
   });
@@ -137,23 +152,13 @@ export const DesktopProfile: React.FC<{
   const [searchValue, setSearchValue] = React.useState('');
 
   const {
-    // useQueryProjects
     isTokensLoading,
     isAllTokenLoading,
     isPortfoliosLoading,
-    portfolios,
-    tokenList,
     hasTokens,
     removeProtocol,
-    portfolioNetWorth,
-    // useQueryProjects end
-    // useAppChain
-    appPortfolios,
-    appPortfolioNetWorth,
     isAppPortfoliosLoading,
-    // useAppChain end
     currentPortfolioNetWorth,
-    displayTokenList,
     displayPortfolios,
     sortTokens,
     lpTokenMode,
@@ -162,16 +167,30 @@ export const DesktopProfile: React.FC<{
     isNoResults,
     refreshPositions,
     refreshTokens,
-  } = useTokenAndDIFIData({
+  } = useTokenAndDefiData({
     selectChainId: chainInfo?.serverId,
     allTokenMode: !!searchValue,
   });
 
   const handleUpdate = useMemoizedFn(async () => {
+    if (activeTab === 'nft' && currentAccount?.address) {
+      expiredNft(currentAccount.address);
+    }
+
     setRefreshKey((prev) => prev + 1);
     refreshPositions();
     refreshBalance();
     refreshCurve();
+  });
+
+  const handleFocusedUpdate = useMemoizedFn(async () => {
+    if (activeTab === 'nft' && currentAccount?.address) {
+      expiredNft(currentAccount.address);
+    }
+
+    setRefreshKey((prev) => prev + 1);
+    refreshPositions();
+    refreshBalanceAndCurveIfExpired();
   });
 
   useListenTxReload(async () => {
@@ -197,19 +216,24 @@ export const DesktopProfile: React.FC<{
 
   useEventBusListener(EVENTS.DESKTOP.FOCUSED, () => {
     // window.location.reload();
-    handleUpdate();
+    handleFocusedUpdate();
+  });
+
+  useMount(() => {
+    if (!action) {
+      reportWebPageView(location.pathname, location.search);
+    }
   });
 
   return (
     <>
       <DesktopPageWrap
-        className="w-full h-full bg-rb-neutral-bg-1 js-scroll-element px-[20px] no-scrollbar"
+        className="w-full h-full bg-rb-neutral-bg-1 js-scroll-element px-[20px] mt-[18px] no-scrollbar"
         ref={scrollContainerRef}
         style={style}
       >
         <div className="main-content flex-1 pb-[20px]">
           <div className="layout-container">
-            <DesktopNav />
             <div
               className="sticky z-10 pt-[0px] overflow-scroll flex-initial px-1 w-auto"
               style={{
@@ -238,6 +262,7 @@ export const DesktopProfile: React.FC<{
                     evmBalance={evmBalance}
                     curveChartData={curveChartData}
                     isLoading={isBalanceLoading || isCurveLoading}
+                    isRefreshing={isRefreshing}
                     onRefresh={handleUpdate}
                     appChainIds={appChainIds}
                   />
@@ -254,12 +279,29 @@ export const DesktopProfile: React.FC<{
                       right: (
                         <>
                           <div className="flex items-center gap-[16px] pr-[20px]">
+                            {isGnosis ? (
+                              <div
+                                className={clsx(
+                                  'min-w-[88px] h-[32px] px-[10px] rounded-[8px]',
+                                  'flex items-center justify-center gap-[4px] cursor-pointer',
+                                  'text-rb-brand-default text-[14px] leading-[16px] font-medium',
+                                  'border-[0.5px] border-solid border-rb-brand-default',
+                                  'hover:bg-r-blue-light-1'
+                                )}
+                                onClick={() => {
+                                  history.replace(
+                                    `${history.location.pathname}?action=gnosis-queue`
+                                  );
+                                }}
+                              >
+                                <RcIconQueueCC />
+                                {t('page.desktopProfile.button.queue')}
+                              </div>
+                            ) : null}
                             <DesktopPending />
                             <DesktopChainSelector
                               value={chain}
-                              onChange={(v) =>
-                                dispatch.desktopProfile.setField({ chain: v })
-                              }
+                              onChange={setChain}
                             />
                           </div>
                         </>
@@ -279,7 +321,7 @@ export const DesktopProfile: React.FC<{
                         }
                         isNoResults={isNoResults}
                         sortTokens={sortTokens}
-                        hasTokens={hasTokens}
+                        hasTokens={!!hasTokens}
                         lpTokenMode={lpTokenMode}
                         setLpTokenMode={setLpTokenMode}
                         selectChainId={chainInfo?.serverId}
@@ -359,17 +401,15 @@ export const DesktopProfile: React.FC<{
           </div>
         </div>
         <aside
-          className={clsx(
-            'flex-shrink-0 sticky z-20 top-0 h-full flex flex-col'
-          )}
+          className={clsx('shrink-0 sticky z-20 top-0 h-full flex flex-col')}
           // style={{ top: DESKTOP_NAV_HEIGHT }}
         >
-          <div
-            className="flex items-center justify-end flex-shrink-0"
+          {/* <div
+            className="flex items-center justify-end shrink-0"
             style={{ height: `${DESKTOP_NAV_HEIGHT}px` }}
           >
             <SwitchThemeBtn />
-          </div>
+          </div> */}
           <div className="flex-1">
             <DesktopSelectAccountList />
           </div>
@@ -439,5 +479,35 @@ export const DesktopProfile: React.FC<{
         destroyOnClose
       />
     </>
+  );
+};
+
+const DesktopProfilePrefetched: React.FC<
+  DesktopProfileProps & { currentAddress: string }
+> = ({ currentAddress, ...props }) => {
+  const { dashboardBalanceCacheInited } = useHomeBalanceViewOuterPrefetch(
+    currentAddress
+  );
+
+  if (!dashboardBalanceCacheInited) {
+    return null;
+  }
+
+  return <DesktopProfileContent {...props} />;
+};
+
+export const DesktopProfile: React.FC<DesktopProfileProps> = (props) => {
+  const currentAccount = useCurrentAccount();
+
+  if (!currentAccount?.address) {
+    return null;
+  }
+
+  return (
+    <DesktopProfilePrefetched
+      key={currentAccount.address}
+      currentAddress={currentAccount.address}
+      {...props}
+    />
   );
 };

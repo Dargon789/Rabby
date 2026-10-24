@@ -1,11 +1,8 @@
-import clsx from 'clsx';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import ReactMarkdown from 'react-markdown';
 import { useHistory, useLocation } from 'react-router-dom';
-import remarkGfm from 'remark-gfm';
 
-import { AuthenticationModal, Modal } from 'ui/component';
+import { AuthenticationModal } from 'ui/component';
 import { connectStore, useRabbyDispatch, useRabbySelector } from 'ui/store';
 import { useWallet } from 'ui/utils';
 import './style.less';
@@ -17,20 +14,63 @@ import { DashboardHeader } from './components/DashboardHeader';
 import { DashboardPanel } from './components/DashboardPanel';
 import { useCurrentAccount } from '@/ui/hooks/backgroundState/useAccount';
 import { GasPriceBar } from './components/GasPriceBar';
-import { CHAINS_ENUM } from '@/constant';
+import { CHAINS_ENUM, KEYRING_CLASS } from '@/constant';
 import Settings from './components/Settings';
 import { useMemoizedFn, useMount } from 'ahooks';
 import { useEnterPassphraseModal } from '@/ui/hooks/useEnterPassphraseModal';
+import {
+  useGasAccountDiscovery,
+  useGasAccountSign,
+} from '@/ui/views/GasAccount/hooks';
+import { StablecoinSwapPopup } from './components/StablecoinSwapPopup';
+import { useAppVersionStore } from '@/ui/state/appVersion';
+import {
+  selectExtensionUpdateBanner,
+  selectExtensionUpdateLevel,
+  useExtensionUpdateStore,
+} from '@/ui/state/extensionUpdate';
+import { ExtensionUpdateBanner } from './components/ExtensionUpdateBanner';
+import { FirstNoticeDialog } from './components/FirstNoticeDialog';
+import { useExtensionVersionInfo } from '@/ui/hooks/useExtensionVersionInfo';
+import { refreshBridgeHistoryTop10 } from '@/ui/views/Bridge/utils/historyCache';
 
 const Dashboard = () => {
   const history = useHistory();
   const wallet = useWallet();
   const dispatch = useRabbyDispatch();
   const currentAccount = useCurrentAccount();
+  const address = currentAccount?.address;
+  useEffect(() => {
+    if (!address) return;
+    refreshBridgeHistoryTop10(wallet, address).catch(() => {
+      // 预热失败，下次请求重试。
+    });
+  }, [address, wallet]);
+  const { refreshDiscovery } = useGasAccountDiscovery({
+    autoRefresh: false,
+  });
+  const { sig, accountId } = useGasAccountSign();
+  const hasGasAccountSession = !!sig && !!accountId;
 
-  const { firstNotice, updateContent, version } = useRabbySelector((s) => ({
-    ...s.appVersion,
-  }));
+  const {
+    firstNotice,
+    updateContent,
+    version,
+    checkIfFirstLoginAsync,
+    afterFirstLogin,
+  } = useAppVersionStore();
+  const locale = useRabbySelector((s) => s.preference.locale);
+  const accountsDiscoveryKey = useRabbySelector((s) =>
+    s.accountToDisplay.accountsList
+      .map(
+        (account) =>
+          `${account.address.toLowerCase()}:${account.type}:${
+            account.brandName || ''
+          }`
+      )
+      .sort()
+      .join('|')
+  );
 
   const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
 
@@ -66,9 +106,28 @@ const Dashboard = () => {
     })();
   }, []);
 
+  // Discovery costs one gas account balance lookup per address. The dashboard
+  // only consumes the two fields discovery derives for a logged-out wallet —
+  // autoLoginAccount and pendingHardwareAccount — and both are forced to
+  // undefined once a session exists, so with one the whole round is wasted. The
+  // remaining field, accountsWithGasAccountBalance, is read by the GasAccount
+  // page, which refreshes discovery on its own mount. Losing a session mid-flight
+  // still rediscovers, from useGasAccountInfo's invalidateSession.
   useEffect(() => {
-    dispatch.appVersion.checkIfFirstLoginAsync();
-  }, [dispatch]);
+    if (!accountsDiscoveryKey || hasGasAccountSession) {
+      return;
+    }
+    refreshDiscovery().catch((error) => {
+      console.error(
+        '[gasAccount] refresh discovery on account change failed',
+        error
+      );
+    });
+  }, [accountsDiscoveryKey, hasGasAccountSession, refreshDiscovery]);
+
+  useMount(() => {
+    void checkIfFirstLoginAsync(locale);
+  });
 
   const { t } = useTranslation();
   const [currentConnectedSiteChain, setCurrentConnectedSiteChain] = useState(
@@ -76,6 +135,27 @@ const Dashboard = () => {
   );
 
   const [settingVisible, setSettingVisible] = useState(false);
+  const [updateClock, setUpdateClock] = useState(Date.now);
+  const showUpdateBanner = useExtensionUpdateStore((s) =>
+    selectExtensionUpdateBanner(s, updateClock)
+  );
+  const updateLevel = useExtensionUpdateStore(selectExtensionUpdateLevel);
+  const dismissedUntil = useExtensionUpdateStore((s) => s.dismissedUntil);
+  const dismissBanner = useExtensionUpdateStore((s) => s.dismissBanner);
+  const revealSettingsCard = useExtensionUpdateStore(
+    (s) => s.revealSettingsCard
+  );
+  const pendingVersion = useExtensionUpdateStore((s) => s.pendingVersion);
+  useExtensionVersionInfo();
+  useEffect(() => {
+    setUpdateClock(Date.now());
+    if (dismissedUntil <= Date.now()) return;
+    const timer = setTimeout(
+      () => setUpdateClock(Date.now()),
+      Math.min(dismissedUntil - Date.now(), 2147483647)
+    );
+    return () => clearTimeout(timer);
+  }, [dismissedUntil]);
   const [autoScrollToBiometric, setAutoScrollToBiometric] = useState(false);
   const toggleShowMoreSettings = useMemoizedFn(() => {
     setSettingVisible(!settingVisible);
@@ -103,6 +183,9 @@ const Dashboard = () => {
         wallet.clearPageStateCache();
         const address = currentAccount?.address;
         if (!address) {
+          return;
+        }
+        if (currentAccount?.type !== KEYRING_CLASS.MNEMONIC) {
           return;
         }
         const hasBackup = await wallet.checkSeedPhraseBackup(address);
@@ -141,28 +224,36 @@ const Dashboard = () => {
 
   return (
     <>
-      <div className={clsx('dashboard')}>
-        <DashboardHeader onSettingClick={toggleShowMoreSettings} />
-        <DashboardPanel onSettingClick={toggleShowMoreSettings} />
-        <div className="px-[16px] pb-[13px]">
-          <GasPriceBar currentConnectedSiteChain={currentConnectedSiteChain} />
-          <CurrentConnection onChainChange={setCurrentConnectedSiteChain} />
+      <div className="relative h-full overflow-hidden">
+        <div className="dashboard h-full overflow-y-auto">
+          <DashboardHeader onSettingClick={toggleShowMoreSettings} />
+          <DashboardPanel onSettingClick={toggleShowMoreSettings} />
+          <div className="px-[16px] pb-[13px]">
+            <GasPriceBar
+              currentConnectedSiteChain={currentConnectedSiteChain}
+            />
+            <CurrentConnection onChainChange={setCurrentConnectedSiteChain} />
+          </div>
         </div>
+        <StablecoinSwapPopup />
+        <ExtensionUpdateBanner
+          key={`${pendingVersion}:${updateLevel}:${dismissedUntil}`}
+          visible={showUpdateBanner && !settingVisible}
+          closable={updateLevel === 3}
+          onDismiss={dismissBanner}
+          onCheck={() => {
+            revealSettingsCard();
+            setAutoScrollToBiometric(false);
+            setSettingVisible(true);
+          }}
+        />
       </div>
-      <Modal
-        visible={firstNotice && updateContent}
-        title={t('page.dashboard.home.whatsNew')}
-        className="first-notice"
-        onCancel={() => {
-          dispatch.appVersion.afterFirstLogin();
-        }}
-        maxHeight="420px"
-      >
-        <div>
-          <p className="mb-12">{version}</p>
-          <ReactMarkdown children={updateContent} remarkPlugins={[remarkGfm]} />
-        </div>
-      </Modal>
+      <FirstNoticeDialog
+        visible={!!(firstNotice && updateContent)}
+        version={version}
+        updateContent={updateContent}
+        onClose={afterFirstLogin}
+      />
 
       {pendingApprovalCount > 0 && (
         <PendingApproval

@@ -1,0 +1,745 @@
+import BigNumber from 'bignumber.js';
+import { intToHex, isHexString } from '@ethereumjs/util';
+import { omit } from 'lodash';
+
+import {
+  buildParseTxRequest,
+  buildPreExecTxRequest,
+  buildSignTx,
+  calcGasLimit,
+  normalizeTxParams,
+  checkGasAndNonce,
+  explainGas,
+  getPendingTxs,
+  prepareInitialGasSelection,
+  shouldUpdateNonce,
+} from '@/utils/transaction';
+
+jest.mock('@/i18n', () => ({
+  __esModule: true,
+  default: {
+    t: (key: string) => key,
+  },
+}));
+
+jest.mock('consts', () => ({
+  CAN_ESTIMATE_L1_FEE_CHAINS: [],
+  DEFAULT_GAS_LIMIT_BUFFER: 0,
+  DEFAULT_GAS_LIMIT_RATIO: 1,
+  GASPRICE_RANGE: {},
+  KEYRING_CATEGORY_MAP: {},
+  MINIMUM_GAS_LIMIT: 21000,
+  SAFE_GAS_LIMIT_BUFFER: 0,
+  SAFE_GAS_LIMIT_RATIO: 1,
+}));
+
+describe('shouldUpdateNonce', () => {
+  const tx = { from: '0xfrom', to: '0xto' } as any;
+
+  test('updates an ordinary transaction without a nonce', () => {
+    expect(shouldUpdateNonce(tx)).toBe(true);
+  });
+
+  test('keeps the existing SignTx behavior for an explicit nonce', () => {
+    expect(shouldUpdateNonce({ ...tx, nonce: '0x1' })).toBe(true);
+  });
+
+  test('preserves nonce for speed up and cancel transactions', () => {
+    expect(
+      shouldUpdateNonce({ ...tx, nonce: '0x1', isSpeedUp: true } as any)
+    ).toBe(false);
+    expect(
+      shouldUpdateNonce({ ...tx, nonce: '0x1', isCancel: true } as any)
+    ).toBe(false);
+  });
+
+  test('preserves nonce for same-address transactions and user changes', () => {
+    expect(
+      shouldUpdateNonce({
+        ...tx,
+        nonce: '0x1',
+        to: tx.from,
+      })
+    ).toBe(false);
+    expect(shouldUpdateNonce({ ...tx, nonceChanged: true })).toBe(false);
+  });
+});
+
+jest.mock('@/utils/chain', () => ({
+  findChain: () => ({
+    serverId: 'tempo',
+    enum: 'TEMPO',
+  }),
+}));
+
+jest.mock('@/utils/tempo', () => {
+  const actual = jest.requireActual('@/utils/tempo');
+  return {
+    ...actual,
+    getTempoFeeTokenInfo: jest.fn(),
+    isTempoChain: (serverId?: string) => serverId === 'tempo',
+  };
+});
+
+const createCheckParams = (overrides = {}) => ({
+  recommendGasLimitRatio: 1,
+  recommendGasLimit: 21000,
+  recommendNonce: 0,
+  tx: {
+    chainId: 123,
+    value: '0x0',
+  },
+  gasLimit: 21000,
+  nonce: 0,
+  isCancel: false,
+  isSpeedUp: false,
+  isGnosisAccount: false,
+  nativeTokenBalance: '2000',
+  gasTokenDecimals: 6,
+  gasTokenId: '0xselected',
+  tempoPreferredFeeTokenId: '0xpreferred',
+  checkTxValueInBalance: false,
+  gasExplainResponse: {
+    gasCostUsd: new BigNumber(0),
+    gasCostAmount: new BigNumber(0),
+    maxGasCostAmount: new BigNumber(0),
+    maxGasCostRawAmount: new BigNumber(1500),
+  },
+  ...overrides,
+});
+
+describe('checkGasAndNonce tempo fee token', () => {
+  test('checks tempo fee token balance against gas cost in token decimals', async () => {
+    const gasExplainResponse = await explainGas({
+      gasUsed: 50000,
+      gasPrice: 30000000000,
+      chainId: 123,
+      nativeTokenPrice: 1,
+      tx: {
+        chainId: 123,
+        value: '0x0',
+      } as any,
+      wallet: {} as any,
+      gasLimit: '50000',
+      account: {} as any,
+      gasTokenDecimals: 6,
+    });
+
+    expect(gasExplainResponse.maxGasCostRawAmount.toFixed()).toBe('1500');
+    expect(
+      checkGasAndNonce(
+        createCheckParams({
+          nativeTokenBalance: '1500',
+          tempoPreferredFeeTokenId: '0xselected',
+          gasExplainResponse,
+        }) as Parameters<typeof checkGasAndNonce>[0]
+      ).some((item) => item.code === 3001)
+    ).toBe(false);
+  });
+
+  test('uses tx feeToken before stale preferred fee token', () => {
+    const errors = checkGasAndNonce(
+      createCheckParams({
+        tx: {
+          chainId: 123,
+          value: '0x0',
+          feeToken: '0xselected',
+        },
+      }) as Parameters<typeof checkGasAndNonce>[0]
+    );
+
+    expect(errors.some((item) => item.code === 3001)).toBe(false);
+  });
+
+  test('falls back to preferred fee token when tx feeToken is missing', () => {
+    const errors = checkGasAndNonce(
+      createCheckParams() as Parameters<typeof checkGasAndNonce>[0]
+    );
+
+    expect(errors.some((item) => item.code === 3001)).toBe(true);
+  });
+});
+
+describe('getPendingTxs', () => {
+  test('returns same-chain pending txs sorted by nonce for pre-exec', async () => {
+    const pending = (chainId: number, nonce: number) => ({
+      chainId,
+      nonce,
+      createdAt: nonce * 1000,
+      txs: [
+        {
+          rawTx: {
+            from: '0xfrom',
+            to: `0xto${nonce}`,
+            chainId,
+            data: `0x${nonce}`,
+            nonce: `0x${nonce}`,
+            value: '0x0',
+            gasPrice: `0x${nonce}`,
+            gas: '0x5208',
+          },
+        },
+      ],
+    });
+    const wallet = {
+      getTransactionHistory: jest.fn().mockResolvedValue({
+        pendings: [pending(1, 3), pending(1, 1), pending(2, 2), pending(1, 2)],
+      }),
+    };
+
+    const txs = await getPendingTxs({
+      recommendNonce: '0x4',
+      wallet: wallet as any,
+      address: '0xfrom',
+      chainId: 1,
+    });
+
+    expect(txs.map((tx) => tx.nonce)).toEqual(['0x1', '0x2', '0x3']);
+  });
+});
+
+test('buildParseTxRequest preserves object and tuple authorization lists', () => {
+  const request = buildParseTxRequest({
+    tx: { from: '0xfrom', chainId: 1 } as any,
+    chainId: '1',
+    nonce: '0x1',
+    origin: '',
+    addr: '0xfrom',
+    support1559: true,
+    enable7702: true,
+    authorizationList: [
+      { chainId: '0x1', address: '0xobject', nonce: '0x2' },
+      ['0x2', '0xtuple', '0x3'],
+    ],
+  });
+
+  expect((request.tx as any).authorizationList).toEqual([
+    [1, '0xobject', 2],
+    [2, '0xtuple', 3],
+  ]);
+});
+
+test('buildPreExecTxRequest normalizes fallback transaction fields', () => {
+  // buildPreExecTxRequest assumes tx has already been through
+  // normalizeTxParams (gas/gasLimit precedence is resolved there, not here)
+  // - it only fills in fields that are safe to default on their own.
+  const request = buildPreExecTxRequest({
+    tx: {
+      from: '0xfrom',
+      gas: '0x5208',
+    } as any,
+    nonce: '0x1',
+    origin: '',
+    address: '0xfrom',
+    updateNonce: true,
+    pendingTxList: [],
+    delegateCall: false,
+  });
+
+  expect(request.tx).toMatchObject({
+    nonce: '0x1',
+    data: '0x',
+    value: '0x0',
+    gas: '0x5208',
+  });
+});
+
+test('normalizeTxParams prefers gasLimit over gas when both are present', () => {
+  const tx = normalizeTxParams({
+    from: '0xfrom',
+    gas: '0x1',
+    gasLimit: 21000,
+  } as any);
+
+  expect(tx.gas).toBe('0x5208');
+});
+
+test('normalizeTxParams normalizes numeric transaction fields', () => {
+  const tx = normalizeTxParams({
+    from: '0xfrom',
+    gasPrice: 1,
+    maxFeePerGas: '2',
+    maxPriorityFeePerGas: 3,
+    value: 4,
+    data: 'abcd',
+  } as any);
+
+  expect(tx).toMatchObject({
+    gasPrice: '0x1',
+    maxFeePerGas: '0x2',
+    maxPriorityFeePerGas: '0x3',
+    value: '0x4',
+    data: '0xabcd',
+  });
+});
+
+test('normalizeTxParams hex-encodes a value past Number.MAX_SAFE_INTEGER', () => {
+  // MAX_SAFE_INTEGER is ~0.009 ETH in wei, so any real amount a dapp sends as
+  // a number lands here. Throwing would make the caller fall back to the raw
+  // params, skipping normalization - including the isDapp field stripping,
+  // which is what keeps a dapp from steering the gas level.
+  const tx = normalizeTxParams(
+    { from: '0xfrom', value: 1e18, isSpeedUp: true } as any,
+    true
+  );
+
+  expect(tx.value).toBe('0xde0b6b3a7640000');
+  expect((tx as any).isSpeedUp).toBeUndefined();
+});
+
+test('prepareInitialGasSelection keeps the initial SignTx gas behavior', async () => {
+  const loadGasMarket = jest.fn().mockResolvedValue([
+    {
+      level: 'normal',
+      price: 90,
+      priority_price: 80,
+      front_tx_count: 0,
+      estimated_seconds: 1,
+      base_fee: 0,
+    },
+    {
+      level: 'custom',
+      price: 100,
+      priority_price: 70,
+      front_tx_count: 0,
+      estimated_seconds: 1,
+      base_fee: 0,
+    },
+  ]);
+  const tx = {
+    chainId: 1,
+    from: '0xfrom',
+    to: '0xto',
+    data: '0x',
+    value: '0x0',
+  } as any;
+
+  const result = await prepareInitialGasSelection({
+    tx,
+    chainId: 1,
+    support1559: true,
+    isSend: true,
+    lastTimeGas: null,
+    loadGasMarket,
+  });
+
+  expect(loadGasMarket).toHaveBeenCalledWith(0);
+  expect(result.gas.level).toBe('normal');
+  expect(result.tx).toMatchObject({
+    maxFeePerGas: '0x5a',
+    maxPriorityFeePerGas: '0x5a',
+  });
+  expect(result.tx).not.toHaveProperty('gasPrice');
+});
+
+test('prepareInitialGasSelection preserves cached and dapp gas precedence', async () => {
+  const gasList = [
+    {
+      level: 'normal',
+      price: 90,
+      priority_price: 80,
+      front_tx_count: 0,
+      estimated_seconds: 1,
+      base_fee: 0,
+    },
+    {
+      level: 'custom',
+      price: 100,
+      priority_price: 60,
+      front_tx_count: 0,
+      estimated_seconds: 1,
+      base_fee: 0,
+    },
+  ];
+  const loadGasMarket = jest.fn().mockResolvedValue(gasList);
+  const baseTx = {
+    chainId: 1,
+    from: '0xfrom',
+    to: '0xto',
+    data: '0x',
+    value: '0x0',
+  } as any;
+
+  const cached = await prepareInitialGasSelection({
+    tx: baseTx,
+    chainId: 1,
+    support1559: false,
+    lastTimeGas: {
+      lastTimeSelect: 'gasPrice',
+      gasPrice: 100,
+      maxPriorityFee: 70,
+    } as any,
+    loadGasMarket,
+  });
+  expect(cached.gas.level).toBe('custom');
+  expect(cached.gas.priority_price).toBe(70);
+  expect(cached.tx.gasPrice).toBe('0x64');
+  // Only the selected level carries the cached priority fee - the returned
+  // list is the raw market list, which is what the gas selector renders.
+  expect(cached.gasList).toBe(gasList);
+  expect(cached.gasList[1].priority_price).toBe(60);
+
+  loadGasMarket.mockClear();
+  const dappGas = await prepareInitialGasSelection({
+    tx: { ...baseTx, gasPrice: '0x78' },
+    chainId: 1,
+    support1559: false,
+    isSend: true,
+    lastTimeGas: {
+      lastTimeSelect: 'gasLevel',
+      gasLevel: 'normal',
+      gasPrice: 100,
+      maxPriorityFee: 70,
+    } as any,
+    loadGasMarket,
+  });
+  expect(loadGasMarket).toHaveBeenCalledWith(120);
+  expect(dappGas.gas.level).toBe('custom');
+  expect(dappGas.tx.gasPrice).toBe('0x64');
+});
+
+test('prepareInitialGasSelection rejects when gas market fails', async () => {
+  const error = new Error('gas market unavailable');
+
+  await expect(
+    prepareInitialGasSelection({
+      tx: { chainId: 1, from: '0xfrom' } as any,
+      chainId: 1,
+      support1559: true,
+      lastTimeGas: null,
+      loadGasMarket: jest.fn().mockRejectedValue(error),
+    })
+  ).rejects.toBe(error);
+});
+
+describe('buildSignTx', () => {
+  // Verbatim copy of the construction SignTx used before it was extracted.
+  // buildSignTx must keep producing exactly this - it decides what the user
+  // sees and signs.
+  const legacySignTxConstruction = (rawTx: any, chainId: number) => {
+    const {
+      data = '0x',
+      from,
+      type,
+      calls,
+      gas,
+      gasPrice,
+      nonce,
+      to,
+      value,
+      feeToken,
+      maxFeePerGas,
+      authorizationList,
+      feePayer,
+      feePayerSignature,
+      nonceKey,
+      keyAuthorization,
+      validBefore,
+      validAfter,
+    } = normalizeTxParams(rawTx, true) as any;
+    const enable7702 = false;
+    const getGasPrice = () => {
+      let result = '';
+      if (maxFeePerGas) {
+        result = isHexString(maxFeePerGas)
+          ? maxFeePerGas
+          : intToHex(maxFeePerGas);
+      }
+      if (gasPrice) {
+        result = isHexString(gasPrice)
+          ? gasPrice
+          : intToHex(parseInt(gasPrice));
+      }
+      if (Number.isNaN(Number(result))) {
+        result = '';
+      }
+      return result;
+    };
+    return omit(
+      {
+        chainId,
+        data: data || '0x',
+        from,
+        gas: gas || rawTx.gasLimit,
+        gasPrice: getGasPrice(),
+        nonce,
+        to,
+        value,
+        type,
+        calls,
+        feeToken,
+        maxFeePerGas,
+        feePayer,
+        feePayerSignature,
+        nonceKey,
+        keyAuthorization,
+        validBefore,
+        validAfter,
+        authorizationList,
+      },
+      ['authorizationList']
+    );
+  };
+
+  const cases: Record<string, any> = {
+    '1559 dapp tx': {
+      from: '0xfrom',
+      to: '0xto',
+      data: '0xdeadbeef',
+      value: '0x0',
+      chainId: '0x1',
+      maxFeePerGas: '0x3b9aca00',
+      maxPriorityFeePerGas: '0x5f5e100',
+    },
+    'legacy dapp tx with gasLimit': {
+      from: '0xfrom',
+      to: '0xto',
+      data: '0xdeadbeef',
+      value: '0x0',
+      chainId: '0x89',
+      gasLimit: 21000,
+      gasPrice: '0x3b9aca00',
+    },
+    'bare tx, no gas fields': {
+      from: '0xfrom',
+      to: '0xto',
+      chainId: 1,
+    },
+  };
+
+  Object.entries(cases).forEach(([name, rawTx]) => {
+    test(`matches the pre-extraction construction: ${name}`, () => {
+      const chainId = Number(rawTx.chainId);
+      expect(
+        buildSignTx({
+          tx: normalizeTxParams(rawTx, true) as any,
+          chainId,
+          gasLimit: rawTx.gasLimit,
+        })
+      ).toEqual(legacySignTxConstruction(rawTx, chainId));
+    });
+  });
+
+  test('buildSignTx preserves the expected dapp fee fields', () => {
+    // buildSignTx is the single construction site for the signed tx, so these
+    // three conversions are what every downstream consumer depends on.
+    const rawTx = cases['1559 dapp tx'];
+    const tx = buildSignTx({
+      tx: normalizeTxParams(rawTx, true) as any,
+      chainId: Number(rawTx.chainId),
+    }) as any;
+
+    expect(tx.chainId).toBe(1);
+    expect(tx.gasPrice).toBe('0x3b9aca00');
+    expect(tx.maxPriorityFeePerGas).toBeUndefined();
+  });
+
+  test('buildSignTx uses the Tempo signing semantics for display', () => {
+    const tx = buildSignTx({
+      tx: normalizeTxParams(
+        {
+          from: '0xfrom',
+          type: '0x76',
+          to: '0xpathusd',
+          data: '0xa9059cbbdead',
+          value: '0x0',
+          calls: [{}],
+        } as any,
+        true
+      ) as any,
+      chainId: 123,
+    }) as any;
+
+    expect(tx.calls).toStrictEqual([
+      {
+        to: '0xpathusd',
+        data: '0xa9059cbbdead',
+        value: '0x0',
+      },
+    ]);
+    expect(tx.to).toBeUndefined();
+    expect(tx.value).toBeUndefined();
+    expect(tx.data).toBe('0x');
+  });
+});
+
+describe('calcGasLimit dapp tx.gas cap', () => {
+  const run = (enumName: string, blockGasLimit: number, txGas: string) =>
+    calcGasLimit({
+      chain: { id: 1, enum: enumName, serverId: 'x' } as any,
+      tx: { gas: txGas } as any,
+      gas: new BigNumber(21000),
+      selectedGas: null,
+      nativeTokenBalance: '0',
+      explainTx: { gas: { gas_ratio: 1 } } as any,
+      needRatio: false,
+      wallet: {} as any,
+      preparedBlock: { gasLimit: intToHex(blockGasLimit) } as any,
+    }).then((r) => r.gasLimit);
+
+  // ETH single-tx limit 16,777,216 (EIP-7825); UNKNOWN is only capped by block
+  test.each([
+    ['single-tx limit + 1', 'ETH', 30_000_000, intToHex(16_777_217), '0x5208'],
+    ['single-tx limit', 'ETH', 30_000_000, intToHex(16_777_216), '0x1000000'],
+    ['block limit + 1', 'UNKNOWN', 1_000_000, intToHex(1_000_001), '0x5208'],
+    ['block limit', 'UNKNOWN', 1_000_000, intToHex(1_000_000), '0xf4240'],
+    ['invalid tx.gas', 'UNKNOWN', 1_000_000, '0x', '0x5208'],
+  ])('%s', async (_, enumName, blockGasLimit, txGas, expected) => {
+    await expect(run(enumName, blockGasLimit, txGas)).resolves.toBe(expected);
+  });
+});
+
+describe('calcGasLimit prepared block fallback on ordinary chains', () => {
+  beforeEach(() => {
+    jest.requireMock('consts').DEFAULT_GAS_LIMIT_BUFFER = 0.95;
+  });
+  afterEach(() => {
+    jest.requireMock('consts').DEFAULT_GAS_LIMIT_BUFFER = 0;
+  });
+
+  test.each(['null', 'rejected', 'ready'])(
+    'preserves the latest block cap with a %s prepared block',
+    async (state) => {
+      const block = { gasLimit: intToHex(1_000_000) };
+      const requestETHRpc = jest.fn().mockResolvedValue(block);
+      const preparedBlock =
+        state === 'ready'
+          ? Promise.resolve(block)
+          : state === 'null'
+          ? Promise.resolve(null)
+          : Promise.reject(new Error('prefetch failed'));
+      const result = await calcGasLimit({
+        chain: { id: 1, enum: 'UNKNOWN', serverId: 'eth' } as any,
+        tx: { from: '0xsender' } as any,
+        gas: new BigNumber(2_000_000),
+        selectedGas: null,
+        nativeTokenBalance: '0',
+        explainTx: { gas: { gas_ratio: 1 } } as any,
+        needRatio: false,
+        wallet: { requestETHRpc } as any,
+        preparedBlock: preparedBlock as any,
+      });
+      expect(Number(result.gasLimit)).toBe(950_000);
+      expect(requestETHRpc).toHaveBeenCalledTimes(state === 'ready' ? 0 : 1);
+    }
+  );
+});
+
+describe('HyperEVM sender gas limit', () => {
+  const run = (
+    usingBigBlocks: unknown,
+    blockGasLimit = 3_000_000,
+    gas = 8_300_000,
+    txGas = 10_000_000
+  ) => {
+    const requestETHRpc = jest.fn().mockResolvedValue(usingBigBlocks);
+    return calcGasLimit({
+      chain: { id: 999, enum: 'HYPER', serverId: 'hyper' } as any,
+      tx: { from: '0xsender', gas: intToHex(txGas) } as any,
+      gas: new BigNumber(gas),
+      selectedGas: null,
+      nativeTokenBalance: '0',
+      explainTx: { gas: { gas_ratio: 1.5 } } as any,
+      needRatio: true,
+      wallet: { requestETHRpc } as any,
+      preparedBlock: { gasLimit: intToHex(blockGasLimit) } as any,
+    }).then((result) => ({ result, requestETHRpc }));
+  };
+
+  beforeEach(() => {
+    jest.requireMock('consts').DEFAULT_GAS_LIMIT_RATIO = 1.5;
+    jest.requireMock('consts').DEFAULT_GAS_LIMIT_BUFFER = 0.95;
+  });
+
+  afterEach(() => {
+    jest.requireMock('consts').DEFAULT_GAS_LIMIT_RATIO = 1;
+    jest.requireMock('consts').DEFAULT_GAS_LIMIT_BUFFER = 0;
+  });
+
+  test.each([
+    [21_000, 0, 31_500],
+    [2_000_000, 0, 3_000_000],
+    [1_000_000, 3_000_000, 3_000_000],
+  ])(
+    'skips the mode query when both gas candidates fit a small block',
+    async (gas, txGas, expected) => {
+      const { result, requestETHRpc } = await run(true, 30_000_000, gas, txGas);
+      expect(Number(result.gasLimit)).toBe(expected);
+      expect(requestETHRpc).not.toHaveBeenCalled();
+    }
+  );
+
+  test.each([
+    [true, 3_750_000],
+    [false, 3_000_000],
+  ])(
+    'queries mode %s when only the buffer exceeds 3M',
+    async (mode, expected) => {
+      const { result, requestETHRpc } = await run(
+        mode,
+        3_000_000,
+        2_500_000,
+        0
+      );
+      expect(Number(result.gasLimit)).toBe(expected);
+      expect(requestETHRpc).toHaveBeenCalledWith(
+        { method: 'eth_usingBigBlocks', params: ['0xsender'] },
+        'hyper'
+      );
+    }
+  );
+
+  test.each([3_000_000, 30_000_000])(
+    'big-block sender ignores latest block limit %i',
+    async (blockLimit) => {
+      const { result, requestETHRpc } = await run(true, blockLimit);
+      expect(Number(result.gasLimit)).toBe(12_450_000);
+      expect(requestETHRpc).toHaveBeenCalledWith(
+        { method: 'eth_usingBigBlocks', params: ['0xsender'] },
+        'hyper'
+      );
+    }
+  );
+
+  test('small-block sender keeps its limit even when latest is a big block', async () => {
+    const { result } = await run(false, 30_000_000);
+    expect(Number(result.gasLimit)).toBe(3_000_000);
+  });
+
+  test('honors a dapp gas limit that fits the sender big-block cap', async () => {
+    const { result, requestETHRpc } = await run(
+      true,
+      3_000_000,
+      2_000_000,
+      9_000_000
+    );
+    expect(Number(result.gasLimit)).toBe(9_000_000);
+    expect(requestETHRpc).toHaveBeenCalledWith(
+      { method: 'eth_usingBigBlocks', params: ['0xsender'] },
+      'hyper'
+    );
+  });
+
+  test('only caps the buffer when the estimate fits a big block', async () => {
+    const { result } = await run(true, 3_000_000, 29_000_000);
+    expect(Number(result.gasLimit)).toBe(30_000_000);
+  });
+
+  test('discards a dapp limit above small-block cap when the estimate fits', async () => {
+    const { result } = await run(false, 30_000_000, 2_000_000, 4_000_000);
+    expect(Number(result.gasLimit)).toBe(3_000_000);
+  });
+
+  test.each([
+    [2_800_000, 0, 3_000_000],
+    [8_300_000, 0, 3_000_000],
+    [2_000_000, 9_000_000, 3_000_000],
+    [2_000_000, 30_000_001, 3_000_000],
+  ])(
+    'retains the small-block cap when the sender mode is unavailable',
+    async (gas, txGas, expected) => {
+      const { result } = await run(null, 3_000_000, gas, txGas);
+      expect(Number(result.gasLimit)).toBe(expected);
+    }
+  );
+});

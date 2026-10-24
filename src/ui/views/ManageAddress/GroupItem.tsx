@@ -2,7 +2,7 @@ import { KEYRING_CLASS, KEYRING_ICONS, WALLET_BRAND_CONTENT } from '@/constant';
 import ThemeIcon from '@/ui/component/ThemeMode/ThemeIcon';
 import { useWalletConnectIcon } from '@/ui/component/WalletConnect/useWalletConnectIcon';
 import { useThemeMode } from '@/ui/hooks/usePreference';
-import { IDisplayedAccountWithBalance } from '@/ui/models/accountToDisplay';
+import { IDisplayedAccountWithBalance } from '@/ui/state/accountToDisplay';
 import { pickKeyringThemeIcon } from '@/utils/account';
 import clsx from 'clsx';
 import React, { useMemo } from 'react';
@@ -50,9 +50,7 @@ export const GroupItem = ({
       onClick={onChange}
       className={clsx(
         'w-[59px] h-[44px] rounded-[4px] flex items-center justify-center cursor-pointer',
-        active
-          ? 'bg-blue-light bg-opacity-[0.15]'
-          : 'hover:bg-blue-light hover:bg-opacity-[0.08]'
+        active ? 'bg-blue-light/[0.15]' : 'hover:bg-blue-light/[0.08]'
       )}
     >
       <div className="relative flex items-center justify-center">

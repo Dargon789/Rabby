@@ -1,18 +1,29 @@
 import eventBus from '@/eventBus';
 import migrateData from '@/migrations';
 import { getOriginFromUrl, transformFunctionsToZero } from '@/utils';
-import { appIsDev, getSentryEnv, isManifestV3 } from '@/utils/env';
+import { appIsDev, isManifestV3 } from '@/utils/env';
 import { matomoRequestEvent } from '@/utils/matomo-request';
-import { Message, sendReadyMessageToTabs } from '@/utils/message';
+import {
+  Message,
+  sendReadyMessageToTabs,
+  setMessageErrorReporter,
+} from '@/utils/message';
+import { getSentryConfig } from '@/utils/sentry-config';
+import {
+  getSigningContext,
+  isSigningCarrierReported,
+  takeSigningCarrier,
+} from '@/utils/sentry';
 import Safe from '@rabby-wallet/gnosis-sdk';
 import * as Sentry from '@sentry/browser';
-import fetchAdapter from 'background/utils/fetchAdapter';
+import fetchAdapter from '@/services/openapi/fetchAdapter';
 import { WalletController } from 'background/controller/wallet';
 import {
   APPCHAIN_SYNC_SCENE,
   BALANCE_SYNC_SCENE,
   CACHE_VALID_DURATION,
   DEFI_SYNC_SCENE,
+  NFT_SYNC_SCENE,
   TOKEN_SYNC_SCENE,
 } from '@/db/constants';
 import { syncDbService } from '@/db/services/syncDbService';
@@ -36,6 +47,7 @@ import createSubscription from './controller/provider/subscriptionManager';
 import {
   bridgeService,
   contactBookService,
+  currencyService,
   gasAccountService,
   HDKeyRingLastAddAddrTimeService,
   keyringService,
@@ -43,6 +55,7 @@ import {
   pageStateCacheService,
   permissionService,
   preferenceService,
+  removedTokensService,
   RabbyPointsService,
   RPCService,
   securityEngineService,
@@ -57,21 +70,42 @@ import {
   OfflineChainsService,
   perpsService,
   transactionsService,
-  innerDappFrameService,
+  feedbackService,
 } from './service';
 import { customTestnetService } from './service/customTestnet';
 import { GasAccountServiceStore } from './service/gasAccount';
-import { testnetOpenapiService } from './service/openapi';
+import { initializeOpenapiRuntime } from './service/openapi';
 import { syncChainService } from './service/syncChain';
 import { userGuideService } from './service/userGuide';
-import lendingService from './service/lending';
-import { isSameAddress } from './utils';
+import perpsLive from './service/perpsLive';
+import { PERPS_LIVE_PORT_NAME } from '@/utils/message/perpsLive';
+import {
+  BACKGROUND_READY_EVENT,
+  BACKGROUND_READY_MESSAGE,
+} from '@/utils/message/constants';
+
+/** Controller methods the perps widget content-script may call via runtime.sendMessage */
+const PERPS_WIDGET_RPC_ALLOWLIST = new Set<string>([
+  'getPerpsWidgetEnabled',
+  'setPerpsWidgetEnabled',
+  'getPerpsWidgetBlockedHosts',
+  'getPerpsWidgetBallPosition',
+  'setPerpsWidgetBallPosition',
+  'openInDesktop',
+  'openPerpsWidgetProfile',
+]);
 import rpcCache from './utils/rpcCache';
 import { storage } from './webapi';
 import { metamaskModeService } from './service/metamaskModeService';
 import { ga4 } from '@/utils/ga4';
 import { ALARMS_SYNC_DEFAULT_RPC, ALARMS_USER_ENABLE } from './utils/alarms';
 import { subscribeTxCompleted } from './subscriptions/rateGuidance';
+import extensionUpdateService from './service/extensionUpdate';
+
+// Register synchronously so update events can wake the MV3 service worker.
+void extensionUpdateService.init().catch((error) => {
+  console.error('[extensionUpdate] failed to initialize store', error);
+});
 
 BigNumber.config({ EXPONENTIAL_AT: [-20, 100] });
 
@@ -84,24 +118,47 @@ const { PortMessage } = Message;
 
 let appStoreLoaded = false;
 
-Sentry.init({
-  dsn:
-    'https://f4a992c621c55f48350156a32da4778d@o4507018303438848.ingest.us.sentry.io/4507018389749760',
-  release: process.env.release,
-  environment: getSentryEnv(),
-  ignoreErrors: [
-    'Transport error: {"event":"transport_error","params":["Websocket connection failed"]}',
-    'Failed to fetch',
-    'TransportOpenUserCancelled',
-    'Non-Error promise rejection captured with keys: message, stack',
-    'Non-Error promise rejection captured with keys: message',
-    /Non-Error promise rejection captured with keys/,
-    /\[From .*\]/, // error from custom rpc
-    /AxiosError/,
-    /WebSocket connection failed/,
-    /Could not establish connection/,
-    /HttpRequestError/,
-  ],
+Sentry.init(getSentryConfig());
+
+// Errors thrown by pm.listen callbacks are caught in Message.onRequest and
+// forwarded to the calling page as the response, so they never reach this
+// context's global handlers. Business failures (user rejections, RPC errors)
+// carry an rpc error code and must stay report-free; only programming errors
+// are captured here.
+//
+// The allowlist is deliberately restricted to native engine error subtypes
+// (TypeError/ReferenceError/RangeError) rather than any uncoded Error. The
+// background throws hundreds of plain `new Error(...)` intentionally — mostly
+// i18n business validations like "no current account" / "invalid chain id" —
+// which have no rpc code either, so broadening to all uncoded Error instances
+// would flood Sentry with those expected states. The engine practically never
+// raises these subtypes for business logic, so they are a clean bug signal.
+setMessageErrorReporter((error) => {
+  const signingCarrier = takeSigningCarrier(error);
+  if (signingCarrier) {
+    if (!isSigningCarrierReported(signingCarrier)) {
+      Sentry.captureException(signingCarrier);
+    }
+    return true;
+  }
+
+  // rpcFlow normally captures signing failures first. Capturing the same Error
+  // here is deduplicated by Sentry and also covers direct wallet-controller calls.
+  if (getSigningContext(error)) {
+    Sentry.captureException(error);
+    return true;
+  }
+
+  if (
+    (error instanceof TypeError ||
+      error instanceof ReferenceError ||
+      error instanceof RangeError) &&
+    (error as { code?: unknown }).code === undefined
+  ) {
+    Sentry.captureException(error);
+    return true;
+  }
+  return false;
 });
 
 async function restoreAppState() {
@@ -109,15 +166,18 @@ async function restoreAppState() {
   const keyringState = await storage.get('keyringState');
   keyringService.loadStore(keyringState);
   keyringService.store.subscribe((value) => storage.set('keyringState', value));
-  await openapiService.init();
-  await testnetOpenapiService.init();
+  keyringService.sanitizeUnencryptedKeyringDataInStore();
+  await initializeOpenapiRuntime();
 
-  // Init keyring and openapi first since this two service will not be migrated
+  // Init keyring and openapi before migrations that depend on them.
   await migrateData();
 
   await customTestnetService.init();
   await permissionService.init();
   await preferenceService.init();
+  await removedTokensService.init();
+  await currencyService.init();
+  await extensionUpdateService.init();
   await transactionWatchService.init();
   await transactionBroadcastWatchService.init();
   await pageStateCacheService.init();
@@ -138,14 +198,17 @@ async function restoreAppState() {
   await syncChainService.init();
   await perpsService.init();
   await transactionsService.init();
-  await lendingService.init();
-  await innerDappFrameService.init();
+  await feedbackService.init();
+
+  // WS is lazy — subscribes only after the first content-script port attaches
+  perpsLive.boot();
 
   await walletController.tryUnlock();
 
   rpcCache.start();
 
   appStoreLoaded = true;
+  eventBus.emit(BACKGROUND_READY_EVENT);
 
   syncChainService.roll();
   transactionWatchService.roll();
@@ -198,6 +261,11 @@ async function restoreAppState() {
       scene: BALANCE_SYNC_SCENE,
       updatedAt: Date.now() - CACHE_VALID_DURATION,
     });
+    syncDbService.setUpdatedAtIfExists({
+      address,
+      scene: NFT_SYNC_SCENE,
+      updatedAt: Date.now() - CACHE_VALID_DURATION,
+    });
   });
 
   if (appIsDev) {
@@ -215,13 +283,48 @@ async function restoreAppState() {
           ready: true,
         },
       });
+      return;
+    }
+    // Native chrome.runtime.onMessage requires explicit `sendResponse(...)` + `return true`
+    // on async paths — returning a Promise would let Chrome close the channel immediately.
+    if (message?.type === 'controller' && typeof message.method === 'string') {
+      if (!PERPS_WIDGET_RPC_ALLOWLIST.has(message.method)) return;
+      const params = Array.isArray(message.params) ? message.params : [];
+      try {
+        const res = (walletController as any)[message.method](...params);
+        if (res && typeof (res as any).then === 'function') {
+          Promise.resolve(res).then(
+            (value) => sendResponse(value),
+            (err) => {
+              console.warn(
+                '[perps-widget rpc] async error',
+                message.method,
+                err
+              );
+              sendResponse(undefined);
+            }
+          );
+          return true;
+        }
+        sendResponse(res);
+      } catch (err) {
+        console.warn('[perps-widget rpc] sync error', message.method, err);
+        sendResponse(undefined);
+      }
     }
   });
 
   uninstalledService.setUninstalled();
 }
 
-restoreAppState();
+restoreAppState().catch((e) => {
+  // A throw here leaves `appStoreLoaded` false and `getBackgroundReady`
+  // unregistered, so every UI page waits until its bootstrap timeout.
+  console.error('[restoreAppState] failed', e);
+  Sentry.captureException(e, {
+    tags: { bootstrap_stage: 'restoreAppState' },
+  });
+});
 {
   let interval: NodeJS.Timeout | null;
   keyringService.on('unlock', () => {
@@ -302,29 +405,8 @@ restoreAppState();
   keyringService.on(
     'removedAccount',
     async (address: string, type: string, brand?: string) => {
+      await logoutGasAccountOnAddressRemoved(address, type, brand);
       if (type !== KEYRING_TYPE.WatchAddressKeyring) {
-        const restAddresses = await keyringService.getAllAdresses();
-        const gasAccount = gasAccountService.getGasAccountData() as GasAccountServiceStore;
-        if (gasAccount?.account?.address) {
-          // check if there is another type address in wallet
-          const stillHasAddr = restAddresses.some((item) => {
-            return (
-              isSameAddress(item.address, gasAccount.account!.address) &&
-              item.type !== KEYRING_TYPE.WatchAddressKeyring
-            );
-          });
-          if (
-            !stillHasAddr &&
-            isSameAddress(address, gasAccount.account.address)
-          ) {
-            // if there is no another type address then reset signature
-            gasAccountService.setGasAccountSig();
-            eventBus.emit(EVENTS.broadcastToUI, {
-              method: EVENTS.GAS_ACCOUNT.LOG_OUT,
-            });
-          }
-        }
-
         const perpsAccount = await perpsService.getCurrentAccount();
         if (perpsAccount?.address === address && perpsAccount.type === type) {
           eventBus.emit(EVENTS.broadcastToUI, {
@@ -354,12 +436,34 @@ keyringService.on('resetPassword', async () => {
 
 // for page provider
 browser.runtime.onConnect.addListener((port) => {
+  // perpsLive owns this port; bypass the generic page-provider routing below
+  if (port.name === PERPS_LIVE_PORT_NAME) {
+    // Fail-closed: only this extension's own content-scripts (which always run
+    // in a tab) may subscribe to the live perps feed. Guards against a future
+    // externally_connectable entry turning this into an open positions/PnL leak.
+    if (port.sender?.id !== browser.runtime.id || !port.sender?.tab) {
+      port.disconnect();
+      return;
+    }
+    perpsLive.attachPort(port);
+    return;
+  }
+
   if (
     port.name === 'popup' ||
     port.name === 'notification' ||
     port.name === 'tab' ||
     port.name === 'desktop'
   ) {
+    const ownUrl = browser.runtime.getURL('/'); // chrome-extension://<id>/
+    const senderUrl = port.sender?.url ?? '';
+    // content-script: sender.tab 存在 且 url 不是扩展自身页面
+    const isContentScript = !!port.sender?.tab && !senderUrl.startsWith(ownUrl);
+
+    if (port.sender?.id !== browser.runtime.id || isContentScript) {
+      port.disconnect();
+      return;
+    }
     const pm = new PortMessage(port);
     pm.listen((data) => {
       if (data?.type) {
@@ -370,14 +474,6 @@ browser.runtime.onConnect.addListener((port) => {
           case 'openapi':
             if (walletController.openapi[data.method]) {
               return walletController.openapi[data.method].apply(
-                null,
-                data.params
-              );
-            }
-            break;
-          case 'testnetOpenapi':
-            if (walletController.testnetOpenapi[data.method]) {
-              return walletController.testnetOpenapi[data.method].apply(
                 null,
                 data.params
               );
@@ -394,10 +490,13 @@ browser.runtime.onConnect.addListener((port) => {
           case 'controller':
           default:
             if (data.method) {
-              const res = walletController[data.method].apply(
-                null,
-                data.params
-              );
+              const controllerMethod = walletController[data.method];
+              if (typeof controllerMethod !== 'function') {
+                throw new Error(
+                  `Unknown wallet controller method: ${String(data.method)}`
+                );
+              }
+              const res = controllerMethod.call(null, ...data.params);
               if (!IS_FIREFOX) {
                 return res;
               }
@@ -428,22 +527,39 @@ browser.runtime.onConnect.addListener((port) => {
       });
     };
 
-    if (port.name === 'popup') {
-      preferenceService.setPopupOpen(true);
-
-      port.onDisconnect.addListener(() => {
-        preferenceService.setPopupOpen(false);
+    let activated = false;
+    const activateUIConnection = () => {
+      eventBus.removeEventListener(
+        BACKGROUND_READY_EVENT,
+        activateUIConnection
+      );
+      activated = true;
+      eventBus.addEventListener(EVENTS.broadcastToUI, boardcastCallback);
+      if (port.name === 'popup') {
+        preferenceService.setPopupOpen(true);
+      }
+      feedbackService.setScreenshotContextMenuVisible(true).catch(() => {
+        // Reset the native menu for newly opened extension pages.
       });
+      browser.runtime.sendMessage({ type: 'pageOpened' });
+      pm.send('message', { event: BACKGROUND_READY_MESSAGE });
+    };
+    if (appStoreLoaded) {
+      activateUIConnection();
+    } else {
+      eventBus.addEventListener(BACKGROUND_READY_EVENT, activateUIConnection);
     }
 
-    browser.runtime.sendMessage({
-      type: 'pageOpened',
-    });
-    eventBus.addEventListener(EVENTS.broadcastToUI, boardcastCallback);
     port.onDisconnect.addListener(() => {
-      browser.runtime.sendMessage({
-        type: 'pageClosed',
-      });
+      eventBus.removeEventListener(
+        BACKGROUND_READY_EVENT,
+        activateUIConnection
+      );
+      if (!activated) return;
+      if (port.name === 'popup') {
+        preferenceService.setPopupOpen(false);
+      }
+      browser.runtime.sendMessage({ type: 'pageClosed' });
       eventBus.removeEventListener(EVENTS.broadcastToUI, boardcastCallback);
     });
 
@@ -496,11 +612,7 @@ browser.runtime.onConnect.addListener((port) => {
       data,
       session,
       origin,
-      isFromDesktopDapp:
-        port.sender.id === browser.runtime.id &&
-        port.sender?.tab?.url?.startsWith(
-          `${browser.runtime.getURL('')}desktop.html#/desktop/`
-        ),
+      sourceFrameId: port.sender.frameId,
     };
     if (!session?.origin) {
       const tabInfo = await browser.tabs.get(sessionId);
@@ -509,7 +621,6 @@ browser.runtime.onConnect.addListener((port) => {
         origin,
         name: tabInfo.title || '',
         icon: tabInfo.favIconUrl || '',
-        isFromDesktopDapp: req.isFromDesktopDapp,
       });
     }
     // for background push to respective page
@@ -574,3 +685,14 @@ if (isManifestV3) {
     }
   });
 }
+
+export const logoutGasAccountOnAddressRemoved = async (
+  address: string,
+  type: string,
+  brand?: string
+) => {
+  if (type === KEYRING_TYPE.WatchAddressKeyring) {
+    return;
+  }
+  gasAccountService.handleRemovedAccount(address, type, brand);
+};

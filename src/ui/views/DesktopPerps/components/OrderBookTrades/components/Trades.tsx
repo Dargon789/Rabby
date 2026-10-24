@@ -7,7 +7,7 @@ import { splitNumberByStep } from '@/ui/utils';
 import dayjs from 'dayjs';
 import eventBus from '@/eventBus';
 import { EVENTS } from '@/constant';
-import { formatPerpsCoin } from '../../../utils';
+import { formatPerpsCoin, formatPerpsValueKMB } from '../../../utils';
 interface Trade {
   time: number;
   price: string;
@@ -20,6 +20,9 @@ export const Trades: React.FC<{ trades: Trade[]; selectedCoin: string }> = ({
   selectedCoin,
 }) => {
   const { t } = useTranslation();
+  const szDecimals = useRabbySelector(
+    (state) => state.perps.marketDataMap[selectedCoin]?.szDecimals ?? 5
+  );
 
   const formatTime = (timestamp: number) => {
     return dayjs(timestamp).format('HH:mm:ss');
@@ -32,7 +35,7 @@ export const Trades: React.FC<{ trades: Trade[]; selectedCoin: string }> = ({
   return (
     <div className="h-full flex flex-col bg-rb-neutral-bg-1">
       {/* Header */}
-      <div className="flex items-center justify-between px-[8px] py-[6px] text-[11px] text-r-neutral-foot flex-shrink-0">
+      <div className="flex items-center justify-between px-[8px] py-[6px] text-[11px] text-rb-neutral-secondary shrink-0">
         <span className="min-w-[60px] text-left">
           {t('page.perpsPro.orderBook.price')} (USD)
         </span>
@@ -48,7 +51,7 @@ export const Trades: React.FC<{ trades: Trade[]; selectedCoin: string }> = ({
       {/* Trades List */}
       <div className="flex-1 overflow-y-auto trades-container-no-scrollbar">
         {trades.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-r-neutral-foot text-[12px]">
+          <div className="flex items-center justify-center h-full text-rb-neutral-secondary text-12">
             {t('page.perpsPro.orderBook.noTrades')}
           </div>
         ) : (
@@ -56,7 +59,7 @@ export const Trades: React.FC<{ trades: Trade[]; selectedCoin: string }> = ({
             <div
               key={`${trade.time}-${index}`}
               onClick={() => handleClickPrice(trade.price)}
-              className="flex items-center justify-between px-[8px] py-[4px] text-[12px] hover:bg-rb-neutral-bg-2 cursor-pointer group"
+              className="flex items-center justify-between px-[8px] py-[4px] text-12 hover:bg-rb-neutral-bg-2 cursor-pointer group"
             >
               <span
                 className={clsx(
@@ -68,10 +71,10 @@ export const Trades: React.FC<{ trades: Trade[]; selectedCoin: string }> = ({
               >
                 {splitNumberByStep(trade.price)}
               </span>
-              <span className="min-w-[90px] text-right text-r-neutral-title-1">
-                {splitNumberByStep(trade.size)}
+              <span className="min-w-[90px] text-right text-r-neutral-body">
+                {formatPerpsValueKMB(trade.size, szDecimals)}
               </span>
-              <span className="min-w-[60px] text-right text-r-neutral-title-1">
+              <span className="min-w-[60px] text-right text-r-neutral-body">
                 {formatTime(trade.time)}
               </span>
             </div>

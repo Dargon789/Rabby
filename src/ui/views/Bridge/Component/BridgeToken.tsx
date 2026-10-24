@@ -11,7 +11,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { TokenRender } from '../../Swap/Component/TokenRender';
 import {
-  formatTokenAmount,
+  formatLargeTokenAmount,
   formatUsdValue,
   isSameAddress,
   useWallet,
@@ -25,6 +25,12 @@ import BridgeToTokenSelect from './BridgeToTokenSelect';
 import { useRabbySelector } from '@/ui/store';
 import { useAsync } from 'react-use';
 import { ReactComponent as RcIconWalletCC } from '@/ui/assets/swap/wallet-cc.svg';
+import {
+  convert18RawToTokenRaw,
+  getGasTokenBalance,
+} from '@/utils/transaction';
+import { isTempoChain } from '@/utils/tempo';
+import { AutoSizeAmountInput } from '@/ui/component/AutoSizeAmountInput';
 
 const StyledInput = styled(Input)`
   color: var(--r-neutral-title1, #192945);
@@ -34,6 +40,7 @@ const StyledInput = styled(Input)`
   line-height: normal;
   background: transparent !important;
   padding-left: 0;
+  padding-right: 0;
   & > .ant-input {
     color: var(--r-neutral-title1, #192945);
     font-size: 24px;
@@ -98,6 +105,10 @@ export const BridgeToken = ({
   const { t } = useTranslation();
 
   const supportedChains = useRabbySelector((s) => s.bridge.supportedChains);
+  const userAddress = useRabbySelector(
+    (s) => s.account.currentAccount?.address || ''
+  );
+  const wallet = useWallet();
 
   const isFromToken = type === 'from';
   const isToToken = type === 'to';
@@ -106,8 +117,9 @@ export const BridgeToken = ({
   const chainObj = findChainByEnum(chain);
 
   const isMaxRef = useRef(false);
+  const isReserveMaxRef = useRef(false);
 
-  const inputRef = useRef<InputRef>();
+  const inputRef = useRef<InputRef>(null);
 
   const chainSelectorRef = useRef<ChainSelectorRef>(null);
 
@@ -121,23 +133,94 @@ export const BridgeToken = ({
     return false;
   }, [token, chain, isFromToken]);
 
+  const isTempoBridgeChain = useMemo(() => isTempoChain(chainObj?.serverId), [
+    chainObj?.serverId,
+  ]);
+
+  const {
+    value: tempoGasTokenInfo,
+    loading: isTempoGasTokenLoading,
+  } = useAsync(async () => {
+    if (
+      !isFromToken ||
+      !chainObj?.id ||
+      !isTempoBridgeChain ||
+      !token?.id ||
+      !userAddress
+    ) {
+      return null;
+    }
+
+    return getGasTokenBalance({
+      wallet,
+      address: userAddress,
+      chainId: chainObj.id,
+    });
+  }, [
+    wallet,
+    userAddress,
+    isFromToken,
+    chainObj?.id,
+    token?.id,
+    isTempoBridgeChain,
+  ]);
+
+  const fromTokenIsTempoFeeToken = useMemo(() => {
+    if (
+      !isFromToken ||
+      !isTempoBridgeChain ||
+      !token?.id ||
+      !tempoGasTokenInfo?.token.tokenId
+    ) {
+      return false;
+    }
+
+    return isSameAddress(token.id, tempoGasTokenInfo.token.tokenId);
+  }, [
+    isFromToken,
+    isTempoBridgeChain,
+    token?.id,
+    tempoGasTokenInfo?.token.tokenId,
+  ]);
+
+  const fromTokenIsGasToken = useMemo(
+    () => fromTokenIsNativeToken || fromTokenIsTempoFeeToken,
+    [fromTokenIsNativeToken, fromTokenIsTempoFeeToken]
+  );
+
   const nativeTokenDecimals = useMemo(
     () => findChainByEnum(chain)?.nativeTokenDecimals || 1e18,
     [chain]
   );
 
+  const gasTokenDecimals = useMemo(() => {
+    if (fromTokenIsNativeToken) {
+      return nativeTokenDecimals;
+    }
+
+    if (fromTokenIsTempoFeeToken) {
+      return tempoGasTokenInfo?.token.decimals || token?.decimals || 18;
+    }
+
+    return undefined;
+  }, [
+    fromTokenIsNativeToken,
+    nativeTokenDecimals,
+    fromTokenIsTempoFeeToken,
+    tempoGasTokenInfo?.token.decimals,
+    token?.decimals,
+  ]);
+
   useEffect(() => {
-    if (!fromTokenIsNativeToken) {
+    if (!fromTokenIsGasToken) {
       handleSetGasPrice?.();
     }
-  }, [fromTokenIsNativeToken]);
+  }, [fromTokenIsGasToken, handleSetGasPrice]);
 
   const gasLimit = useMemo(
     () => (chain === CHAINS_ENUM.ETH ? 1000000 : 2000000),
     [chain]
   );
-
-  const wallet = useWallet();
 
   const { value: gasList } = useAsync(async () => {
     if (!isFromToken) {
@@ -149,6 +232,54 @@ export const BridgeToken = ({
     });
   }, [chain, isFromToken]);
 
+  const applyMaxAmount = React.useCallback(() => {
+    if (!token) {
+      return;
+    }
+
+    if (
+      isFromToken &&
+      fromTokenIsGasToken &&
+      gasList &&
+      gasTokenDecimals !== undefined
+    ) {
+      const checkGasIsEnough = (price: number) => {
+        return new BigNumber(token?.raw_amount_hex_str || 0, 16).gte(
+          convert18RawToTokenRaw(
+            new BigNumber(gasLimit).times(price),
+            gasTokenDecimals
+          )
+        );
+      };
+      const normalPrice =
+        gasList?.find((e) => e.level === 'normal')?.price || 0;
+      const isNormalEnough = checkGasIsEnough(normalPrice);
+      if (isNormalEnough) {
+        const val = tokenAmountBn(token).minus(
+          convert18RawToTokenRaw(
+            new BigNumber(gasLimit).times(normalPrice),
+            gasTokenDecimals
+          ).div(new BigNumber(10).pow(gasTokenDecimals))
+        );
+        onInputChange?.(val.toString(10));
+        handleSetGasPrice?.(normalPrice);
+        return;
+      }
+    }
+
+    handleSetGasPrice?.();
+    onInputChange?.(tokenAmountBn(token)?.toString(10));
+  }, [
+    token,
+    isFromToken,
+    fromTokenIsGasToken,
+    gasList,
+    gasTokenDecimals,
+    gasLimit,
+    onInputChange,
+    handleSetGasPrice,
+  ]);
+
   const handleChangeFromToken = React.useCallback(
     (t: TokenItem) => {
       const chainEnum = findChainByServerID(t?.chain || '')?.enum;
@@ -156,6 +287,7 @@ export const BridgeToken = ({
         changeChain(chainEnum);
       }
       onChangeToken(t);
+      isReserveMaxRef.current = false;
       if (t.id !== token?.id) {
         onInputChange?.('');
         setTimeout(() => {
@@ -171,6 +303,7 @@ export const BridgeToken = ({
       if (chain !== newChain) {
         onChangeChain(newChain);
         if (isFromToken) {
+          isReserveMaxRef.current = false;
           onInputChange?.('');
           setTimeout(() => {
             inputRef?.current?.focus?.();
@@ -184,6 +317,9 @@ export const BridgeToken = ({
 
   useLayoutEffect(() => {
     if (isFromToken) {
+      if (value === '') {
+        isReserveMaxRef.current = false;
+      }
       if (
         document?.activeElement !== inputRef.current?.input &&
         !isMaxRef.current
@@ -207,10 +343,11 @@ export const BridgeToken = ({
 
   const inputChange = React.useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
+      isReserveMaxRef.current = false;
       onInputChange?.(e.target.value);
       handleSetGasPrice?.();
     },
-    [onInputChange]
+    [onInputChange, handleSetGasPrice]
   );
 
   const handleMax = React.useCallback(() => {
@@ -219,49 +356,44 @@ export const BridgeToken = ({
     }
     if (token) {
       isMaxRef.current = true;
-      if (isFromToken && fromTokenIsNativeToken && gasList) {
-        const checkGasIsEnough = (price: number) => {
-          return new BigNumber(token?.raw_amount_hex_str || 0, 16).gte(
-            new BigNumber(gasLimit).times(price)
-          );
-        };
-        const normalPrice =
-          gasList?.find((e) => e.level === 'normal')?.price || 0;
-        const isNormalEnough = checkGasIsEnough(normalPrice);
-        if (isNormalEnough) {
-          const val = tokenAmountBn(token).minus(
-            new BigNumber(gasLimit)
-              .times(normalPrice)
-              .div(10 ** nativeTokenDecimals)
-          );
-          onInputChange?.(val.toString(10));
-          handleSetGasPrice?.(normalPrice);
-          return;
-        }
-      }
-      handleSetGasPrice?.();
-      onInputChange?.(tokenAmountBn(token)?.toString(10));
+      isReserveMaxRef.current = true;
+      applyMaxAmount();
     }
-  }, [
-    handleSetGasPrice,
-    token?.raw_amount_hex_str,
-    onInputChange,
-    nativeTokenDecimals,
-    isFromToken,
-    fromTokenIsNativeToken,
-    gasList,
-    disabled,
-  ]);
+  }, [disabled, token, applyMaxAmount]);
 
   useEffect(() => {
     if (isFromToken && disabled) {
+      isReserveMaxRef.current = false;
       onInputChange?.('');
       handleSetGasPrice?.();
     }
   }, [isFromToken, disabled, onInputChange, handleSetGasPrice]);
 
+  useEffect(() => {
+    isReserveMaxRef.current = false;
+  }, [chain, token?.chain, token?.id]);
+
+  useEffect(() => {
+    if (
+      isFromToken &&
+      isReserveMaxRef.current &&
+      token &&
+      gasList &&
+      (!isTempoBridgeChain || !isTempoGasTokenLoading)
+    ) {
+      applyMaxAmount();
+    }
+  }, [
+    isFromToken,
+    token,
+    gasList,
+    isTempoBridgeChain,
+    isTempoGasTokenLoading,
+    applyMaxAmount,
+  ]);
+
   return (
-    <div className={clsx('h-[156px] bg-r-neutral-card1 rounded-[8px]')}>
+    <div className={clsx('h-[148px] bg-r-neutral-card1 rounded-[8px]')}>
       <div
         className={clsx(
           'flex items-center gap-8',
@@ -287,7 +419,7 @@ export const BridgeToken = ({
         />
       </div>
 
-      <div className={clsx('p-16 pb-[18px]')}>
+      <div className={clsx('p-16')}>
         <div className={clsx('flex justify-between items-center')}>
           {valueLoading && skeletonLoading ? (
             <SkeletonInput
@@ -299,17 +431,30 @@ export const BridgeToken = ({
               }}
             />
           ) : (
-            <StyledInput
-              className={clsx(
-                inSufficient && 'text-rabby-red-default',
-                valueLoading && 'opacity-50'
+            <AutoSizeAmountInput
+              inputRef={inputRef}
+              inputValue={String(value ?? '')}
+              maxFontSize={24}
+              minFontSize={16}
+              fontSizeStep={2}
+              fontWeight={500}
+              className="min-w-0 flex-1"
+            >
+              {(fontSize) => (
+                <StyledInput
+                  className={clsx(
+                    inSufficient && 'text-rabby-red-default',
+                    valueLoading && 'opacity-50'
+                  )}
+                  placeholder={showNoQuote ? t('page.bridge.no-quote') : '0'}
+                  value={value}
+                  onChange={inputChange}
+                  readOnly={disabled || !isFromToken}
+                  ref={inputRef}
+                  style={{ fontSize }}
+                />
               )}
-              placeholder={showNoQuote ? t('page.bridge.no-quote') : '0'}
-              value={value}
-              onChange={inputChange}
-              readOnly={disabled || !isFromToken}
-              ref={inputRef as any}
-            />
+            </AutoSizeAmountInput>
           )}
           {isToToken ? (
             <BridgeToTokenSelect
@@ -346,7 +491,7 @@ export const BridgeToken = ({
         <div
           className={clsx(
             'flex justify-between items-center',
-            'mt-14 text-13 text-r-neutral-foot font-normal'
+            'mt-12 text-13 text-r-neutral-foot font-normal'
           )}
         >
           <div className="flex items-center gap-2">
@@ -378,7 +523,8 @@ export const BridgeToken = ({
               <RcIconWalletCC viewBox="0 0 16 16" className="w-16 h-16" />
               <span className={clsx(valueLoading && 'opacity-50')}>
                 {token
-                  ? formatTokenAmount(tokenAmountBn(token).toString(10)) || '0'
+                  ? formatLargeTokenAmount(tokenAmountBn(token).toString(10)) ||
+                    '0'
                   : 0}
               </span>
             </div>

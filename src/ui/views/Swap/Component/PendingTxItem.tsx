@@ -106,11 +106,19 @@ export const PendingTxItem = forwardRef<
     bridgeHistoryList?: BridgeHistory[];
     openBridgeHistory?: () => void;
     onFulfilled?: () => void;
+    onStatusChange?: (status: PendingTxData['status'] | null) => void;
     getContainer?: DrawerProps['getContainer'];
   }
 >(
   (
-    { type, bridgeHistoryList, openBridgeHistory, onFulfilled, getContainer },
+    {
+      type,
+      bridgeHistoryList,
+      openBridgeHistory,
+      onFulfilled,
+      onStatusChange,
+      getContainer,
+    },
     ref
   ) => {
     const { t } = useTranslation();
@@ -122,6 +130,11 @@ export const PendingTxItem = forwardRef<
       userAddress: state.account.currentAccount?.address || '',
     }));
     const preFulfilledRef = useRef<boolean>(true);
+
+    useEffect(() => {
+      onStatusChange?.(data?.status || null);
+      return () => onStatusChange?.(null);
+    }, [data?.status, onStatusChange]);
 
     const fetchHistory = useCallback(async () => {
       if (!userAddress) return;
@@ -263,7 +276,7 @@ export const PendingTxItem = forwardRef<
         <div
           className={clsx(
             'flex items-center justify-between cursor-pointer rounded-[8px] px-[16px] py-[14px]',
-            'hover:bg-blue-light hover:bg-opacity-[0.1] hover:border-rabby-blue-default border border-transparent',
+            'hover:bg-blue-light/10 hover:border-rabby-blue-default border border-transparent',
             'bg-r-neutral-card-1'
           )}
           onClick={handlePress}

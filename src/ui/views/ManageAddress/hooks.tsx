@@ -6,7 +6,7 @@ import {
   WALLET_BRAND_TYPES,
   WALLET_SORT_SCORE,
 } from '@/constant';
-import { IDisplayedAccountWithBalance } from '@/ui/models/accountToDisplay';
+import { IDisplayedAccountWithBalance } from '@/ui/state/accountToDisplay';
 import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
 import { useWallet } from '@/ui/utils';
 import { sortAccountsByBalance } from '@/ui/utils/account';
@@ -34,6 +34,7 @@ export type TypeKeyringGroup = {
   publicKey?: string;
   hdPathBasePublicKey?: string;
   hdPathType?: string;
+  hasBackup?: boolean;
 };
 
 export const getWalletTypeName = (s: string) => {
@@ -292,14 +293,17 @@ export const useBackUp = () => {
 
   const handleBackup = useCallback(
     async (publicKey: string, index) => {
+      let data: string | undefined;
       await AuthenticationModalPromise({
         confirmText: t('page.manageAddress.confirm'),
         cancelText: t('page.manageAddress.cancel'),
         title: t('page.manageAddress.backup-seed-phrase'),
 
+        validationHandler: async (password: string) => {
+          data = await wallet.getMnemonicFromPublicKey(password, publicKey);
+        },
         async onFinished() {
           await invokeEnterPassphrase(publicKey);
-          const data = await wallet.getMnemonicFromPublicKey(publicKey);
           history.replace({
             search: `?index=${index}`,
           });
@@ -307,6 +311,7 @@ export const useBackUp = () => {
             pathname: '/settings/address-backup/mneonics',
             state: {
               data: data,
+              publicKey,
               goBack: true,
             },
           });

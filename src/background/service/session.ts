@@ -5,7 +5,6 @@ export interface SessionProp {
   origin: string;
   icon: string;
   name: string;
-  isFromDesktopDapp?: boolean;
 }
 
 export class Session {
@@ -15,7 +14,7 @@ export class Session {
 
   name = '';
 
-  isFromDesktopDapp: boolean | undefined = false;
+  isFromRabby: boolean | undefined = false;
 
   pms: PortMessage[] = [];
 
@@ -38,11 +37,10 @@ export class Session {
     this.pms.push(pm);
   }
 
-  setProp({ origin, icon, name, isFromDesktopDapp }: SessionProp) {
+  setProp({ origin, icon, name }: SessionProp) {
     this.origin = origin;
     this.icon = icon;
     this.name = name;
-    this.isFromDesktopDapp = isFromDesktopDapp;
   }
 }
 
@@ -89,17 +87,13 @@ const broadcastEvent = (
   ev: string,
   data?,
   origin?: string,
-  ignorePermission?: boolean,
-  isFromDesktopDapp?: boolean
+  ignorePermission?: boolean
 ) => {
   let sessions: { key: string; data: Session }[] = [];
 
   sessionMap.forEach((session, key) => {
     if (
       session &&
-      (isFromDesktopDapp == undefined
-        ? true
-        : !!session.isFromDesktopDapp === !!isFromDesktopDapp) &&
       (permissionService.hasPermission(session.origin) || ignorePermission)
     ) {
       sessions.push({

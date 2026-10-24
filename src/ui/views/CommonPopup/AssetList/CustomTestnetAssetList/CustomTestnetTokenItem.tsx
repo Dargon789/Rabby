@@ -131,7 +131,7 @@ export const TokenItemAmount: React.FC<Props & { className?: string }> = ({
     <TCell
       style={style}
       className={clsx(
-        'py-8 text-r-neutral-title-1 text-15 font-medium text-right w-[110px] ml-auto',
+        'py-8 text-r-neutral-title-1 text-15 font-medium text-right w-[110px] ml-auto truncate',
         className
       )}
     >
@@ -155,7 +155,7 @@ export const CustomTestnetTokenItem: React.FC<Props> = ({
       className={clsx(
         'cursor-pointer',
         'rounded-[8px] border border-transparent bg-r-neutral-card1 h-[60px] mt-8 px-12',
-        'hover:border-blue-light hover:bg-blue-light hover:bg-opacity-10'
+        'hover:border-blue-light hover:bg-blue-light/10'
       )}
     >
       <TokenItemAsset item={item} />

@@ -6,7 +6,7 @@ import { KEYRING_CLASS, KEYRING_TYPE, WALLET_BRAND_CATEGORY } from 'consts';
 import { isValidAddress } from '@ethereumjs/util';
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useHistory } from 'react-router-dom';
+import { useHistory, useLocation } from 'react-router-dom';
 import IconBack from 'ui/assets/icon-back.svg';
 import IconGnosis from 'ui/assets/walletlogo/safe.svg';
 import { useWallet } from 'ui/utils';
@@ -16,6 +16,7 @@ import { safeJSONParse } from '@/utils';
 import clsx from 'clsx';
 import { UI_TYPE } from '@/constant/ui';
 import qs from 'qs';
+import { twMerge } from 'tailwind-merge';
 
 const ImportGnosisAddress: React.FC<{
   isInModal?: boolean;
@@ -25,6 +26,8 @@ const ImportGnosisAddress: React.FC<{
   const { t } = useTranslation();
   const history = useHistory();
   const wallet = useWallet();
+  // Set when entered from a pending ImportAddress approval; forwarded to the success screen so it can complete it.
+  const { approvalId } = (useLocation().state as { approvalId?: string }) || {};
 
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -72,6 +75,7 @@ const ImportGnosisAddress: React.FC<{
             await wallet.getTypedAccounts(KEYRING_TYPE.GnosisKeyring)
           )?.[0]?.accounts?.length,
           supportChainList: chainList,
+          approvalId,
         });
       } else {
         history.replace({
@@ -85,6 +89,7 @@ const ImportGnosisAddress: React.FC<{
               await wallet.getTypedAccounts(KEYRING_TYPE.GnosisKeyring)
             )?.[0]?.accounts?.length,
             supportChainList: chainList,
+            approvalId,
           },
         });
       }
@@ -104,39 +109,41 @@ const ImportGnosisAddress: React.FC<{
 
   return (
     <div
-      className={clsx(
-        'import-gnosis h-full relative',
+      className={twMerge(
+        'import-gnosis h-full relative flex flex-col',
         isInModal ? 'h-[600px] overflow-auto' : ''
       )}
     >
-      {contextHolder}
-      <header className="header h-[180px] relative dark:bg-r-blue-disable">
-        <div className="rabby-container pt-[40px]">
-          <img
-            src={IconBack}
-            className="mb-0 absolute z-10 top-[20px] left-[20px] cursor-pointer"
-            onClick={() => {
-              if (onBack) {
-                onBack();
-                return;
-              }
-              history.goBack();
-              sessionStorage.setItem(
-                'SELECTED_WALLET_TYPE',
-                WALLET_BRAND_CATEGORY.INSTITUTIONAL
-              );
-            }}
-          />
-          <img
-            className="unlock-logo w-[60px] h-[60px] mb-[16px] mx-auto"
-            src={IconGnosis}
-          />
-          <p className="text-[17px] leading-[20px] mt-0 text-white text-center font-bold">
-            {t('page.importSafe.title')}
-          </p>
-        </div>
-      </header>
-      <div className="rabby-container">
+      <div className="shrink-0">
+        {contextHolder}
+        <header className="header h-[180px] relative dark:bg-r-blue-disable">
+          <div className="rabby-container pt-[40px]">
+            <img
+              src={IconBack}
+              className="mb-0 absolute z-10 top-[20px] left-[20px] cursor-pointer"
+              onClick={() => {
+                if (onBack) {
+                  onBack();
+                  return;
+                }
+                history.goBack();
+                sessionStorage.setItem(
+                  'SELECTED_WALLET_TYPE',
+                  WALLET_BRAND_CATEGORY.INSTITUTIONAL
+                );
+              }}
+            />
+            <img
+              className="unlock-logo w-[60px] h-[60px] mb-[16px] mx-auto"
+              src={IconGnosis}
+            />
+            <p className="text-[17px] leading-[20px] mt-0 text-white text-center font-bold">
+              {t('page.importSafe.title')}
+            </p>
+          </div>
+        </header>
+      </div>
+      <div className="rabby-container flex-1 min-h-0 overflow-auto">
         <div className="relative p-20">
           <Form
             form={form}
@@ -178,48 +185,50 @@ const ImportGnosisAddress: React.FC<{
               />
             </Form.Item>
           </Form>
-          {loading ? (
-            <div className="loading">
-              <LoadingOutlined /> {t('page.importSafe.loading')}
-            </div>
-          ) : (
-            <>
-              {errorMessage ? (
-                <div className="error">{errorMessage}</div>
-              ) : (
-                !!chainList?.length && (
-                  <div className="chain-list-container">
-                    <div className="desc">
-                      {t('page.importSafe.gnosisChainDesc', {
-                        count: chainList?.length,
-                      })}
+          <div>
+            {loading ? (
+              <div className="loading">
+                <LoadingOutlined /> {t('page.importSafe.loading')}
+              </div>
+            ) : (
+              <>
+                {errorMessage ? (
+                  <div className="error">{errorMessage}</div>
+                ) : (
+                  !!chainList?.length && (
+                    <div className="chain-list-container">
+                      <div className="desc">
+                        {t('page.importSafe.gnosisChainDesc', {
+                          count: chainList?.length,
+                        })}
+                      </div>
+                      <div className="chain-list">
+                        {chainList?.map((chain) => {
+                          return (
+                            <div className="chain-list-item" key={chain.id}>
+                              <img
+                                src={chain.logo}
+                                alt=""
+                                className="chain-logo"
+                              />
+                              {chain.name}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                    <div className="chain-list">
-                      {chainList?.map((chain) => {
-                        return (
-                          <div className="chain-list-item" key={chain.id}>
-                            <img
-                              src={chain.logo}
-                              alt=""
-                              className="chain-logo"
-                            />
-                            {chain.name}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )
-              )}
-            </>
-          )}
+                  )
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
-      <footer className="footer fixed bottom-0 left-0 right-0 p-[20px]">
+      <footer className="footer shrink-0 px-[20px] py-[18px] bg-transparent">
         <Button
           type="primary"
           size="large"
-          className="w-full h-[42px]"
+          className="w-full h-[44px]"
           disabled={loading || !!errorMessage || !chainList?.length}
           onClick={() =>
             handleNext(

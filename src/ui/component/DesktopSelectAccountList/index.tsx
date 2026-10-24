@@ -11,7 +11,8 @@ import { useCurrentAccount } from '@/ui/hooks/backgroundState/useAccount';
 import { useAccounts } from '@/ui/hooks/useAccounts';
 import { useBrandIcon } from '@/ui/hooks/useBrandIcon';
 import { useEventBusListener } from '@/ui/hooks/useEventBusListener';
-import { IDisplayedAccountWithBalance } from '@/ui/models/accountToDisplay';
+import { IDisplayedAccountWithBalance } from '@/ui/state/accountToDisplay';
+import { useDesktopProfileStore } from '@/ui/state/desktopProfile';
 import { isSameAddress, splitNumberByStep } from '@/ui/utils';
 import { onBackgroundStoreChanged } from '@/ui/utils/broadcastToUI';
 import { obj2query } from '@/ui/utils/url';
@@ -38,6 +39,7 @@ export const DesktopSelectAccountList: React.FC<DesktopSelectAccountListProps> =
   const history = useHistory();
   const location = useLocation();
   const dispatch = useRabbyDispatch();
+  const setAddAddress = useDesktopProfileStore((state) => state.setAddAddress);
   const currentAccount = useCurrentAccount();
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const shouldScrollRef = useRef(true);
@@ -130,11 +132,9 @@ export const DesktopSelectAccountList: React.FC<DesktopSelectAccountListProps> =
       />
       <div
         onClick={() => {
-          dispatch.desktopProfile.setField({
-            addAddress: {
-              visible: true,
-              importType: '',
-            },
+          setAddAddress({
+            visible: true,
+            importType: '',
           });
         }}
         className={clsx(
@@ -143,7 +143,7 @@ export const DesktopSelectAccountList: React.FC<DesktopSelectAccountListProps> =
           'bg-rb-neutral-bg-3 hover:bg-rb-neutral-bg-2'
         )}
       >
-        <RcIconAddWalletCC className="flex-shrink-0" />
+        <RcIconAddWalletCC className="shrink-0" />
         <div className="text-[16px] leading-[19px] font-normal desktop-account-item-content truncate">
           {t('component.DesktopSelectAccountList.addAddresses')}
         </div>

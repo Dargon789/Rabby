@@ -7,7 +7,7 @@ import { Image } from 'antd';
 import { isNumber } from 'lodash';
 import { TooltipWithMagnetArrow } from '@/ui/component/Tooltip/TooltipWithMagnetArrow';
 import { findChain } from '@/utils/chain';
-import { isLpToken } from '@/ui/utils/portfolio/lpToken';
+import { isLpToken, isUnknownToken } from '@/ui/utils/portfolio/lpToken';
 import { LpTokenTag } from '../../DesktopProfile/components/TokensTabPane/components/LpTokenTag';
 import styled from 'styled-components';
 import { useHistory } from 'react-router-dom';
@@ -20,6 +20,7 @@ import {
   RcIconSendWhiteCC,
 } from 'ui/assets/dashboard/panel';
 import { useThemeMode } from '@/ui/hooks/usePreference';
+import { UnknownTag } from '@/ui/component';
 
 export interface Props {
   item: AbstractPortfolioToken;
@@ -36,7 +37,7 @@ const LpContainer = styled.div`
   align-items: center;
   gap: 2px;
   .inner-symbol {
-    max-width: calc(100% - 24px);
+    max-width: 140px;
   }
 `;
 
@@ -62,6 +63,8 @@ const ActionBtnWrapper = styled.div<{ isDark?: boolean }>`
 `;
 
 const StyledTRow = styled(TRow)`
+  background-color: var(--r-neutral-card1, #ffffff);
+
   &:hover {
     box-shadow: 0px 4px 16px 0px rgba(0, 0, 0, 0.04);
   }
@@ -144,7 +147,7 @@ const TokenItemAsset: React.FC<TokenItemAssetProps> = ({
   );
 
   return (
-    <TCell className="py-8 flex gap-10 w-[146px] items-center flex-shrink-0">
+    <TCell className="py-8 flex gap-10 items-center shrink-1 flex-1">
       <div className="relative h-[32px]">
         <Image
           className="w-32 h-32 rounded-full"
@@ -177,9 +180,10 @@ const TokenItemAsset: React.FC<TokenItemAssetProps> = ({
           )}
         >
           <LpContainer>
-            <span className="text-r-neutral-title-1 font-medium text-15 leading-[18px] whitespace-nowrap overflow-ellipsis overflow-hidden inner-symbol">
+            <span className="text-r-neutral-title-1 font-medium text-15 leading-[18px] whitespace-nowrap text-ellipsis overflow-hidden inner-symbol">
               {item.symbol}
             </span>
+            {isUnknownToken(item) && <UnknownTag className="ml-2" />}
             {isLpToken(item) && (
               <span className="inline-flex">
                 <LpTokenTag
@@ -191,7 +195,7 @@ const TokenItemAsset: React.FC<TokenItemAssetProps> = ({
               </span>
             )}
           </LpContainer>
-          <span className="text-r-neutral-foot text-13 leading-[16px] truncate whitespace-nowrap overflow-ellipsis overflow-hidden">
+          <span className="text-r-neutral-foot text-13 leading-[16px] truncate whitespace-nowrap text-ellipsis overflow-hidden max-w-[180px]">
             {item._amountStr}
           </span>
         </div>
@@ -274,13 +278,11 @@ const TokenItemMarketInfo: React.FC<Props> = ({ item }) => {
         </div>
         {isNumber(item.price_24h_change) && (
           <div
-            className={clsx(
-              'font-normal text-13 leading-[16px] text-r-neutral-foot',
-              {
-                'text-green': item.price_24h_change > 0,
-                'text-red-forbidden': item.price_24h_change < 0,
-              }
-            )}
+            className={clsx('font-normal text-13 leading-[16px]', {
+              'text-green': item.price_24h_change > 0,
+              'text-red-forbidden': item.price_24h_change < 0,
+              'text-r-neutral-foot': !item.price_24h_change,
+            })}
           >
             ({item.price_24h_change > 0 ? '+' : ''}
             {(item.price_24h_change * 100).toFixed(2)}%)
@@ -310,8 +312,8 @@ export const TokenItem: React.FC<Props> = ({ item, style, onClick }) => {
       className={clsx(
         'group cursor-pointer',
         'h-[60px] mt-8 px-12 justify-between',
-        'rounded-[8px] border border-transparent bg-r-neutral-card1',
-        'hover:border-blue-light active:bg-opacity-10'
+        'rounded-[8px] border border-transparent',
+        'hover:border-blue-light'
       )}
     >
       <TokenItemAsset item={item} showButtons={showButtons} />

@@ -4,7 +4,7 @@ import { ReactComponent as RcIconChecked } from '@/ui/assets/check-2.svg';
 import { AddressViewer, Item } from '@/ui/component';
 import { CopyChecked } from '@/ui/component/CopyChecked';
 import { useBrandIcon } from '@/ui/hooks/useBrandIcon';
-import { IDisplayedAccountWithBalance } from '@/ui/models/accountToDisplay';
+import { IDisplayedAccountWithBalance } from '@/ui/state/accountToDisplay';
 import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
 import {
   formatUsdValue,
@@ -31,6 +31,11 @@ import { ReactComponent as RcIconLoginLoading } from 'ui/assets/perps/IconLoginL
 import { Skeleton } from 'antd';
 import { getCustomClearinghouseState } from '@/ui/views/DesktopPerps/utils';
 
+// Debug-only toggle: when truthy in localStorage, the WATCH-only filter below
+// is bypassed so QA can pick watch-mode addresses inside Perps for testing.
+// Flipped from the Settings → Debug Kits panel.
+export const PERPS_TEST_INCLUDE_WATCH_KEY = '__perps_test_include_watch__';
+
 export const SelectAddressList = ({
   currentAccount,
   onChange,
@@ -55,15 +60,26 @@ export const SelectAddressList = ({
     }
   }, [wallet, visible]);
 
+  // Production builds must never honor this flag even if a stale value sits in
+  // localStorage — gate the read with the same DEBUG check that hides the
+  // toggle in Settings.
+  const includeWatchForTest = useMemo(
+    () =>
+      !!process.env.DEBUG &&
+      localStorage.getItem(PERPS_TEST_INCLUDE_WATCH_KEY) === '1',
+    []
+  );
+
   const accountsList = React.useMemo(
     () =>
       sortAccountsByBalance(
         [...accounts].filter(
           (a) =>
-            a.type !== KEYRING_CLASS.WATCH && a.type !== KEYRING_CLASS.GNOSIS
+            (includeWatchForTest || a.type !== KEYRING_CLASS.WATCH) &&
+            a.type !== KEYRING_CLASS.GNOSIS
         )
       ),
-    [accounts]
+    [accounts, includeWatchForTest]
   );
 
   const dispatch = useRabbyDispatch();
@@ -305,24 +321,24 @@ function AccountItem(props: {
       );
     }
     return (
-      <div className="flex flex-col gap-[4px] items-end ml-auto">
+      <div className="flex flex-col gap-[4px] items-end ml-auto flex-shrink-0">
         <div className="text-[13px] leading-[16px] text-r-neutral-body font-medium">
-          {info
-            ? formatUsdValue(Number(info?.withdrawable || 0))
-            : formatUsdValue(account.balance || 0)}
+          {info ? formatUsdValue(Number(info?.withdrawable || 0)) : ''}
         </div>
-        {positionCount > 0 ? (
-          <div className="text-[12px] leading-[14px] font-medium text-r-neutral-foot">
-            {positionCount}{' '}
-            {positionCount > 1
-              ? t('page.perps.accountSelector.positions')
-              : t('page.perps.accountSelector.position')}
-          </div>
-        ) : (
-          <div className="text-[12px] leading-[14px] font-normal text-r-neutral-foot">
-            {t('page.perps.accountSelector.noPosition')}
-          </div>
-        )}
+        {info ? (
+          positionCount > 0 ? (
+            <div className="text-[12px] leading-[14px] font-medium text-r-neutral-foot">
+              {positionCount}{' '}
+              {positionCount > 1
+                ? t('page.perps.accountSelector.positions')
+                : t('page.perps.accountSelector.position')}
+            </div>
+          ) : (
+            <div className="text-[12px] leading-[14px] font-normal text-r-neutral-foot">
+              {t('page.perps.accountSelector.noPosition')}
+            </div>
+          )
+        ) : null}
       </div>
     );
   }, [loading, info, positionCount, account.balance, t]);
@@ -344,16 +360,16 @@ function AccountItem(props: {
         />
       }
     >
-      <div className="ml-10">
+      <div className="ml-10 flex-1 min-w-0">
         <div className="flex items-center gap-[4px]">
           <div
             className={clsx(
-              'text-r-neutral-title1 font-medium leading-[16px] text-[13px]'
+              'text-r-neutral-title1 font-medium leading-[16px] text-[13px] truncate'
             )}
           >
             {alias}
           </div>
-          <div>
+          <div className="flex-shrink-0">
             {isCurrent ? (
               <RcIconChecked className="text-r-green-default w-[16px] h-[16px]" />
             ) : isLogin ? null : isLastUsed ? (

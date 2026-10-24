@@ -99,19 +99,14 @@ function ViewMessageTriggerForContract({
     isLoadingExplain,
     loadingExplainError,
     contractCallPlainText,
-  } = useParseContractAddress(
-    {
-      contractAddress,
-      chain: chainItem,
-      inputDataHex: txInputData
-        ? formatTxInputDataOnERC20(txInputData).hexData
-        : null,
-      userAddress,
-    },
-    {
-      isTestnet,
-    }
-  );
+  } = useParseContractAddress({
+    contractAddress,
+    chain: chainItem,
+    inputDataHex: txInputData
+      ? formatTxInputDataOnERC20(txInputData).hexData
+      : null,
+    userAddress,
+  });
 
   const { t } = useTranslation();
 
@@ -224,7 +219,7 @@ function useClientParseTx({
 }
 
 type HistoryItemProps = {
-  data: TxHistoryItemRow;
+  data: TxHistoryItemRow & { isGasDeposit?: boolean };
   onViewInputData?: (ctx: HistoryItemActionContext) => void;
 };
 
@@ -260,7 +255,7 @@ export const HistoryItem = ({ data, onViewInputData }: HistoryItemProps) => {
           )}
         >
           <div className="time">{sinceTime(data.time_at)}</div>
-          <div className="txs-history-card-header-right flex items-center justify-end flex-shrink-1 w-[100%]">
+          <div className="txs-history-card-header-right flex items-center justify-end shrink-1 w-[100%]">
             <TxId chain={data.chain} id={data.id} />
             {/* {addressType === AddressType.CONTRACT && !data.is_scam && (
               <ViewMessageTriggerForContract
@@ -303,8 +298,8 @@ export const HistoryItem = ({ data, onViewInputData }: HistoryItemProps) => {
             <div>
               {t('global.gas')}:{' '}
               {numberWithCommasIsLtOne(data.tx?.eth_gas_fee, 2)}{' '}
-              {chainItem?.nativeTokenSymbol} ($
-              {numberWithCommasIsLtOne(data.tx?.usd_gas_fee ?? 0, 2)})
+              {chainItem?.nativeTokenSymbol} (
+              {numberWithCommasIsLtOne(data.tx?.usd_gas_fee ?? 0, 2, '$')})
             </div>
           ) : null}
           {isFailed && (

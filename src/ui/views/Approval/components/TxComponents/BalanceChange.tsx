@@ -15,7 +15,7 @@ import { ReactComponent as RcIconAlert } from 'ui/assets/sign/tx/alert-currentco
 import { ReactComponent as NoBalanceSVG } from 'ui/assets/sign/no-balance.svg';
 import { formatNumber, formatUsdValue } from 'ui/utils/number';
 import { getTokenSymbol } from '@/ui/utils/token';
-import { useRabbyDispatch } from 'ui/store';
+import { useSignStore } from '@/ui/state/sign';
 import ThemeIcon from '@/ui/component/ThemeMode/ThemeIcon';
 import styled from 'styled-components';
 import IconNFTDefault from '@/ui/assets/nft-default.svg';
@@ -84,7 +84,7 @@ const NFTBalanceChange = ({
                   className="w-[24px] h-[24px] mr-8 rounded-sm"
                 />
                 <span
-                  className="flex-1 overflow-hidden whitespace-nowrap overflow-ellipsis"
+                  className="flex-1 overflow-hidden whitespace-nowrap text-ellipsis"
                   title={item.collection ? item.collection.name : item.name}
                 >
                   <span className="text-green">+ {item.amount}</span>{' '}
@@ -122,7 +122,7 @@ const NFTBalanceChange = ({
                   className="w-[24px] h-[24px] mr-8 rounded-sm"
                 />
                 <span
-                  className="flex-1 overflow-hidden whitespace-nowrap overflow-ellipsis"
+                  className="flex-1 overflow-hidden whitespace-nowrap text-ellipsis"
                   title={item.collection ? item.collection.name : item.name}
                 >
                   <span className="text-red-forbidden">- {item.amount}</span>{' '}
@@ -157,7 +157,9 @@ const BalanceChange = ({
   chainEnum?: CHAINS_ENUM;
   version: 'v0' | 'v1' | 'v2';
 }) => {
-  const dispatch = useRabbyDispatch();
+  const openTokenDetailPopup = useSignStore(
+    (state) => state.openTokenDetailPopup
+  );
   const { t } = useTranslation();
 
   const isSuccess = data?.success;
@@ -194,7 +196,7 @@ const BalanceChange = ({
   }, [data]);
 
   const handleClickToken = (t: TokenItem) => {
-    dispatch.sign.openTokenDetailPopup(t);
+    openTokenDetailPopup(t);
   };
 
   if (version === 'v0') {
@@ -239,7 +241,7 @@ const BalanceChange = ({
       <HeadlineStyled>
         <span>{t('page.signTx.balanceChange.successTitle')}</span>
         {showUsdValueDiff && (
-          <span className="flex-1 whitespace-nowrap overflow-hidden overflow-ellipsis text-r-title-1 text-right text-14 font-normal">
+          <span className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis text-r-title-1 text-right text-14 font-normal">
             {`${data.usd_value_change >= 0 ? '+' : '-'} $${formatNumber(
               Math.abs(data.usd_value_change)
             )}`}
@@ -266,7 +268,7 @@ const BalanceChange = ({
               >
                 <ThemeIcon
                   src={RcIconAlert}
-                  className="w-[16px] flex-shrink-0 mr-4 text-r-orange-default top-[2px] relative"
+                  className="w-[16px] shrink-0 mr-4 text-r-orange-default top-[2px] relative"
                 />
                 <span>
                   <span className="text-r-orange-default">
@@ -286,7 +288,7 @@ const BalanceChange = ({
                   text={
                     <div className="max-w-[200px] flex relative">
                       <span
-                        className="text-red-forbidden font-medium flex-1 overflow-hidden overflow-ellipsis"
+                        className="text-red-forbidden font-medium flex-1 overflow-hidden text-ellipsis"
                         title={token.amount.toString()}
                       >
                         - {formatAmount(token.amount)}
@@ -295,7 +297,7 @@ const BalanceChange = ({
                       <span
                         onClick={() => handleClickToken(token)}
                         title={getTokenSymbol(token)}
-                        className="group-hover:underline cursor-pointer text-red-forbidden font-medium overflow-hidden overflow-ellipsis max-w-[100px] ml-4"
+                        className="group-hover:underline cursor-pointer text-red-forbidden font-medium overflow-hidden text-ellipsis max-w-[100px] ml-4"
                       >
                         {getTokenSymbol(token)}
                       </span>
@@ -329,7 +331,7 @@ const BalanceChange = ({
                   text={
                     <div className="max-w-[200px] flex relative">
                       <span
-                        className="text-green font-medium flex-1 overflow-hidden overflow-ellipsis"
+                        className="text-green font-medium flex-1 overflow-hidden text-ellipsis"
                         title={token.amount.toString()}
                       >
                         + {formatAmount(token.amount)}
@@ -337,7 +339,7 @@ const BalanceChange = ({
                       <span
                         onClick={() => handleClickToken(token)}
                         title={getTokenSymbol(token)}
-                        className="group-hover:underline cursor-pointer text-green font-medium overflow-hidden overflow-ellipsis max-w-[80px] ml-2"
+                        className="group-hover:underline cursor-pointer text-green font-medium overflow-hidden text-ellipsis max-w-[80px] ml-2"
                       >
                         {getTokenSymbol(token)}
                       </span>

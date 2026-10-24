@@ -1,6 +1,6 @@
 import React from 'react';
 import BigNumber from 'bignumber.js';
-import { formatUsdValue } from '@/ui/utils';
+import { formatNumber, formatUsdValue } from '@/ui/utils';
 import { PerpsSlider } from '../components/PerpsSlider';
 import { useTranslation } from 'react-i18next';
 import { PERPS_MARGIN_SIGNIFICANT_DIGITS } from '../constants';
@@ -9,6 +9,7 @@ import { RcIconInfoCC } from '@/ui/assets/desktop/common';
 
 interface MarginInputProps {
   title: string;
+  quoteAsset: string;
   availableAmount: number;
   sliderDisabled?: boolean;
   margin: string;
@@ -16,10 +17,13 @@ interface MarginInputProps {
   errorMessage?: string | null;
   customAvailableText?: string;
   titleExtra?: React.ReactNode;
+  availableExtra?: React.ReactNode;
+  embedded?: boolean;
 }
 
 export const MarginInput: React.FC<MarginInputProps> = ({
   title,
+  quoteAsset,
   availableAmount,
   sliderDisabled,
   margin,
@@ -27,6 +31,8 @@ export const MarginInput: React.FC<MarginInputProps> = ({
   errorMessage,
   customAvailableText,
   titleExtra,
+  availableExtra,
+  embedded,
 }) => {
   const { t } = useTranslation();
   const textColorClass =
@@ -72,10 +78,7 @@ export const MarginInput: React.FC<MarginInputProps> = ({
   }, [margin, availableAmount]);
 
   const handleChange: React.ChangeEventHandler<HTMLInputElement> = (e) => {
-    let value = e.target.value;
-    if (value.startsWith('$')) {
-      value = value.slice(1);
-    }
+    const value = e.target.value;
     if (/^\d*\.?\d*$/.test(value) || value === '') {
       // 用户通过输入框改变 margin 时，清除 slider 百分比，让它重新计算
       if (!isSliderChangingRef.current) {
@@ -95,21 +98,40 @@ export const MarginInput: React.FC<MarginInputProps> = ({
   };
 
   return (
-    <div className="bg-r-neutral-card1 rounded-[8px] mb-[12px] px-[16px] py-[16px]">
+    <div
+      className={clsx(
+        'px-[16px] pt-[16px] pb-[20px]',
+        !embedded && 'bg-r-neutral-card1 rounded-[8px] mb-[12px]'
+      )}
+    >
       <div className="flex items-center">
-        <div className="text-[16px] leading-[19px] font-medium text-r-blue-default">
+        <div className="text-[17px] font-bold text-r-neutral-title-1">
           {title}
+          <span>({quoteAsset})</span>
         </div>
         {titleExtra}
       </div>
       <div className="flex items-center mb-[8px]">
-        <div className="flex items-end gap-[6px]">
-          <div className="text-[20px] leading-[24px] font-medium text-r-neutral-title-1">
-            {formatUsdValue(availableAmount, BigNumber.ROUND_DOWN)}
+        <div className="flex items-baseline gap-[6px]">
+          <div
+            className={clsx(
+              'text-[20px] leading-[24px] font-medium',
+              availableExtra ? 'text-r-red-default' : 'text-r-neutral-title-1'
+            )}
+          >
+            {new BigNumber(availableAmount)
+              .decimalPlaces(2, BigNumber.ROUND_DOWN)
+              .toFixed()}
           </div>
-          <div className="text-[13px] leading-[16px] text-r-neutral-foot pb-[2px]">
+          <div
+            className={clsx(
+              'text-[13px] leading-[16px] flex items-center gap-[6px]',
+              availableExtra ? 'text-r-red-default' : 'text-r-neutral-foot'
+            )}
+          >
             {customAvailableText ||
               t('page.perpsDetail.PerpsEditMarginPopup.available')}
+            {availableExtra}
           </div>
         </div>
         <input
@@ -125,8 +147,8 @@ export const MarginInput: React.FC<MarginInputProps> = ({
             outline: 'none',
             boxShadow: 'none',
           }}
-          placeholder="$0"
-          value={margin ? `$${margin}` : ''}
+          placeholder="0"
+          value={margin ? `${margin}` : ''}
           onChange={handleChange}
         />
       </div>

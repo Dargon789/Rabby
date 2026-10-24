@@ -4,6 +4,7 @@ import { Approval } from 'background/service/notification';
 import { useWallet, useApproval } from 'ui/utils';
 import { IExtractFromPromise } from '@/ui/utils/type';
 import { ApprovalUtilsProvider } from './hooks/useApprovalUtils';
+import { useSecurityEngineStore } from '@/ui/state/securityEngine';
 import * as ApprovalComponent from './components';
 
 import './style.less';
@@ -17,12 +18,15 @@ const Approval: React.FC<{
   const history = useHistory();
   // const [account, setAccount] = useState('');
   const wallet = useWallet();
-  const [getApproval, , rejectApproval] = useApproval();
+  const [getApproval] = useApproval(null);
   type IApproval = Exclude<
     IExtractFromPromise<ReturnType<typeof getApproval>>,
     void
   >;
   const [approval, setApproval] = useState<IApproval | null>(null);
+  const resetCurrentTx = useSecurityEngineStore(
+    (state) => state.resetCurrentTx
+  );
 
   const init = async () => {
     const approval = await getApproval();
@@ -30,11 +34,35 @@ const Approval: React.FC<{
       history.replace('/');
       return null;
     }
+
+    // Fail closed: 'Unlock' (and any other ApprovalKind not in the UI dispatch
+    // barrel) can reach here as currentApproval via unrelated races (queue
+    // advancement, a cross-window unlock broadcast) — reject it by the exact
+    // ref just read rather than rendering <undefined/> below.
+    if (!ApprovalComponent[approval.data.approvalComponent]) {
+      await wallet.rejectApprovalFor({
+        approval: {
+          id: approval.id,
+          component: approval.data.approvalComponent,
+        },
+      });
+      history.replace('/');
+      return null;
+    }
+
+    // "忽略所有" 只允许作用于当前审批, 不能在同窗口排队切换时残留到下一笔
+    resetCurrentTx();
     setApproval(approval);
     document.title = 'Rabby Wallet Notification';
     const account = approval.data.account || (await wallet.getCurrentAccount());
     if (!account) {
-      rejectApproval();
+      // Trusted loading boundary: rejects the exact approval just read, not whatever's current later.
+      wallet.rejectApprovalFor({
+        approval: {
+          id: approval.id,
+          component: approval.data.approvalComponent,
+        },
+      });
       return;
     }
   };
@@ -55,6 +83,8 @@ const Approval: React.FC<{
       {approval && (
         <ApprovalUtilsProvider>
           <CurrentApprovalComponent
+            key={approval.id}
+            approvalId={approval.id}
             params={params}
             origin={origin}
             account={account}

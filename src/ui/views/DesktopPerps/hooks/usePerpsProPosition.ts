@@ -1,6 +1,6 @@
 import { sleep, useWallet } from '@/ui/utils';
 import { playSound } from '@/ui/utils/sound';
-import { getPerpsSDK } from '../../Perps/sdkManager';
+import { getPerpsSDK, isSelfSignPerpsAccount } from '../../Perps/sdkManager';
 import {
   PERPS_BUILDER_INFO,
   PERPS_BUILDER_INFO_PRO,
@@ -13,14 +13,17 @@ import {
   SLIPPAGE,
 } from '@rabby-wallet/hyperliquid-sdk';
 import { perpsToast } from '../components/PerpsToast';
-import * as Sentry from '@sentry/browser';
+import { capturePerpsError } from '../../Perps/sentry';
 import { useMemoizedFn } from 'ahooks';
 import { useRabbyDispatch, useRabbySelector } from '@/ui/store';
 import { useTranslation } from 'react-i18next';
 import { LimitOrderType, MarginMode } from '../types';
 import { removeTrailingZeros } from '../components/TradingPanel/utils';
 import BigNumber from 'bignumber.js';
-import { formatTpOrSlPrice } from '../../Perps/utils';
+import {
+  formatTpOrSlPrice,
+  isBuilderFeeNotApprovedError,
+} from '../../Perps/utils';
 import { SignAction, usePerpsProState } from './usePerpsProState';
 import { useMemo } from 'react';
 import { KEYRING_CLASS } from '@/constant';
@@ -30,6 +33,32 @@ const formatTriggerPx = (px?: string) => {
   // avoid '.15' input error from hy validator
   // '.15' -> '0.15'
   return px ? Number(px).toString() : undefined;
+};
+
+/** Error strings of the rejected orders in an exchange response's statuses. */
+const getOrderStatusErrors = (res: unknown): string[] => {
+  const statuses = (res as
+    | {
+        response?: { data?: { statuses?: unknown } };
+      }
+    | null
+    | undefined)?.response?.data?.statuses;
+  if (!Array.isArray(statuses)) return [];
+  return statuses.flatMap((s) =>
+    typeof s === 'object' && s !== null && (s as { error?: string }).error
+      ? [(s as { error: string }).error]
+      : []
+  );
+};
+
+const hasOrderStatuses = (res: unknown): boolean => {
+  const statuses = (res as
+    | {
+        response?: { data?: { statuses?: unknown } };
+      }
+    | null
+    | undefined)?.response?.data?.statuses;
+  return Array.isArray(statuses) && statuses.length > 0;
 };
 
 export const usePerpsProPosition = () => {
@@ -72,9 +101,7 @@ export const usePerpsProPosition = () => {
       });
     } catch (error) {
       console.error('Failed to send new approve agent:', error);
-      Sentry.captureException(
-        new Error(`Failed to send new approve agent: ${error}`)
-      );
+      capturePerpsError('send new approve agent failed', error);
     }
   });
 
@@ -82,6 +109,10 @@ export const usePerpsProPosition = () => {
     async (errorMessage: string) => {
       const masterAddress = currentPerpsAccount?.address;
       if (!masterAddress) {
+        return false;
+      }
+      // self-sign master signs its own orders — there is no agent to expire.
+      if (isSelfSignPerpsAccount(currentPerpsAccount?.type)) {
         return false;
       }
 
@@ -122,20 +153,21 @@ export const usePerpsProPosition = () => {
         if (isExpired) {
           return;
         }
+        // builder fee not approved yet — flag for re-prompt, skip Sentry.
+        if (isBuilderFeeNotApprovedError(error?.message)) {
+          dispatch.perps.setAccountNeedApproveBuilderFee(true);
+          perpsToast.error({
+            title: 'Builder fee not approved',
+            description: 'Please try again',
+          });
+          return;
+        }
         console.error('PERPS', errorMessage, error);
         perpsToast.error({
           title: errorMessage,
           description: error?.message?.toString() || 'unknown error',
         });
-        Sentry.captureException(
-          new Error(
-            `PERPS ${errorMessage} ` +
-              'params: ' +
-              JSON.stringify(params) +
-              'error: ' +
-              JSON.stringify(error)
-          )
-        );
+        capturePerpsError(errorMessage, error, { params });
       }
     }
   );
@@ -143,6 +175,7 @@ export const usePerpsProPosition = () => {
   const handleOpenMarketOrder = useMemoizedFn(
     async (params: {
       coin: string;
+      dex: string;
       isBuy: boolean;
       size: string;
       midPx: string;
@@ -156,6 +189,7 @@ export const usePerpsProPosition = () => {
           const sdk = getPerpsSDK();
           const {
             coin,
+            dex,
             isBuy,
             size,
             midPx,
@@ -194,6 +228,7 @@ export const usePerpsProPosition = () => {
                 price: avgPx,
               }),
             });
+            dispatch.perps.fetchClearinghouseState({ dex });
             return results?.response?.data?.statuses[0]?.filled as {
               totalSz: string;
               avgPx: string;
@@ -213,6 +248,7 @@ export const usePerpsProPosition = () => {
   const handleOpenLimitOrder = useMemoizedFn(
     async (params: {
       coin: string;
+      dex: string;
       isBuy: boolean;
       size: string;
       limitPx: string;
@@ -226,6 +262,7 @@ export const usePerpsProPosition = () => {
           const sdk = getPerpsSDK();
           const {
             coin,
+            dex,
             isBuy,
             size,
             limitPx,
@@ -271,6 +308,8 @@ export const usePerpsProPosition = () => {
                 }),
               });
             }
+            // Refresh on both resting and filled: isolated limit reserves margin.
+            dispatch.perps.fetchClearinghouseState({ dex });
             return resting?.oid || filled?.oid;
           } else {
             const msg = res?.response?.data?.statuses[0]?.error;
@@ -648,6 +687,7 @@ export const usePerpsProPosition = () => {
   const handleCloseWithMarketOrder = useMemoizedFn(
     async (params: {
       coin: string;
+      dex: string;
       size: string;
       midPx: string;
       isBuy: boolean;
@@ -656,7 +696,7 @@ export const usePerpsProPosition = () => {
       return withErrorHandler(
         async (p) => {
           const sdk = getPerpsSDK();
-          const { coin, isBuy, midPx, size, reduceOnly } = p;
+          const { coin, dex, isBuy, midPx, size, reduceOnly } = p;
           const res = await sdk.exchange?.marketOrderClose({
             coin,
             isBuy,
@@ -679,6 +719,7 @@ export const usePerpsProPosition = () => {
                 price: avgPx,
               }),
             });
+            dispatch.perps.fetchClearinghouseState({ dex });
             return res?.response?.data?.statuses[0]?.filled as {
               totalSz: string;
               avgPx: string;
@@ -711,6 +752,8 @@ export const usePerpsProPosition = () => {
               title: t('page.perps.toast.orderFilled'),
               description: t('page.perps.toast.closeAllPositionsSuccess'),
             });
+            // Close-all spans every dex, so refresh the full set.
+            dispatch.perps.fetchClearinghouseState();
             return true;
           }
         },
@@ -721,7 +764,12 @@ export const usePerpsProPosition = () => {
   );
 
   const handleUpdateMargin = useMemoizedFn(
-    async (coin: string, action: 'add' | 'reduce', margin: number) => {
+    async (
+      coin: string,
+      dex: string,
+      action: 'add' | 'reduce',
+      margin: number
+    ) => {
       return withErrorHandler(
         async (p) => {
           const sdk = getPerpsSDK();
@@ -739,12 +787,13 @@ export const usePerpsProPosition = () => {
                   : 'page.perpsDetail.PerpsEditMarginPopup.reduceMarginSuccess'
               ),
             });
+            dispatch.perps.fetchClearinghouseState({ dex: p.dex });
           } else {
             const msg = res?.response?.data?.statuses[0];
             throw new Error(msg || 'Update margin failed');
           }
         },
-        { coin, action, margin },
+        { coin, dex, action, margin },
         'Update margin failed'
       );
     }
@@ -795,10 +844,15 @@ export const usePerpsProPosition = () => {
             slTriggerPx: formattedSlTriggerPx,
             builder: PERPS_BUILDER_INFO_PRO,
           });
+          const errors = getOrderStatusErrors(res);
+          if (!res || errors.length > 0) {
+            throw new Error(errors[0] || 'Set auto close failed');
+          }
           perpsToast.success({
             title: t('page.perps.toast.success'),
             description: t('page.perps.toast.setAutoCloseSuccess'),
           });
+          return true;
         },
         params,
         'Set auto close failed'
@@ -829,16 +883,11 @@ export const usePerpsProPosition = () => {
             tp,
             sl,
           });
-          const resting = res?.response?.data?.statuses[0]?.resting;
-          if (resting?.oid) {
-            // message.success({
-            //   duration: 1.5,
-            //   content: t('page.perps.toast.setAutoCloseSuccess'),
-            // });
-          } else {
-            const msg = res?.response?.data?.statuses[0].error;
-            throw new Error(msg || 'modify auto close failed');
+          const errors = getOrderStatusErrors(res);
+          if (hasOrderStatuses(res) && errors.length === 0) {
+            return true;
           }
+          throw new Error(errors[0] || 'modify auto close failed');
         },
         params,
         'modify auto close failed'
@@ -846,8 +895,134 @@ export const usePerpsProPosition = () => {
     }
   );
 
+  // Partial TP/SL: reduce-only trigger orders with their own size, placed on
+  // the closing side (sell to close a long, buy to close a short). All legs go
+  // in one signed batch so a TP + SL pair lands together; each order is the
+  // one `placeTPSlMarketOrder` would build (market trigger, SDK slippage).
+  // Throws on the first rejected leg like the SDK, even if another landed.
+  const handlePlacePartialTpSl = useMemoizedFn(
+    async (params: {
+      coin: string;
+      direction: 'Long' | 'Short';
+      szDecimals: number;
+      legs: { size: string; triggerPx: string; tpsl: 'tp' | 'sl' }[];
+    }) => {
+      return withErrorHandler(
+        async (p) => {
+          const sdk = getPerpsSDK();
+          const exchange = sdk.exchange;
+          if (!exchange) throw new Error('Hyperliquid no exchange client');
+          const isBuy = p.direction === 'Short';
+          const res = await exchange.multiOrder({
+            orders: p.legs.map((leg) => {
+              const triggerPx = formatTriggerPx(leg.triggerPx) || '';
+              return {
+                coin: p.coin,
+                isBuy,
+                sz: leg.size,
+                limitPx: exchange.getSlippagePx(
+                  triggerPx,
+                  SLIPPAGE,
+                  isBuy,
+                  p.szDecimals
+                ),
+                reduceOnly: true,
+                orderType: {
+                  trigger: { isMarket: true, triggerPx, tpsl: leg.tpsl },
+                },
+              };
+            }),
+            builder: PERPS_BUILDER_INFO_PRO,
+          });
+          const errors = getOrderStatusErrors(res);
+          if (!res || errors.length > 0) {
+            throw new Error(errors[0] || 'place partial tp/sl failed');
+          }
+          return true as const;
+        },
+        params,
+        'place partial tp/sl failed'
+      );
+    }
+  );
+
+  // Edits a partial TP/SL in place (one signed modify, no unprotected gap).
+  const handleModifyPartialTpSl = useMemoizedFn(
+    async (params: {
+      coin: string;
+      oid: number;
+      direction: 'Long' | 'Short';
+      size: string;
+      triggerPx: string;
+      tpsl: 'tp' | 'sl';
+      szDecimals: number;
+    }) => {
+      return withErrorHandler(
+        async (p) => {
+          const sdk = getPerpsSDK();
+          if (!sdk.exchange) throw new Error('Hyperliquid no exchange client');
+          const isBuy = p.direction === 'Short';
+          const triggerPx = formatTriggerPx(p.triggerPx) || '';
+          const res = await sdk.exchange.modifyOrder({
+            oid: p.oid,
+            coin: p.coin,
+            isBuy,
+            sz: p.size,
+            limitPx: sdk.exchange.getSlippagePx(
+              triggerPx,
+              SLIPPAGE,
+              isBuy,
+              p.szDecimals
+            ),
+            reduceOnly: true,
+            orderType: {
+              trigger: { isMarket: true, triggerPx, tpsl: p.tpsl },
+            },
+          });
+          // A single modify answers `{ type: 'default' }`; a batch answers
+          // per-order statuses. An error string means rejected (the SDK http
+          // client already throws for err/error/fail statuses).
+          const errors = getOrderStatusErrors(res);
+          if (errors.length > 0) throw new Error(errors[0]);
+          return true as const;
+        },
+        params,
+        'modify partial tp/sl failed'
+      );
+    }
+  );
+
+  const handleStableCoinOrder = useMemoizedFn(
+    async (params: {
+      coin: 'USDT' | 'USDH' | 'USDE';
+      isBuy: boolean;
+      size: string;
+      limitPx: string;
+    }) => {
+      return withErrorHandler(
+        async (p) => {
+          const sdk = getPerpsSDK();
+          if (!sdk.exchange) throw new Error('Hyperliquid no exchange client');
+          await sdk.exchange.stableCoinOrder(p);
+          // Spot balance refresh comes from the existing subscribeToSpotState WS push.
+          return true;
+        },
+        params,
+        'stableCoinOrder error'
+      );
+    }
+  );
+
   const handleCancelOrder = useMemoizedFn(
-    async (params: CancelOrderParams[]) => {
+    async (
+      params: CancelOrderParams[],
+      options?: {
+        successToast?: {
+          title: string;
+          description?: string;
+        };
+      }
+    ) => {
       return withErrorHandler(
         async () => {
           const sdk = getPerpsSDK();
@@ -858,26 +1033,30 @@ export const usePerpsProPosition = () => {
             )
           ) {
             const num = params.length;
-            perpsToast.success({
-              title:
-                num > 1
-                  ? t('page.perps.toast.ordersCancelled')
-                  : t('page.perps.toast.orderCancelled'),
-              description:
-                num > 1
-                  ? t('page.perps.toast.cancelAllOrderSuccess', {
-                      count: num,
-                    })
-                  : t('page.perps.toast.cancelOrderSuccess'),
-            });
+            perpsToast.success(
+              options?.successToast || {
+                title:
+                  num > 1
+                    ? t('page.perps.toast.ordersCancelled')
+                    : t('page.perps.toast.orderCancelled'),
+                description:
+                  num > 1
+                    ? t('page.perps.toast.cancelAllOrderSuccess', {
+                        count: num,
+                      })
+                    : t('page.perps.toast.cancelOrderSuccess'),
+              }
+            );
             setTimeout(() => {
               dispatch.perps.fetchPositionOpenOrders();
             }, 100);
+            return true;
           } else {
             perpsToast.error({
               title: t('page.perps.toast.cancelFailed'),
               description: t('page.perps.toast.cancelOrderError'),
             });
+            return false;
           }
         },
         params,
@@ -900,8 +1079,11 @@ export const usePerpsProPosition = () => {
     handleSetAutoClose,
     handleCloseAllPositions,
     handleModifyTpSlOrders,
+    handlePlacePartialTpSl,
+    handleModifyPartialTpSl,
     handleUpdateMarginModeLeverage,
     handleCancelOrder,
+    handleStableCoinOrder,
 
     needEnableTrading,
     handleActionApproveStatus,

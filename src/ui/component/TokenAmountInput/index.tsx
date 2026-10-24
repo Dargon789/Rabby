@@ -18,22 +18,27 @@ import React, {
 } from 'react';
 import useSearchToken from 'ui/hooks/useSearchToken';
 import useSortToken from 'ui/hooks/useSortTokens';
-import { formatUsdValue, splitNumberByStep, useWallet } from 'ui/utils';
+import { formatUsdValue, useWallet } from 'ui/utils';
 import { abstractTokenToTokenItem, getTokenSymbol } from 'ui/utils/token';
 import TokenSelector, { TokenSelectorProps } from '../TokenSelector';
 import TokenWithChain from '../TokenWithChain';
 import './style.less';
-import { INPUT_NUMBER_RE, filterNumber } from '@/constant/regexp';
+import { normalizeInputNumber } from '@/constant/regexp';
 import { SendMaxButton } from '@/ui/views/SendToken/components/MaxButton';
 import { useTranslation } from 'react-i18next';
 import { ReactComponent as RcIconWalletCC } from '@/ui/assets/swap/wallet-cc.svg';
 import { ReactComponent as RcArrowDown } from './icons/arrow-down.svg';
+import { ReactComponent as RcIconAmountModeSwitch } from '@/ui/assets/send-token/amount-mode-switch.svg';
 import styled from 'styled-components';
 import { RiskWarningTitle } from '../RiskWarningTitle';
 import BigNumber from 'bignumber.js';
 import { ChainSelectorInSend } from '@/ui/views/SendToken/components/ChainSelectorInSend';
 import { Chain } from '@debank/common';
 import { concatAndSort } from '@/ui/utils/portfolio/tokenUtils';
+import {
+  AutoSizeAmountInput,
+  AmountInputOverflowPosition,
+} from '../AutoSizeAmountInput';
 
 interface TokenAmountInputProps {
   token: TokenItem | null;
@@ -52,6 +57,15 @@ interface TokenAmountInputProps {
   getContainer?: DrawerProps['getContainer'];
   balanceNumText?: string;
   handleClickMaxButton?: () => void;
+  displayValue?: string;
+  displayValueText?: string;
+  inputPrefixText?: string;
+  quoteText?: string;
+  showQuote?: boolean;
+  canSwitchMode?: boolean;
+  onSwitchMode?: () => void;
+  onInputValueChange?: (amount: string) => string | false | void;
+  amountInputOverflowPosition?: AmountInputOverflowPosition;
   disableItemCheck?: (
     token: TokenItem
   ) => {
@@ -63,18 +77,28 @@ interface TokenAmountInputProps {
 }
 
 const DEFAULT_EXCLUDE_TOKENS: TokenItem['id'][] = [];
+const AMOUNT_MAX_FONT_SIZE = 28;
+const AMOUNT_MIN_FONT_SIZE = 18;
+const AMOUNT_FONT_SIZE_STEP = 2;
 
-const StyledInput = styled(Input)`
+const StyledInput = styled(Input)<{
+  $fontSize: number;
+  $hasDisplayText?: boolean;
+}>`
   color: var(--r-neutral-title1, #192945);
-  font-size: 28px !important;
+  font-size: ${({ $fontSize }) => $fontSize}px !important;
   font-style: normal;
   font-weight: 700;
   line-height: 36px;
   background: transparent !important;
+  min-width: 0;
+  flex: 1;
   padding-left: 0;
+  padding-right: 0;
   &::placeholder {
-    color: var(--r-neutral-foot, #6a7587);
-    font-size: 28px !important;
+    color: ${({ $hasDisplayText }) =>
+      $hasDisplayText ? 'transparent' : 'var(--r-neutral-foot, #6a7587)'};
+    font-size: ${({ $fontSize }) => $fontSize}px !important;
     font-style: normal;
     font-weight: 700;
     line-height: 36px;
@@ -87,11 +111,15 @@ const StyledInput = styled(Input)`
   }
 `;
 
-function isTestchain(chainServerId?: Chain['serverId']) {
-  if (!chainServerId) return false;
+function getDefaultSelectorChainId(
+  chainServerId: Chain['serverId'] | undefined,
+  type: TokenSelectorProps['type']
+) {
+  if (!chainServerId) return '';
 
   const chain = findChain({ serverId: chainServerId });
-  return chain?.isTestnet;
+  // Send starts with all mainnets; retain the current testnet tab behavior.
+  return type === 'send' && !chain?.isTestnet ? '' : chainServerId;
 }
 
 const TokenAmountInput = ({
@@ -109,6 +137,15 @@ const TokenAmountInput = ({
   getContainer,
   balanceNumText,
   handleClickMaxButton,
+  displayValue,
+  displayValueText,
+  inputPrefixText,
+  quoteText,
+  showQuote = true,
+  canSwitchMode,
+  onSwitchMode,
+  onInputValueChange,
+  amountInputOverflowPosition,
   insufficientError,
   isLoading,
   initLoading,
@@ -138,12 +175,13 @@ const TokenAmountInput = ({
           }),
     [token?.chain]
   );
+  const defaultSelectorChainId = getDefaultSelectorChainId(token?.chain, type);
   const [
     { mainnet: mainnetChainServerId, testnet: testnetChainServerId },
     setNetVariedChainServerId,
   ] = useState({
-    mainnet: chainItemOfToken?.isTestnet ? '' : token?.chain || '',
-    testnet: chainItemOfToken?.isTestnet ? token?.chain || '' : '',
+    mainnet: chainItemOfToken?.isTestnet ? '' : defaultSelectorChainId,
+    testnet: chainItemOfToken?.isTestnet ? defaultSelectorChainId : '',
   });
   // const testnetChainItem = useMemo(
   //   () =>
@@ -166,6 +204,28 @@ const TokenAmountInput = ({
     }));
   }, []);
 
+  const applyInputValue = useCallback(
+    (rawValue: string) => {
+      if (onInputValueChange) {
+        const nextValue = onInputValueChange(rawValue);
+        if (nextValue === false) {
+          return;
+        }
+
+        if (typeof nextValue === 'string') {
+          onChange?.(nextValue);
+          return;
+        }
+      }
+
+      const nextValue = normalizeInputNumber(rawValue);
+      if (nextValue !== null) {
+        onChange?.(nextValue);
+      }
+    },
+    [onChange, onInputValueChange]
+  );
+
   useLayoutEffect(() => {
     if (amountFocus && !tokenSelectorVisible) {
       tokenInputRef.current?.focus();
@@ -174,21 +234,21 @@ const TokenAmountInput = ({
 
   const handleCurrentTokenChange = useCallback(
     (token: TokenItem) => {
-      onChange && onChange('');
+      applyInputValue('');
       onTokenChange(token);
       setTokenSelectorVisible(false);
       setLpTokenMode(false);
       tokenInputRef.current?.focus();
-      setChainServerId(token?.chain);
+      setChainServerId(getDefaultSelectorChainId(token.chain, type));
     },
-    [onChange, onTokenChange, setChainServerId]
+    [applyInputValue, onTokenChange, setChainServerId, type]
   );
 
   const handleTokenSelectorClose = useCallback(() => {
-    setChainServerId(token?.chain);
+    setChainServerId(defaultSelectorChainId);
     setLpTokenMode(false);
     setTokenSelectorVisible(false);
-  }, [token?.chain, setChainServerId]);
+  }, [defaultSelectorChainId, setChainServerId]);
 
   const checkBeforeConfirm = useCallback(
     (token: TokenItem) => {
@@ -231,26 +291,24 @@ const TokenAmountInput = ({
     tokens: allTokens,
     isLoading: isLoadingAllTokens,
     isAllTokenLoading, // 包含lpToken
-  } = useTokens(
-    currentAccount?.address,
-    undefined,
-    selectorOpened.current ? tokenSelectorVisible : true,
+  } = useTokens(currentAccount?.address, {
+    visible: selectorOpened.current ? tokenSelectorVisible : true,
     updateNonce,
-    mainnetChainServerId,
-    undefined,
-    isFromMode ? lpTokenMode : undefined, // only show lp tokens in from mode
-    undefined,
-    !!keyword,
-    false,
-    true
-  );
+    chainServerId: mainnetChainServerId,
+    lpTokensOnly: isFromMode ? lpTokenMode : undefined, // only show lp tokens in from mode
+    searchMode: !!keyword,
+    realtimeMode: true,
+  });
 
   const handleSelectToken = useCallback(() => {
+    if (type === 'send') {
+      setChainServerId(defaultSelectorChainId);
+    }
     if (allTokens.length > 0) {
       setUpdateNonce(updateNonce + 1);
     }
     setTokenSelectorVisible(true);
-  }, [allTokens, updateNonce]);
+  }, [allTokens, defaultSelectorChainId, setChainServerId, type, updateNonce]);
 
   const allDisplayTokens = useMemo(() => {
     return allTokens.map(abstractTokenToTokenItem);
@@ -325,16 +383,30 @@ const TokenAmountInput = ({
   );
 
   useEffect(() => {
-    setChainServerId(token?.chain || '');
-  }, [token?.chain, setChainServerId]);
+    setChainServerId(defaultSelectorChainId);
+  }, [defaultSelectorChainId, setChainServerId]);
+
+  const displayInputValue = displayValue ?? value ?? '';
+  const actualInputValue = displayValueText ? '' : displayInputValue;
+  const amountMeasureValue = displayValueText || displayInputValue || '0';
+  const amountMeasureText = `${inputPrefixText || ''}${amountMeasureValue}`;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (INPUT_NUMBER_RE.test(e.target.value)) {
-      onChange?.(filterNumber(e.target.value));
+    applyInputValue(e.target.value);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (displayValueText && (e.key === 'Backspace' || e.key === 'Delete')) {
+      e.preventDefault();
+      applyInputValue('');
     }
   };
 
-  const useValue = useMemo(() => {
+  const handleInputWrapClick = () => {
+    tokenInputRef.current?.focus();
+  };
+
+  const fallbackQuoteText = useMemo(() => {
     if (token && value) {
       return formatUsdValue(
         new BigNumber(value).multipliedBy(token.price || 0).toString()
@@ -342,38 +414,74 @@ const TokenAmountInput = ({
     }
     return '$0.00';
   }, [token, value]);
+  const amountQuoteText = quoteText ?? fallbackQuoteText;
 
   const chainSelectorRef = useRef<ChainSelectorInSend>(null);
 
   return (
-    <div className={clsx('token-amount-input', className)}>
-      <div
-        className="right relative flex flex-col justify-between pt-[5px] overflow-hidden"
-        style={{ paddingRight: 32 }}
-      >
-        <StyledInput
-          ref={tokenInputRef}
-          placeholder="0"
-          className={clsx(
-            !value && 'h-[29px]',
-            insufficientError && 'text-rabby-red-default'
-          )}
-          autoFocus
-          value={value}
-          size="large"
-          onChange={handleChange}
-          title={value}
-        />
-
-        <div
-          className="text-r-neutral-foot font-normal text-[13px] max-w-full truncate"
-          title={useValue}
+    <div className={clsx('token-amount-input flex-col gap-[13px]', className)}>
+      <div className="token-amount-input__main-row flex items-start">
+        <AutoSizeAmountInput
+          inputRef={tokenInputRef}
+          inputValue={actualInputValue}
+          measureText={amountMeasureText}
+          maxFontSize={AMOUNT_MAX_FONT_SIZE}
+          minFontSize={AMOUNT_MIN_FONT_SIZE}
+          fontSizeStep={AMOUNT_FONT_SIZE_STEP}
+          overflowPosition={amountInputOverflowPosition}
+          fontWeight={700}
+          className="right token-amount-input__amount-area relative min-w-0 flex-1 overflow-hidden"
         >
-          {useValue}
-        </div>
-      </div>
-      <div className="flex flex-col justify-between gap-[13px] items-end">
-        <div className="left" onClick={handleSelectToken}>
+          {(amountFontSize) => (
+            <>
+              {!!inputPrefixText && (
+                <span
+                  className={clsx(
+                    'token-amount-input__prefix',
+                    insufficientError && 'text-rabby-red-default'
+                  )}
+                  style={{ fontSize: amountFontSize }}
+                >
+                  {inputPrefixText}
+                </span>
+              )}
+              <div
+                className="token-amount-input__input-wrap"
+                onClick={displayValueText ? handleInputWrapClick : undefined}
+              >
+                {!!displayValueText && (
+                  <span
+                    className={clsx(
+                      'token-amount-input__display-text',
+                      insufficientError && 'text-rabby-red-default'
+                    )}
+                    style={{ fontSize: amountFontSize }}
+                  >
+                    {displayValueText}
+                  </span>
+                )}
+                <StyledInput
+                  ref={tokenInputRef}
+                  placeholder={displayValueText ? '' : '0'}
+                  $fontSize={amountFontSize}
+                  $hasDisplayText={!!displayValueText}
+                  className={clsx(
+                    'h-[36px]',
+                    insufficientError && 'text-rabby-red-default'
+                  )}
+                  autoFocus
+                  value={actualInputValue}
+                  size="large"
+                  onChange={handleChange}
+                  onKeyDown={handleKeyDown}
+                  title={displayValueText || displayInputValue}
+                />
+              </div>
+            </>
+          )}
+        </AutoSizeAmountInput>
+
+        <div className="left shrink-0" onClick={handleSelectToken}>
           {initLoading ? (
             <>
               <Skeleton.Avatar
@@ -386,8 +494,9 @@ const TokenAmountInput = ({
             <>
               {!!token && (
                 <TokenWithChain
-                  width="24px"
-                  height="24px"
+                  width="26px"
+                  height="26px"
+                  chainSize={14}
                   token={token}
                   // hideChainIcon
                   hideConer
@@ -415,34 +524,57 @@ const TokenAmountInput = ({
             <RcArrowDown width={20} height={20} />
           </div>
         </div>
-        <div className="flex items-center">
-          {isLoading ? (
-            <Skeleton.Input active style={{ width: 100 }} />
-          ) : (
+      </div>
+      <div className="token-amount-input__bottom-row flex items-center justify-between">
+        <div className="min-w-0 flex-1">
+          {showQuote && !!amountQuoteText && (
             <div
               className={clsx(
-                'flex items-center gap-4',
-                insufficientError
-                  ? 'text-rabby-red-default'
-                  : 'text-r-neutral-foot'
+                'token-amount-input__quote',
+                canSwitchMode && 'token-amount-input__quote--clickable'
               )}
+              title={amountQuoteText}
+              onClick={canSwitchMode ? onSwitchMode : undefined}
             >
-              <RcIconWalletCC viewBox="0 0 16 16" className="w-16 h-16" />
-              <span
-                className={clsx(
-                  'truncate max-w-[90px] text-[13px] font-normal text-r-neutral-foot'
-                )}
-                title={balanceNumText}
-              >
-                {balanceNumText}
+              <span className="token-amount-input__quote-text">
+                {amountQuoteText}
               </span>
+              {canSwitchMode && (
+                <RcIconAmountModeSwitch className="token-amount-input__switch-icon" />
+              )}
             </div>
           )}
-          {token && token.amount > 0 && !isLoading && (
-            <SendMaxButton onClick={handleClickMaxButton}>
-              {t('page.sendToken.max')}
-            </SendMaxButton>
-          )}
+        </div>
+        <div className="flex shrink-0 items-center">
+          <div className="flex items-center">
+            {isLoading ? (
+              <Skeleton.Input active style={{ width: 100 }} />
+            ) : (
+              <div
+                className={clsx(
+                  'flex items-center gap-4',
+                  insufficientError
+                    ? 'text-rabby-red-default'
+                    : 'text-r-neutral-foot'
+                )}
+              >
+                <RcIconWalletCC viewBox="0 0 16 16" className="w-16 h-16" />
+                <span
+                  className={clsx(
+                    'truncate max-w-[90px] text-[13px] font-normal text-r-neutral-foot'
+                  )}
+                  title={balanceNumText}
+                >
+                  {balanceNumText}
+                </span>
+              </div>
+            )}
+            {token && token.amount > 0 && !isLoading && (
+              <SendMaxButton onClick={handleClickMaxButton}>
+                {t('page.sendToken.max')}
+              </SendMaxButton>
+            )}
+          </div>
         </div>
       </div>
       <TokenSelector
@@ -475,6 +607,7 @@ const TokenAmountInput = ({
         onChange={(value) => {
           setChainServerId(findChainByEnum(value)?.serverId || '');
         }}
+        getContainer={getContainer}
       />
     </div>
   );

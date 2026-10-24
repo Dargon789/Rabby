@@ -9,7 +9,10 @@ const tsImportPluginFactory = require('ts-import-plugin');
 const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
 // const AssetReplacePlugin = require('./plugins/AssetReplacePlugin');
 const CopyPlugin = require('copy-webpack-plugin');
-const { resolveManifestFilename } = require('./manifest-utils');
+const {
+  resolveManifestFilename,
+  resolveManifestVersion,
+} = require('./manifest-utils');
 
 const createStyledComponentsTransformer = require('typescript-plugin-styled-components')
   .default;
@@ -40,11 +43,23 @@ const IS_MANIFEST_MV3 = MANIFEST_TYPE.includes('-mv3');
 const FINAL_DIST = IS_MANIFEST_MV3 ? paths.dist : paths.distMv2;
 const IS_FIREFOX = MANIFEST_TYPE.includes('firefox');
 const BUILD_ENV = process.env.RABBY_BUILD_ENV || '';
+const disableStyleSourceMap =
+  !!process.env.sourcemap || BUILD_ENV === 'sourcemap';
+const DEXIE_IMPORT_WRAPPER =
+  BUILD_ENV === 'pro' || BUILD_ENV === 'sourcemap'
+    ? 'import-wrapper-prod.mjs'
+    : 'import-wrapper.mjs';
 
 const MANIFEST_FILENAME = resolveManifestFilename({
   manifestType: MANIFEST_TYPE,
   buildEnv: BUILD_ENV,
 });
+const APP_VERSION =
+  process.env.VERSION ||
+  resolveManifestVersion({
+    manifestType: MANIFEST_TYPE,
+    buildEnv: BUILD_ENV,
+  });
 
 const config = {
   entry: {
@@ -155,14 +170,26 @@ const config = {
             loader: 'css-loader',
             options: {
               importLoaders: 1,
+              ...(disableStyleSourceMap ? { sourceMap: false } : {}),
             },
           },
           {
             loader: 'postcss-loader',
+            options: {
+              ...(disableStyleSourceMap ? { sourceMap: false } : {}),
+              postcssOptions: {
+                plugins: [
+                  require('postcss-nested'),
+                  require('postcss-custom-properties'),
+                  require('autoprefixer'),
+                ],
+              },
+            },
           },
           {
             loader: 'less-loader',
             options: {
+              ...(disableStyleSourceMap ? { sourceMap: false } : {}),
               lessOptions: {
                 javascriptEnabled: true,
               },
@@ -190,10 +217,14 @@ const config = {
             loader: 'css-loader',
             options: {
               importLoaders: 1,
+              ...(disableStyleSourceMap ? { sourceMap: false } : {}),
             },
           },
           {
             loader: 'postcss-loader',
+            options: {
+              ...(disableStyleSourceMap ? { sourceMap: false } : {}),
+            },
           },
         ],
       },
@@ -282,10 +313,13 @@ const config = {
       dayjs: 'dayjs',
     }),
     new webpack.DefinePlugin({
-      'process.env.version': JSON.stringify(`version: ${process.env.VERSION}`),
-      'process.env.release': JSON.stringify(process.env.VERSION),
+      'process.env.version': JSON.stringify(`version: ${APP_VERSION}`),
+      'process.env.release': JSON.stringify(APP_VERSION),
       'process.env.RABBY_BUILD_GIT_HASH': JSON.stringify(BUILD_GIT_HASH),
       'process.env.ETHERSCAN_KEY': JSON.stringify(process.env.ETHERSCAN_KEY),
+      'process.env.RABBY_SENTRY_DSN': JSON.stringify(
+        process.env.RABBY_SENTRY_DSN
+      ),
     }),
     new CopyPlugin({
       patterns: [
@@ -315,31 +349,35 @@ const config = {
                 './vendor/trezor/trezor-content-script.js'
               ),
             },
-        IS_MANIFEST_MV3
-          ? {
-              from: require.resolve(
-                '@trezor/connect-webextension/build/trezor-connect-webextension.js'
-              ),
-              to: path.resolve(
-                FINAL_DIST,
-                './vendor/trezor/trezor-connect-webextension.js'
-              ),
-            }
-          : {
-              from: require.resolve(
-                '@trezor/connect-web/lib/webextension/trezor-usb-permissions.js'
-              ),
-              to: path.resolve(
-                FINAL_DIST,
-                './vendor/trezor/trezor-usb-permissions.js'
-              ),
-            },
+        {
+          from: require.resolve(
+            '@trezor/connect-web/lib/webextension/trezor-usb-permissions.js'
+          ),
+          to: path.resolve(
+            FINAL_DIST,
+            './vendor/trezor-usb-permissions.js'
+          ),
+        },
+        ...(IS_MANIFEST_MV3
+          ? [
+              {
+                from: require.resolve(
+                  '@trezor/connect-web/lib/webextension/trezor-usb-permissions.html'
+                ),
+                to: path.resolve(
+                  FINAL_DIST,
+                  './trezor-usb-permissions.html'
+                ),
+              },
+            ]
+          : []),
       ],
     }),
     tsStyledComponentPlugin,
   ],
   resolve: {
     alias: {
+      dexie$: paths.rootResolve(`node_modules/dexie/${DEXIE_IMPORT_WRAPPER}`),
       moment: require.resolve('dayjs'),
       '@debank/common': require.resolve('@debank/common/dist/index-rabby'),
     },
@@ -351,6 +389,7 @@ const config = {
       zlib: require.resolve('browserify-zlib'),
       https: require.resolve('https-browserify'),
       http: require.resolve('stream-http'),
+      vm: false,
     },
     extensions: ['.js', 'jsx', '.ts', '.tsx'],
   },

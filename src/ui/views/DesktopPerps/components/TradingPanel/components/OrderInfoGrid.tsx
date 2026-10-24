@@ -4,6 +4,7 @@ import { formatPerpsCoin } from '../../../utils';
 import { useTranslation } from 'react-i18next';
 import { formatUsdValue, splitNumberByStep } from '@/ui/utils';
 import BigNumber from 'bignumber.js';
+import type { PerpsQuoteAsset } from '@/ui/views/Perps/constants';
 
 interface OrderInfoGridProps {
   buy: OrderSideInfo;
@@ -12,6 +13,7 @@ interface OrderInfoGridProps {
   selectedCoin: string;
   reduceOnly?: boolean;
   hideLiqPrice?: boolean;
+  quoteAsset: PerpsQuoteAsset;
   price?: number | string;
 }
 
@@ -23,14 +25,15 @@ export const OrderInfoGrid: React.FC<OrderInfoGridProps> = ({
   reduceOnly,
   hideLiqPrice,
   price,
+  quoteAsset,
 }) => {
   const { t } = useTranslation();
 
   const formatMax = (max: string) => {
-    if (displayUnit === 'usdc' && price && Number(max) > 0) {
+    if (displayUnit === 'usd' && price && Number(max) > 0) {
       return `${splitNumberByStep(
         new BigNumber(max).multipliedBy(price).toFixed(2)
-      )} USDC`;
+      )} ${quoteAsset}`;
     }
     return `${max} ${formatPerpsCoin(selectedCoin)}`;
   };
@@ -39,20 +42,20 @@ export const OrderInfoGrid: React.FC<OrderInfoGridProps> = ({
     <div className="space-y-[6px]">
       {/* Liq. Price row (hidden when reduceOnly) */}
       {!reduceOnly && !hideLiqPrice && (
-        <div className="flex items-baseline justify-between">
-          <div className="flex-1 flex flex-wrap items-baseline gap-x-[4px]">
-            <span className="text-rb-neutral-secondary text-[12px] whitespace-nowrap">
+        <div className="flex items-baseline justify-between gap-x-[8px]">
+          <div className="flex-1 min-w-0 flex flex-wrap items-baseline gap-x-[4px] gap-y-[2px]">
+            <span className="text-rb-neutral-secondary text-12 whitespace-nowrap shrink-0">
               {t('page.perpsDetail.PerpsEditMarginPopup.liqPrice')}
             </span>
-            <span className="text-rb-neutral-title-1 font-medium text-[12px] whitespace-nowrap">
+            <span className="text-rb-neutral-body text-12">
               {buy.liqPrice || '-'}
             </span>
           </div>
-          <div className="flex-1 flex flex-wrap items-baseline justify-end gap-x-[4px]">
-            <span className="text-rb-neutral-secondary text-[12px] whitespace-nowrap">
+          <div className="flex-1 min-w-0 flex flex-wrap items-baseline justify-end gap-x-[4px] gap-y-[2px]">
+            <span className="text-rb-neutral-secondary text-12 whitespace-nowrap shrink-0">
               {t('page.perpsDetail.PerpsEditMarginPopup.liqPrice')}
             </span>
-            <span className="text-rb-neutral-title-1 font-medium text-[12px] whitespace-nowrap">
+            <span className="text-rb-neutral-body text-12">
               {sell.liqPrice || '-'}
             </span>
           </div>
@@ -60,40 +63,36 @@ export const OrderInfoGrid: React.FC<OrderInfoGridProps> = ({
       )}
 
       {/* Cost row */}
-      <div className="flex items-baseline justify-between">
-        <div className="flex-1 flex flex-wrap items-baseline gap-x-[4px]">
-          <span className="text-rb-neutral-secondary text-[12px] whitespace-nowrap">
+      <div className="flex items-baseline justify-between gap-x-[8px]">
+        <div className="flex-1 min-w-0 flex flex-wrap items-baseline gap-x-[4px] gap-y-[2px]">
+          <span className="text-rb-neutral-secondary text-12 whitespace-nowrap shrink-0">
             {t('page.perpsPro.tradingPanel.cost')}
           </span>
-          <span className="text-rb-neutral-title-1 font-medium text-[12px] whitespace-nowrap">
-            {buy.cost}
-          </span>
+          <span className="text-rb-neutral-body text-12">{buy.cost}</span>
         </div>
-        <div className="flex-1 flex flex-wrap items-baseline justify-end gap-x-[4px]">
-          <span className="text-rb-neutral-secondary text-[12px] whitespace-nowrap">
+        <div className="flex-1 min-w-0 flex flex-wrap items-baseline justify-end gap-x-[4px] gap-y-[2px]">
+          <span className="text-rb-neutral-secondary text-12 whitespace-nowrap shrink-0">
             {t('page.perpsPro.tradingPanel.cost')}
           </span>
-          <span className="text-rb-neutral-title-1 font-medium text-[12px] whitespace-nowrap">
-            {sell.cost}
-          </span>
+          <span className="text-rb-neutral-body text-12">{sell.cost}</span>
         </div>
       </div>
 
       {/* Max row */}
-      <div className="flex items-baseline justify-between">
-        <div className="flex-1 flex flex-wrap items-baseline gap-x-[4px]">
-          <span className="text-rb-neutral-secondary text-[12px] whitespace-nowrap">
+      <div className="flex items-baseline justify-between gap-x-[8px]">
+        <div className="flex-1 min-w-0 flex flex-wrap items-baseline gap-x-[4px] gap-y-[2px]">
+          <span className="text-rb-neutral-secondary text-12 whitespace-nowrap shrink-0">
             {t('page.perpsPro.tradingPanel.max')}
           </span>
-          <span className="text-rb-neutral-title-1 font-medium text-[12px] whitespace-nowrap">
+          <span className="text-rb-neutral-body text-12">
             {formatMax(buy.max)}
           </span>
         </div>
-        <div className="flex-1 flex flex-wrap items-baseline justify-end gap-x-[4px]">
-          <span className="text-rb-neutral-secondary text-[12px] whitespace-nowrap">
+        <div className="flex-1 min-w-0 flex flex-wrap items-baseline justify-end gap-x-[4px] gap-y-[2px]">
+          <span className="text-rb-neutral-secondary text-12 whitespace-nowrap shrink-0">
             {t('page.perpsPro.tradingPanel.max')}
           </span>
-          <span className="text-rb-neutral-title-1 font-medium text-[12px] whitespace-nowrap">
+          <span className="text-rb-neutral-body text-12">
             {formatMax(sell.max)}
           </span>
         </div>

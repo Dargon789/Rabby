@@ -1,24 +1,24 @@
 import React, { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { PrivateRouteGuard } from 'ui/component';
+import { PrivateRoute, PrivateRouteGuard } from 'ui/component';
 
 import { PortalHost } from '../component/PortalHost';
 import { CommonPopup } from './CommonPopup';
 import { DesktopProfile } from './DesktopProfile';
-import { DesktopInnerDapp } from './DesktopDappIframe';
 import {
   GlobalSignerPortal,
   GlobalTypedDataSignerPortal,
 } from '../component/MiniSignV2/components';
 import clsx from 'clsx';
 import { DesktopPerpsEntry } from './DesktopPerps/entry';
-import { DesktopLendingEntry } from './DesktopLending/entry';
 import { AddAddressModal } from './DesktopProfile/components/AddAddressModal';
 import { useRabbyDispatch } from '../store';
 import { useEventBusListener } from '../hooks/useEventBusListener';
 import { EVENTS } from '@/constant';
 import { useMemoizedFn } from 'ahooks';
-import { onBackgroundStoreChanged } from '../utils/broadcastToUI';
+import { useContactBookStore } from '@/ui/state/contactBook';
+import { DesktopSmallSwap } from './DesktopSmallSwap';
+import { DesktopManageApprovals } from './DesktopManageApprovals';
 
 declare global {
   interface Window {
@@ -28,27 +28,17 @@ declare global {
 
 const Main = () => {
   const location = useLocation();
-  const isDappIframeRoute = location.pathname === '/desktop/prediction';
   const isPerpsRoute = location.pathname === '/desktop/perps';
   const isProfileRoute = location.pathname.startsWith('/desktop/profile');
-  const isLendingRoute = location.pathname === '/desktop/lending';
 
-  const hasMountedDappIframeRef = useRef(false);
   const hasMountedPerpsRef = useRef(false);
   const hasMountedProfileRef = useRef(false);
-  const hasMountedLendingRef = useRef(false);
 
-  if (isDappIframeRoute) {
-    hasMountedDappIframeRef.current = true;
-  }
   if (isPerpsRoute) {
     hasMountedPerpsRef.current = true;
   }
   if (isProfileRoute) {
     hasMountedProfileRef.current = true;
-  }
-  if (isLendingRoute) {
-    hasMountedLendingRef.current = true;
   }
 
   const dispatch = useRabbyDispatch();
@@ -66,13 +56,17 @@ const Main = () => {
   });
 
   useEffect(() => {
-    return onBackgroundStoreChanged('contactBook', (payload) => {
-      fetchAllAccounts();
-    });
+    return useContactBookStore.subscribe(fetchAllAccounts);
   }, [fetchAllAccounts]);
 
   return (
     <>
+      <PrivateRoute exact path="/desktop/small-swap">
+        <DesktopSmallSwap />
+      </PrivateRoute>
+      <PrivateRoute exact path="/desktop/manage-approvals">
+        <DesktopManageApprovals />
+      </PrivateRoute>
       {hasMountedProfileRef.current ? (
         <PrivateRouteGuard>
           <DesktopProfile
@@ -85,26 +79,6 @@ const Main = () => {
         <PrivateRouteGuard>
           <div className={clsx('h-full', isPerpsRoute ? 'block' : 'hidden')}>
             <DesktopPerpsEntry isActive={isPerpsRoute} />
-          </div>
-        </PrivateRouteGuard>
-      ) : null}
-      {hasMountedDappIframeRef.current ? (
-        <PrivateRouteGuard>
-          <div
-            className={clsx('h-full', isDappIframeRoute ? 'block' : 'hidden')}
-          >
-            <DesktopInnerDapp
-              isActive={isDappIframeRoute}
-              type={'prediction'}
-            />
-          </div>
-        </PrivateRouteGuard>
-      ) : null}
-
-      {hasMountedLendingRef.current ? (
-        <PrivateRouteGuard>
-          <div className={clsx('h-full', isLendingRoute ? 'block' : 'hidden')}>
-            <DesktopLendingEntry isActive={isLendingRoute} />
           </div>
         </PrivateRouteGuard>
       ) : null}

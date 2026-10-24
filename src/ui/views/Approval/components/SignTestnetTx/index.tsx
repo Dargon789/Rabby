@@ -6,6 +6,7 @@ import BigNumber from 'bignumber.js';
 import { FooterBar } from '../FooterBar/FooterBar';
 import {
   intToHex,
+  bindApproval,
   useApproval,
   useCommonPopupView,
   useWallet,
@@ -48,7 +49,7 @@ import {
   ParsedTransactionActionData,
 } from '@rabby-wallet/rabby-action';
 import * as Sentry from '@sentry/browser';
-import { getCexInfo } from '@/ui/models/exchange';
+import { getCexInfo } from '@/ui/state/exchange';
 import { useSetReportGasLevel } from '@/ui/hooks/useSetReportGasLevel';
 
 const checkGasAndNonce = ({
@@ -203,12 +204,14 @@ interface SignTxProps<TData extends any[] = any[]> {
   };
   origin?: string;
   account: Account;
+  approvalId?: string;
 }
 
 export const SignTestnetTx = ({
   params,
   origin,
   account: $account,
+  approvalId,
 }: SignTxProps) => {
   const { isGnosis } = params;
   const currentAccount = params.isGnosis ? params.account! : $account;
@@ -258,12 +261,12 @@ export const SignTestnetTx = ({
 
   const getGasPrice = () => {
     let result = '';
-    if (maxFeePerGas) {
+    if (maxFeePerGas != null) {
       result = isHexString(maxFeePerGas)
         ? maxFeePerGas
         : intToHex(maxFeePerGas);
     }
-    if (gasPrice) {
+    if (gasPrice != null) {
       result = isHexString(gasPrice) ? gasPrice : intToHex(parseInt(gasPrice));
     }
     if (Number.isNaN(Number(result))) {
@@ -272,6 +275,8 @@ export const SignTestnetTx = ({
     return result;
   };
 
+  const dappGasPrice = getGasPrice();
+  const isDappGasPriceRef = useRef(!!dappGasPrice);
   const [tx, setTx] = useState<Tx>({
     chainId,
     data: data || '0x', // can not execute with empty string, use 0x instead
@@ -419,18 +424,27 @@ export const SignTestnetTx = ({
         }
       }
       let customGasPrice = 0;
+      let useDappGasPrice = false;
       const lastTimeGas = await runGetLastTimeGasSelection();
-      if (lastTimeGas?.lastTimeSelect === 'gasPrice' && lastTimeGas.gasPrice) {
-        // use cached gasPrice if exist
-        customGasPrice = lastTimeGas.gasPrice;
-      }
-      if (
-        isSpeedUp ||
-        isCancel ||
-        ((isSend || isSwap || isBridge) && tx.gasPrice)
-      ) {
-        // use gasPrice set by dapp when it's a speedup or cancel tx
-        customGasPrice = parseInt(tx.gasPrice!);
+      if (dappGasPrice) {
+        customGasPrice = parseInt(dappGasPrice);
+        useDappGasPrice = true;
+      } else {
+        if (
+          lastTimeGas?.lastTimeSelect === 'gasPrice' &&
+          lastTimeGas.gasPrice
+        ) {
+          // use cached gasPrice if exist
+          customGasPrice = lastTimeGas.gasPrice;
+        }
+        if (
+          isSpeedUp ||
+          isCancel ||
+          ((isSend || isSwap || isBridge) && tx.gasPrice)
+        ) {
+          // use gasPrice set by dapp when it's a speedup or cancel tx
+          customGasPrice = parseInt(tx.gasPrice!);
+        }
       }
       const gasUsed = await runGetGasUsed();
       const recommendNonce = await runGetNonce();
@@ -442,6 +456,7 @@ export const SignTestnetTx = ({
       let gas: GasLevel | null = null;
 
       if (
+        useDappGasPrice ||
         ((isSend || isSwap || isBridge) && customGasPrice) ||
         isSpeedUp ||
         isCancel ||
@@ -575,6 +590,7 @@ export const SignTestnetTx = ({
           chainId: chain.serverId,
           sender: currentAccount.address,
           walletProvider: {
+            ethRpc: wallet.requestETHRpc,
             findChain,
             ALIAS_ADDRESS,
             hasPrivateKeyInWallet: wallet.hasPrivateKeyInWallet,
@@ -625,7 +641,9 @@ export const SignTestnetTx = ({
 
   const { t } = useTranslation();
 
-  const [getApproval, resolveApproval, rejectApproval] = useApproval();
+  const [getApproval, resolveApproval, rejectApproval] = useApproval(
+    bindApproval(approvalId, 'SignTx')
+  );
 
   const checkCanProcess = async () => {
     const session = params.session;
@@ -641,7 +659,7 @@ export const SignTestnetTx = ({
       setCanProcess(false);
       setCantProcessReason(
         <div className="flex items-center gap-6">
-          <img src={IconGnosis} alt="" className="w-[24px] flex-shrink-0" />
+          <img src={IconGnosis} alt="" className="w-[24px] shrink-0" />
           {t('page.signTx.multiSigChainNotMatch')}
         </div>
       );
@@ -649,6 +667,7 @@ export const SignTestnetTx = ({
   };
 
   const handleGasChange = (gas: GasSelectorResponse) => {
+    isDappGasPriceRef.current = false;
     setSelectedGas({
       level: gas.level,
       front_tx_count: gas.front_tx_count,
@@ -752,7 +771,7 @@ export const SignTestnetTx = ({
     } else {
       selected.gasLevel = selectedGas.level;
     }
-    if (!isSpeedUp && !isCancel && !isSwap) {
+    if (!isSpeedUp && !isCancel && !isSwap && !isDappGasPriceRef.current) {
       await wallet.updateLastTimeGasSelection(chainId, selected);
     }
     const transaction: Tx = {

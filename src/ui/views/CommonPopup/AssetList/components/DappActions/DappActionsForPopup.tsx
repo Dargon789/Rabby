@@ -20,6 +20,7 @@ import { last } from 'lodash';
 const Wrapper = styled.div`
   display: flex;
   gap: 12px;
+  padding-top: 12px;
   padding-left: 12px;
   padding-right: 12px;
   padding-bottom: 16px;
@@ -136,11 +137,13 @@ const DappActionsForPopup = ({
 
   const { valid: showWithdraw, action: actionWithdraw } = useDappAction(
     withdrawAction,
-    chain
+    chain,
+    protocolName
   );
   const { valid: showClaim, action: actionClaim } = useDappAction(
     claimAction,
-    chain
+    chain,
+    protocolName
   );
 
   const onPreExecChange = useCallback(

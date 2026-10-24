@@ -187,8 +187,11 @@ export const filterKeyringData = (
 
     if (Array.isArray(value)) {
       if (isAddress(value[0])) {
-        data[key] = value.filter((item) =>
-          addresses.some((address) => isSameAddress(item, address))
+        // also drop repeated addresses so a dirty vault doesn't sync them out
+        data[key] = value.filter(
+          (item, idx) =>
+            addresses.some((address) => isSameAddress(item, address)) &&
+            value.findIndex((e) => isSameAddress(e, item)) === idx
         );
       }
     } else if (isObject(value)) {
@@ -266,11 +269,24 @@ export const isSupportDBAccount = (account?: Account | null) => {
     return false;
   }
   return (
-    ([KEYRING_CLASS.MNEMONIC, KEYRING_CLASS.PRIVATE_KEY] as string[]).includes(
-      account.type
-    ) ||
+    ([
+      KEYRING_CLASS.MNEMONIC,
+      KEYRING_CLASS.PRIVATE_KEY,
+      KEYRING_CLASS.GNOSIS,
+    ] as string[]).includes(account.type) ||
     !!Object.values(HARDWARE_KEYRING_TYPES).find(
       (item) => item.type === account.type
     )
   );
+};
+
+export const isSupportSmallSwapAccount = (account?: Account | null) => {
+  if (!account) {
+    return false;
+  }
+  return ([
+    KEYRING_CLASS.MNEMONIC,
+    KEYRING_CLASS.PRIVATE_KEY,
+    KEYRING_CLASS.HARDWARE.LEDGER,
+  ] as string[]).includes(account.type);
 };

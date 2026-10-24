@@ -3,12 +3,15 @@ import { ReactComponent as RcIconEmptyCC } from '@/ui/assets/empty-cc.svg';
 import { useTranslation } from 'react-i18next';
 import { formatGasAccountUSDValue, sinceTime } from '@/ui/utils';
 import clsx from 'clsx';
-import { useGasAccountHistory } from '../hooks';
+import type { useGasAccountHistory } from '../hooks';
 import { Skeleton, Tooltip } from 'antd';
 import { ReactComponent as RcIconPendingCC } from '@/ui/assets/pending-cc.svg';
 import { ReactComponent as RcIconOpenExternalCC } from '@/ui/assets/open-external-cc.svg';
 import { findChainByServerID } from '@/utils/chain';
+import { getTxScanLink } from '@/utils';
 import { ReactComponent as IconGift } from '@/ui/assets/gift-green.svg';
+
+type GasAccountHistoryState = ReturnType<typeof useGasAccountHistory>;
 
 const HistoryItem = ({
   time,
@@ -34,15 +37,15 @@ const HistoryItem = ({
   source?: string;
 }) => {
   const { t } = useTranslation();
+  const txDetailUrl =
+    !isWithdraw && chainServerId && txId
+      ? getTxScanLink(findChainByServerID(chainServerId)?.scanLink, txId) ||
+        undefined
+      : undefined;
 
   const gotoTxDetail = () => {
-    if (chainServerId && txId && !isWithdraw) {
-      const chain = findChainByServerID(chainServerId);
-      if (chain && chain.scanLink) {
-        const scanLink = chain.scanLink.replace('_s_', '');
-
-        window.open(`${scanLink}${txId}`);
-      }
+    if (txDetailUrl) {
+      window.open(txDetailUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -59,12 +62,12 @@ const HistoryItem = ({
         <div
           className={clsx(
             'flex items-center justify-center gap-6',
-            'cursor-pointer',
+            txDetailUrl && 'cursor-pointer',
             'px-10 py-6',
             'bg-r-orange-light rounded-[900px]',
             'text-13 font-medium text-r-orange-default'
           )}
-          onClick={gotoTxDetail}
+          onClick={txDetailUrl ? gotoTxDetail : undefined}
         >
           <RcIconPendingCC
             viewBox="0 0 16 16"
@@ -75,7 +78,7 @@ const HistoryItem = ({
               ? t('page.gasAccount.withdraw')
               : t('page.gasAccount.deposit')}
           </div>
-          {!isWithdraw && (
+          {txDetailUrl && (
             <RcIconOpenExternalCC viewBox="0 0 12 12" className="w-12 h-12" />
           )}
         </div>
@@ -117,10 +120,13 @@ const LoadingItem = ({ borderT }: { borderT: boolean }) => {
   );
 };
 
-export const GasAccountHistory = () => {
+export const GasAccountHistory = ({
+  historyState,
+}: {
+  historyState: GasAccountHistoryState;
+}) => {
   const { t } = useTranslation();
-
-  const { loading, txList, loadingMore, ref } = useGasAccountHistory();
+  const { loading, txList, loadingMore, ref } = historyState;
 
   if (
     !loading &&
@@ -129,19 +135,21 @@ export const GasAccountHistory = () => {
     !txList?.list.length
   ) {
     return (
-      <div className="bg-r-neutral-card-1 h-[283px] flex flex-col gap-8 items-center rounded-[8px]">
+      <div className="bg-r-neutral-card-1 h-full min-h-[283px] flex flex-col items-center justify-center gap-10 rounded-[12px] px-20">
         <RcIconEmptyCC
           viewBox="0 0 40 40"
-          className="w-28 h-28 mt-[90px] text-r-neutral-foot"
+          className="w-32 h-32 text-r-neutral-foot"
         />
         <span className="text-13 font-medium text-r-neutral-foot">
-          {t('page.gasAccount.history.noHistory')}
+          {t('page.gasAccount.history.noHistoryForPast30Days', {
+            defaultValue: 'No history for the past 30 days.',
+          })}
         </span>
       </div>
     );
   }
   return (
-    <div className="bg-r-neutral-card-1 flex flex-col rounded-[8px] mb-20">
+    <div className="bg-r-neutral-card-1 flex flex-col rounded-[12px] overflow-hidden">
       {!loading &&
         txList?.rechargeList?.map((item, index) => (
           <HistoryItem
@@ -151,7 +159,8 @@ export const GasAccountHistory = () => {
             sign={'+'}
             borderT={index !== 0}
             isPending={true}
-            chainServerId={item?.chain_id}
+            // @ts-expect-error add from_chain_id
+            chainServerId={item?.chain_id || item?.from_chain_id}
             txId={item?.tx_id}
           />
         ))}
@@ -165,7 +174,8 @@ export const GasAccountHistory = () => {
             sign={'-'}
             borderT={!txList.rechargeList.length ? index !== 0 : true}
             isPending={true}
-            chainServerId={item?.chain_id}
+            // @ts-expect-error add from_chain_id
+            chainServerId={item?.chain_id || item?.from_chain_id}
             txId={item?.tx_id}
           />
         ))}

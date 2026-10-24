@@ -7,10 +7,37 @@ import {
 } from 'background/service';
 import providerController from './controller';
 import { findChainByEnum } from '@/utils/chain';
-import { appIsDev } from '@/utils/env';
+import { appIsDev, isManifestV3 } from '@/utils/env';
+import browser from 'webextension-polyfill';
 import wallet from '../wallet';
 import { metamaskModeService } from '@/background/service/metamaskModeService';
 import { ProviderRequest } from './type';
+import { ga4 } from '@/utils/ga4';
+import { ethErrors } from 'eth-rpc-errors';
+import { getOpenInDesktopPolicy } from './openInDesktopPolicy';
+import extensionUpdateService from '@/background/service/extensionUpdate';
+
+const TAB_CHECKIN_DEDUPE_MS = 100;
+const TAB_CHECKIN_TTL_MS = 2 * 1000;
+const lastTabCheckinAt = new Map<string, number>();
+
+const shouldSkipTabCheckin = (origin: string) => {
+  const now = Date.now();
+
+  for (const [key, time] of lastTabCheckinAt) {
+    if (now - time > TAB_CHECKIN_TTL_MS) {
+      lastTabCheckinAt.delete(key);
+    }
+  }
+
+  const last = lastTabCheckinAt.get(origin) || 0;
+  if (now - last < TAB_CHECKIN_DEDUPE_MS) {
+    return true;
+  }
+
+  lastTabCheckinAt.set(origin, now);
+  return false;
+};
 
 const networkIdMap: {
   [key: string]: string;
@@ -22,12 +49,17 @@ const tabCheckin = ({
   },
   session,
   origin,
-  isFromDesktopDapp,
 }) => {
-  session.setProp({ origin, name, icon, isFromDesktopDapp });
+  session.setProp({ origin, name, icon });
   const site = permissionService.getSite(origin);
   if (site) {
     permissionService.updateConnectSite(origin, { ...site, icon, name }, true);
+  }
+  if (site?.isConnected && !shouldSkipTabCheckin(origin)) {
+    ga4.fireEvent('Dapp_Connected', {
+      event_category: 'Dapp Usage',
+      event_label: origin,
+    });
   }
 };
 
@@ -110,18 +142,41 @@ const resetProvider = ({ origin }: { origin: string }) => {
 
 const openInDesktop = async (req: ProviderRequest) => {
   const origin = req.session?.origin || req.origin;
+  const policy = getOpenInDesktopPolicy(origin, req.sourceFrameId);
+  if (!policy) {
+    throw ethErrors.provider.unauthorized();
+  }
+
+  if (policy.source === 'go-rabby') {
+    const requestedTarget = req.data?.params?.[0]?.target;
+    let desktopPath: string;
+    switch (requestedTarget) {
+      case 'perps':
+        desktopPath = '/desktop/perps';
+        break;
+      case 'swap':
+        desktopPath = '/desktop/profile?action=swap';
+        break;
+      case 'bridge':
+        desktopPath = '/desktop/profile?action=bridge';
+        break;
+      case 'home':
+      default:
+        desktopPath = '/desktop/profile';
+        break;
+    }
+    await wallet.openInDesktop(desktopPath);
+    return { opened: true } as const;
+  }
 
   const params: { address: string } = req.data?.params?.[0] || {};
 
-  if (
-    !origin ||
-    !['https://debank.com', 'https://www.debank.com'].includes(origin)
-  ) {
-    return;
-  }
-
   if (!keyringService.isUnlocked()) {
-    wallet.openInDesktop(`/unlock?address=${params.address || ''}`);
+    wallet.openInDesktop(
+      `/unlock?address=${encodeURIComponent(
+        params.address || ''
+      )}&from=${encodeURIComponent('/desktop/profile?utm_source=debank')}`
+    );
     return;
   }
   if (params.address) {
@@ -135,7 +190,31 @@ const openInDesktop = async (req: ProviderRequest) => {
       preferenceService.setCurrentAccount(account);
     }
   }
-  wallet.openInDesktop('/desktop/profile');
+  wallet.openInDesktop('/desktop/profile?utm_source=debank');
+};
+
+const getUpdateStatus = async (req: ProviderRequest) => {
+  if (req.origin !== 'https://rabby.io') {
+    throw ethErrors.provider.unauthorized();
+  }
+  const pendingVersion = await extensionUpdateService.getPendingVersion();
+  return { version: browser.runtime.getManifest().version, pendingVersion };
+};
+
+const openPopup = async (req: ProviderRequest) => {
+  // Background derives this origin from port.sender.url, not request params.
+  if (req.origin !== 'https://rabby.io') {
+    throw ethErrors.provider.unauthorized();
+  }
+
+  const action = isManifestV3 ? browser.action : browser.browserAction;
+  if (!action?.openPopup) {
+    throw ethErrors.provider.unsupportedMethod({
+      message: 'Opening the extension popup is not supported by this browser',
+    });
+  }
+  await action.openPopup();
+  return { opened: true } as const;
 };
 
 export default {
@@ -147,4 +226,6 @@ export default {
   'rabby:getProviderConfig': getProviderConfig,
   'rabby:resetProvider': resetProvider,
   'rabby:openInDesktop': openInDesktop,
+  'rabby:openPopup': openPopup,
+  'rabby:getUpdateStatus': getUpdateStatus,
 };

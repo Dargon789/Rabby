@@ -24,6 +24,7 @@ import {
   LAST_EXPOSURE_VERSIONED_KEY,
   RateGuideLastExposure,
 } from '@/utils/rateGuidance';
+import { findChain } from '@/utils/chain';
 
 const version = process.env.release || '0';
 
@@ -39,6 +40,7 @@ export interface Account {
 
 export interface ChainGas {
   gasPrice?: number | null; // custom cached gas price
+  maxPriorityFee?: number | null; // custom cached maxPriorityFee for 1559 tx
   gasLevel?: string | null; // cached gasLevel
   lastTimeSelect?: 'gasLevel' | 'gasPrice'; // last time selection, 'gasLevel' | 'gasPrice'
   expireAt?: number;
@@ -121,6 +123,7 @@ export interface PreferenceStore {
   lastSelectedGasTopUpChain?: Record<string, CHAINS_ENUM>;
   sendEnableTime?: number;
   ga4EventTime?: number;
+  userDataTrackingOptOut?: boolean;
   customizedToken?: Token[];
   blockedToken?: Token[];
   collectionStarred?: Token[];
@@ -148,7 +151,14 @@ export interface PreferenceStore {
 
   rateGuideLastExposure?: RateGuideLastExposure;
 
+  /** @deprecated use desktopTabIds instead */
   desktopTabId?: number;
+
+  desktopTabIds?: {
+    profile?: number;
+    perps?: number;
+    prediction?: number;
+  };
 
   dashboardPanelOrder?: string[];
 
@@ -156,6 +166,11 @@ export interface PreferenceStore {
   desktopTokensAllMode?: boolean;
 
   sceneAccountMap?: Record<string, Account | null>;
+
+  perpsWidgetEnabled?: boolean;
+  perpsWidgetGuideShown?: boolean;
+  perpsWidgetBlockedHosts?: string[];
+  perpsWidgetBallPosition?: { x: number; y: number } | null;
 }
 
 export interface AddressSortStore {
@@ -238,11 +253,17 @@ class PreferenceService {
         biometricUnlockIv: '',
         unlockPreferredMethod: 'biometric',
         ga4EventTime: 0,
+        userDataTrackingOptOut: true,
         rateGuideLastExposure: getDefaultRateGuideLastExposure(),
         desktopTabId: undefined,
+        desktopTabIds: {},
         desktopTokensAllMode: false,
         dashboardPanelOrder: [],
         sceneAccountMap: {},
+        perpsWidgetEnabled: false,
+        perpsWidgetGuideShown: false,
+        perpsWidgetBlockedHosts: [],
+        perpsWidgetBallPosition: null,
       },
     });
 
@@ -374,9 +395,50 @@ class PreferenceService {
     if (this.store.ga4EventTime) {
       this.store.ga4EventTime = 0;
     }
+    if (this.store.userDataTrackingOptOut == null) {
+      this.store.userDataTrackingOptOut = false;
+    }
     if (!this.store.sceneAccountMap) {
       this.store.sceneAccountMap = {};
     }
+    if (this.store.perpsWidgetEnabled == null) {
+      this.store.perpsWidgetEnabled = false;
+    }
+    if (this.store.perpsWidgetGuideShown == null) {
+      this.store.perpsWidgetGuideShown = false;
+    }
+    if (!Array.isArray(this.store.perpsWidgetBlockedHosts)) {
+      this.store.perpsWidgetBlockedHosts = [];
+    }
+    if (this.store.perpsWidgetBallPosition === undefined) {
+      this.store.perpsWidgetBallPosition = null;
+    }
+  };
+
+  getPerpsWidgetEnabled = () => this.store.perpsWidgetEnabled === true;
+  setPerpsWidgetEnabled = (v: boolean) => {
+    this.store.perpsWidgetEnabled = v;
+    eventBus.emit(EVENTS.PERPS.WIDGET_ENABLED_CHANGED, v);
+  };
+
+  getPerpsWidgetGuideShown = () => this.store.perpsWidgetGuideShown === true;
+  setPerpsWidgetGuideShown = (v: boolean) => {
+    this.store.perpsWidgetGuideShown = v;
+  };
+
+  getPerpsWidgetBlockedHosts = (): string[] =>
+    this.store.perpsWidgetBlockedHosts ?? [];
+  setPerpsWidgetBlockedHosts = (hosts: string[]) => {
+    this.store.perpsWidgetBlockedHosts = Array.isArray(hosts) ? hosts : [];
+    eventBus.emit(
+      EVENTS.PERPS.WIDGET_BLOCKED_HOSTS_CHANGED,
+      this.store.perpsWidgetBlockedHosts
+    );
+  };
+
+  getPerpsWidgetBallPosition = () => this.store.perpsWidgetBallPosition ?? null;
+  setPerpsWidgetBallPosition = (pos: { x: number; y: number } | null) => {
+    this.store.perpsWidgetBallPosition = pos;
   };
 
   hasConfirmSafeSelfHost = (networkId: string) => {
@@ -458,7 +520,16 @@ class PreferenceService {
 
   getLastTimeSendToken = () => {
     // const key = address.toLowerCase();
-    return this.store.lastTimeUsedToken['send'];
+    const token = this.store.lastTimeUsedToken['send'];
+    if (
+      !token ||
+      !findChain({
+        serverId: token?.chain,
+      })
+    ) {
+      return undefined;
+    }
+    return token;
   };
 
   setLastTimeSendToken = (token: TokenItem) => {
@@ -588,8 +659,7 @@ class PreferenceService {
           'accountsChanged',
           [account.address.toLowerCase()],
           undefined,
-          undefined,
-          false
+          undefined
         );
       }
       syncStateToUI(BROADCAST_TO_UI_EVENTS.accountsChanged, account);
@@ -753,6 +823,18 @@ class PreferenceService {
   };
   getLastTimeGasSelection = (chainId: keyof GasCache): ChainGas | null => {
     const cache = this.store.gasCache[chainId];
+    if (cache && cache.lastTimeSelect === 'gasPrice') {
+      if (Date.now() <= (cache.expireAt || 0)) {
+        return cache;
+      }
+      if (cache.gasLevel) {
+        return {
+          lastTimeSelect: 'gasLevel',
+          gasLevel: cache.gasLevel,
+        };
+      }
+      return null;
+    }
     return cache;
   };
 
@@ -763,6 +845,7 @@ class PreferenceService {
         [chainId]: {
           ...this.store.gasCache[chainId],
           ...gas,
+          maxPriorityFee: gas.maxPriorityFee ?? null,
           expireAt: Date.now() + 3600000, // custom gasPrice will expire at 1h later
         },
       };
@@ -896,6 +979,12 @@ class PreferenceService {
   };
   updateSendEnableTime = (time: number) => {
     this.store.sendEnableTime = time;
+  };
+  getUserDataTrackingOptOut = () => {
+    return this.store.userDataTrackingOptOut === true;
+  };
+  setUserDataTrackingOptOut = (value: boolean) => {
+    this.store.userDataTrackingOptOut = value;
   };
   getNeedSwitchWalletCheck = () => {
     if (this.store.needSwitchWalletCheck == null) {

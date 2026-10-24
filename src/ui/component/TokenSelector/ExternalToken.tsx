@@ -2,15 +2,21 @@ import { getTokenSymbol } from '@/ui/utils/token';
 import { TokenItemWithEntity } from '@rabby-wallet/rabby-api/dist/types';
 import React, { memo, SVGProps, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { UnknownTag } from '@/ui/component';
 import TokenWithChain from '../TokenWithChain';
-import { formatPrice, formatTokenAmount, formatUsdValue } from '@/ui/utils';
+import {
+  formatTVL,
+  formatLargeTokenAmount,
+  formatPrice,
+  formatUsdValue,
+} from '@/ui/utils';
 import { ReactComponent as RcIconWarningCC } from '@/ui/assets/warning-cc.svg';
 import { ReactComponent as RcIconArrowRight } from '@/ui/assets/dashboard/portfolio/cc-right.svg';
 import clsx from 'clsx';
 import BigNumber from 'bignumber.js';
 import { ellipsisAddress } from '@/ui/utils/address';
 import { ExchangeLogos } from './CexLogos';
-import { isLpToken } from '@/ui/utils/portfolio/lpToken';
+import { isLpToken, isUnknownToken } from '@/ui/utils/portfolio/lpToken';
 import { LpTokenTag } from '@/ui/views/DesktopProfile/components/TokensTabPane/components/LpTokenTag';
 import { getCexIds } from '@/ui/utils/portfolio/tokenUtils';
 import { isNumber } from 'lodash';
@@ -79,18 +85,19 @@ const ExternalTokenRow = memo(
                 <span className="symbol_click" onClick={onClickTokenSymbol}>
                   {getTokenSymbol(data)}
                 </span>
+                {isUnknownToken(data) && <UnknownTag className="ml-4 mr-4" />}
                 {isLpToken(data) && (
                   <LpTokenTag
                     size={14}
                     inModal
-                    iconClassName="text-r-neutral-foot"
+                    iconClassName="text-r-neutral-foot shrink-0"
                     protocolName={data.protocol_id || ''}
                   />
                 )}
                 <ExchangeLogos cexIds={cexIds} />
               </div>
               <span className="symbol text-13 font-normal text-r-neutral-foot mb-2">
-                {formatTokenAmount(data.amount || 0)}
+                {formatLargeTokenAmount(data.amount || 0)}
               </span>
             </div>
           </div>
@@ -192,7 +199,7 @@ export const ExternalContent = ({
       ) : (
         <span className="symbol text-13 font-normal text-r-neutral-foot mb-2 z-20">
           {t('page.search.tokenItem.FDV')}{' '}
-          {data.identity?.fdv ? formatUsdValue(data.identity?.fdv) : '-'}
+          {data.identity?.fdv ? formatTVL(data.identity.fdv) : '-'}
           <span className="text-r-neutral-line text-13 font-normal"> | </span>
           CA:{' '}
           {ellipsisAddress(

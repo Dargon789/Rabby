@@ -1,12 +1,17 @@
 node_modules
+.yalc
+yalc.lock
 dist
 dist-*
-.yarn
+.yarn/*
+!.yarn/releases/
+!.yarn/releases/*
 .DS_Store
 yarn-error
 .claude/settings.local.json
 .claude/CLAUDE.local.md
 tmp/*.zip
+tmp/sourcemaps/
 tmp/inv-batch.json
 tmp/styled-components-id-mappings.*
 
@@ -15,3 +20,6 @@ flake.nix
 flake.lock
 .envrc
 src/manifest/chrome-mv3/manifest.local.json
+
+# Local agent specs/plans — not part of the repo
+docs/superpowers/

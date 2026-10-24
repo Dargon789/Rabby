@@ -20,7 +20,7 @@ import { RcIconAddWalletCC, RcIconMoreCC } from '@/ui/assets/desktop/profile';
 import { useAccounts } from '@/ui/hooks/useAccounts';
 import { useBrandIcon } from '@/ui/hooks/useBrandIcon';
 import { useEventBusListener } from '@/ui/hooks/useEventBusListener';
-import { IDisplayedAccountWithBalance } from '@/ui/models/accountToDisplay';
+import { IDisplayedAccountWithBalance } from '@/ui/state/accountToDisplay';
 import { formatUsdValue, isSameAddress, splitNumberByStep } from '@/ui/utils';
 import { onBackgroundStoreChanged } from '@/ui/utils/broadcastToUI';
 import { isSameAccount } from '@/utils/account';
@@ -273,7 +273,7 @@ export const DesktopPerpsSelectAccountList: React.FC<{
                 background: 'rgba(76, 101, 255, 0.08)',
               }}
             >
-              <RcIconAddWalletCC className="flex-shrink-0" />
+              <RcIconAddWalletCC className="shrink-0" />
               <div className="text-[16px] leading-[19px] font-normal desktop-account-item-content truncate">
                 {t('component.DesktopSelectAccountList.addAddresses')}
               </div>

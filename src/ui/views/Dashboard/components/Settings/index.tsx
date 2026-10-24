@@ -5,7 +5,7 @@ import { Button, DrawerProps, Form, Input, message, Modal, Switch } from 'antd';
 import clsx from 'clsx';
 import {
   INITIAL_OPENAPI_URL,
-  INITIAL_TESTNET_OPENAPI_URL,
+  CUSTOM_RPC_ENABLED,
   LANGS,
   ThemeIconType,
   ThemeModes,
@@ -25,9 +25,11 @@ import { ReactComponent as RcIconLockWallet } from 'ui/assets/dashboard/settings
 import { ReactComponent as RcIconSwitchPwdForNonWhitelistedTx } from 'ui/assets/dashboard/settings/switch-password-non-whitelisted-tx.svg';
 import { ReactComponent as RcIconDappSwitchAddress } from 'ui/assets/dashboard/dapp-switch-address.svg';
 import { ReactComponent as RcIconThemeMode } from 'ui/assets/settings/theme-mode.svg';
+import { ReactComponent as RcIconCurrency } from 'ui/assets/settings/currency.svg';
 import { ReactComponent as RcIconEcosystemCC } from 'ui/assets/settings/echosystem-cc.svg';
 import { ReactComponent as RcIconRabbyMobileCC } from 'ui/assets/settings/IconMobileSync-cc.svg';
 import { ReactComponent as RCIconBiometric } from 'ui/assets/dashboard/settings/biometric.svg';
+import { ReactComponent as RcIconPerps } from 'ui/assets/dashboard/panel/perps-float-cc.svg';
 import IconDiscordHover from 'ui/assets/discord-hover.svg';
 import { ReactComponent as RcIconDiscord } from 'ui/assets/discord.svg';
 import IconTwitterHover from 'ui/assets/twitter-hover.svg';
@@ -56,34 +58,50 @@ import { ReactComponent as RcIconSettingsGitForkCC } from 'ui/assets/dashboard/s
 import { ReactComponent as RcIconSettingsCodeCC } from 'ui/assets/dashboard/settings/code-cc.svg';
 import { ReactComponent as RcIconSettingsSearchDapps } from 'ui/assets/dashboard/settings/search.svg';
 import { ReactComponent as RcIconI18n } from 'ui/assets/dashboard/settings/i18n.svg';
+import { ReactComponent as RcIconRemovedToken } from 'ui/assets/settings/removed-token.svg';
 import { ReactComponent as RcIconFeedback } from 'ui/assets/dashboard/settings/feedback.svg';
 import { ReactComponent as RcIconWarning } from 'ui/assets/warning-cc.svg';
+import { ReactComponent as RcIconDataAnalysisCC } from 'ui/assets/dashboard/settings/data-analysis-cc.svg';
+
 import IconIntro from 'ui/assets/dashboard/dapp-account-intro.png';
 
 import stats from '@/stats';
-import { useAsync, useCss } from 'react-use';
-import semver from 'semver-compare';
-import { Contacts, RecentConnections } from '..';
+import Contacts from '../Contacts';
+import RecentConnections from '../RecentConnections';
 import SwitchThemeModal from './components/SwitchThemeModal';
+import { CurrencyModal } from './components/CurrencyModal';
+import { useRemovedTokenPopup } from './components/RemovedTokenPopup';
 import ThemeIcon from '@/ui/component/ThemeMode/ThemeIcon';
 import FeedbackPopup from '../Feedback';
 import { getChainList } from '@/utils/chain';
-import { SvgIconCross } from '@/ui/assets';
 import { sendPersonalMessage } from '@/ui/utils/sendPersonalMessage';
 import { ga4 } from '@/utils/ga4';
 import { EcosystemBanner } from './components/EcosystemBanner';
+import { ExtensionUpdateCard } from './components/ExtensionUpdateCard';
+import { ExtensionUpdateDialog } from './components/ExtensionUpdateDialog';
 import { useMemoizedFn } from 'ahooks';
 import RateModalTriggerOnSettings from '@/ui/component/RateModal/RateModalTriggerOnSettings';
 import { useMakeMockDataForRateGuideExposure } from '@/ui/component/RateModal/hooks';
 import { PwdForNonWhitelistedTxModal } from '@/ui/component/Whitelist/Modal';
+import { useCurrency } from '@/ui/hooks/useCurrency';
+import { useExtensionUpdateSettingsCard } from '@/ui/hooks/useExtensionUpdateSettingsCard';
 import {
   cleanupBiometricCredential,
   isBiometricUnlockSupported,
 } from '@/ui/utils/biometric';
+import { PERPS_TEST_INCLUDE_WATCH_KEY } from '@/ui/views/Perps/components/SelectAddressList';
+import { useOpenapiStore } from '@/ui/state/openapi';
+import { appIsDebugPkg, appIsDev } from '@/utils/env';
+import {
+  selectHasNewExtensionVersion,
+  selectExtensionUpdateChangelog,
+  useExtensionUpdateStore,
+} from '@/ui/state/extensionUpdate';
 
 const useAutoLockOptions = () => {
   const { t } = useTranslation();
-  return [
+
+  const options = [
     {
       value: 0,
       label: t('page.dashboard.settings.lock.never'),
@@ -109,6 +127,13 @@ const useAutoLockOptions = () => {
       label: t('page.dashboard.settings.10Minutes'),
     },
   ];
+  if (appIsDebugPkg || appIsDev) {
+    options.push({
+      value: 1,
+      label: '1 minute',
+    });
+  }
+  return options;
 };
 
 interface SettingsProps {
@@ -391,7 +416,7 @@ const ResetAccountModal = ({
               onChange={setClearNonce}
             >
               <span className="text-13 text-r-neutral-body">
-                Also reset my local nonce data and signature record
+                {t('page.dashboard.settings.clearPendingCheckbox')}
               </span>
             </Checkbox>
           </div>
@@ -603,12 +628,17 @@ const SettingsInner = ({
 }) => {
   const wallet = useWallet();
   const history = useHistory();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [showOpenApiModal, setShowOpenApiModal] = useState(false);
-  const [showTestnetOpenApiModal, setShowTestnetOpenApiModal] = useState(false);
   const [showResetAccountModal, setShowResetAccountModal] = useState(false);
   const [isShowAutoLockModal, setIsShowAutoLockModal] = useState(false);
   const [isShowLangModal, setIsShowLangModal] = useState(false);
+  const {
+    removedTokenCount,
+    openRemovedTokenPopup,
+    removedTokenPopup,
+  } = useRemovedTokenPopup();
+  const [isShowCurrencyModal, setIsShowCurrencyModal] = useState(false);
   const [isShowThemeModeModal, setIsShowThemeModeModal] = useState(false);
   const [contactsVisible, setContactsVisible] = useState(false);
   const [connectedDappsVisible, setConnectedDappsVisible] = useState(false);
@@ -616,6 +646,13 @@ const SettingsInner = ({
   const [isShowDappAccountModal, setIsShowDappAccountModal] = useState(false);
   const [biometricSupported, setBiometricSupported] = useState(false);
   const [biometricBusy, setBiometricBusy] = useState(false);
+  const [perpsWidgetEnabled, setPerpsWidgetEnabled] = useState(false);
+  const [perpsWidgetBusy, setPerpsWidgetBusy] = useState(false);
+  const [dataAnalysisPending, setDataAnalysisPending] = useState(false);
+
+  const [perpsIncludeWatchForTest, setPerpsIncludeWatchForTest] = useState(
+    () => localStorage.getItem(PERPS_TEST_INCLUDE_WATCH_KEY) === '1'
+  );
   const lockShortcutLabel = useMemo(() => {
     return detectClientOS() === 'darwin' ? '⌘ + L' : 'Ctrl + L';
   }, []);
@@ -643,11 +680,15 @@ const SettingsInner = ({
   const isShowTestnet = useRabbySelector(
     (state) => state.preference.isShowTestnet
   );
+  const userDataTrackingOptOut = useRabbySelector(
+    (state) => state.preference.userDataTrackingOptOut
+  );
   const themeMode = useRabbySelector((state) => state.preference.themeMode);
 
-  const openapiStore = useRabbySelector((state) => state.openapi);
+  const openapiStore = useOpenapiStore();
 
   const dispatch = useRabbyDispatch();
+  const { currency, syncCurrencyList } = useCurrency();
 
   const autoLockTimeLabel = useMemo(() => {
     return (
@@ -738,6 +779,34 @@ const SettingsInner = ({
     }
   );
 
+  const handleTogglePerpsWidget = useMemoizedFn(async (checked: boolean) => {
+    setPerpsWidgetBusy(true);
+    try {
+      await wallet.setPerpsWidgetEnabled(checked);
+      setPerpsWidgetEnabled(checked);
+      ga4.fireEvent(`PerpsFloating_${checked ? 'On' : 'Off'}`, {
+        event_category: 'Settings Snapshot',
+      });
+    } catch (error) {
+      message.error((error as Error)?.message || 'Failed to update setting');
+    } finally {
+      setPerpsWidgetBusy(false);
+    }
+  });
+
+  const handleToggleUserDataTrackingOptOut = useMemoizedFn(
+    async (checked: boolean) => {
+      try {
+        setDataAnalysisPending(true);
+        await dispatch.preference.setUserDataTrackingOptOut(!checked);
+      } catch (error) {
+        message.error((error as Error)?.message || 'Failed to update setting');
+      } finally {
+        setDataAnalysisPending(false);
+      }
+    }
+  );
+
   const handleClickClearWatchMode = () => {
     confirm({
       className: 'modal-support-darkmode',
@@ -749,50 +818,21 @@ const SettingsInner = ({
     });
   };
 
-  const { value: hasNewVersion = false } = useAsync(async () => {
-    const data = await wallet.openapi.getLatestVersion();
-
-    return semver(process.env.release || '0.0.0', data.version_tag) === -1;
-  });
-
-  const updateVersionClassName = useCss({
-    '& .ant-modal-body': {
-      padding: '15px 14px 28px 14px',
-    },
-    '& .ant-modal-confirm-content': {
-      padding: '24px 0 0 0',
-      background: 'transparent',
-      'background-color': 'transparent',
-    },
-    '& .ant-modal-confirm-btns': {
-      justifyContent: 'center',
-      'button:first-child': {
-        display: 'none',
-      },
-    },
-  });
+  const hasNewVersion = useExtensionUpdateStore(selectHasNewExtensionVersion);
+  const pendingVersion = useExtensionUpdateStore((s) => s.pendingVersion);
+  const changelog = useExtensionUpdateStore((s) =>
+    selectExtensionUpdateChangelog(s, i18n.language)
+  );
+  const reloadForUpdate = useExtensionUpdateStore((s) => s.reloadForUpdate);
+  const [updateDialogVisible, setUpdateDialogVisible] = useState(false);
+  const showExtensionUpdateCard = useExtensionUpdateSettingsCard();
+  const dismissSettingsCard = useExtensionUpdateStore(
+    (s) => s.dismissSettingsCard
+  );
 
   const updateVersion = () => {
     if (hasNewVersion) {
-      confirm({
-        width: 320,
-        closable: true,
-        centered: true,
-        closeIcon: (
-          <SvgIconCross className="w-14 fill-current text-r-neutral-foot" />
-        ),
-        className: clsx(updateVersionClassName, 'modal-support-darkmode'),
-        title: t('page.dashboard.settings.updateVersion.title'),
-        content: (
-          <div className="text-14 leading-[18px] text-center text-r-neutral-body">
-            {t('page.dashboard.settings.updateVersion.content')}
-          </div>
-        ),
-        okText: t('page.dashboard.settings.updateVersion.okText'),
-        onOk() {
-          openInTab('https://rabby.io/update-extension');
-        },
-      });
+      setUpdateDialogVisible(true);
     } else {
       message.success({
         key: 'latest version',
@@ -817,6 +857,18 @@ const SettingsInner = ({
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    wallet
+      .getPerpsWidgetEnabled()
+      .then((v) => setPerpsWidgetEnabled(!!v))
+      .catch(() => {});
+  }, [wallet]);
+
+  useEffect(() => {
+    if (!visible) return;
+    syncCurrencyList();
+  }, [visible, syncCurrencyList]);
 
   const {
     mockExposureRateGuide,
@@ -976,6 +1028,20 @@ const SettingsInner = ({
           ),
         },
         {
+          leftIcon: RcIconPerps,
+          leftIconClassName: 'text-r-neutral-body',
+          className: 'js-setting-perps-widget',
+          content: t('page.dashboard.settings.settings.perpsFloatWidget'),
+          rightIcon: (
+            <Switch
+              checked={perpsWidgetEnabled}
+              disabled={perpsWidgetBusy}
+              loading={perpsWidgetBusy}
+              onChange={handleTogglePerpsWidget}
+            />
+          ),
+        },
+        {
           leftIcon: RcIconSwitchPwdForNonWhitelistedTx,
           // Password for non-whitelisted transfers
           content: t(
@@ -999,6 +1065,19 @@ const SettingsInner = ({
           ),
         },
         {
+          leftIcon: RcIconDataAnalysisCC,
+          leftIconClassName: 'text-r-neutral-body',
+          content: t('page.dashboard.settings.settings.dataAnalysis'),
+          rightIcon: (
+            <Switch
+              checked={!userDataTrackingOptOut}
+              onChange={handleToggleUserDataTrackingOptOut}
+              loading={dataAnalysisPending}
+              disabled={dataAnalysisPending}
+            />
+          ),
+        },
+        {
           leftIcon: RcIconCustomTestnet,
           content: t('page.dashboard.settings.settings.customTestnet'),
           onClick: () => {
@@ -1016,24 +1095,28 @@ const SettingsInner = ({
             reportSettings('Custom Testnet');
           },
         },
-        {
-          leftIcon: RcIconCustomRPC,
-          content: t('page.dashboard.settings.settings.customRpc'),
-          onClick: () => {
-            history.push('/custom-rpc');
-            matomoRequestEvent({
-              category: 'Setting',
-              action: 'clickToUse',
-              label: 'Custom RPC',
-            });
+        ...(CUSTOM_RPC_ENABLED
+          ? [
+              {
+                leftIcon: RcIconCustomRPC,
+                content: t('page.dashboard.settings.settings.customRpc'),
+                onClick: () => {
+                  history.push('/custom-rpc');
+                  matomoRequestEvent({
+                    category: 'Setting',
+                    action: 'clickToUse',
+                    label: 'Custom RPC',
+                  });
 
-            ga4.fireEvent('More_CustomRPC', {
-              event_category: 'Click More',
-            });
+                  ga4.fireEvent('More_CustomRPC', {
+                    event_category: 'Click More',
+                  });
 
-            reportSettings('Custom RPC');
-          },
-        },
+                  reportSettings('Custom RPC');
+                },
+              },
+            ]
+          : []),
         {
           leftIcon: RcIconI18n,
           content: t('page.dashboard.settings.settings.currentLanguage'),
@@ -1054,10 +1137,57 @@ const SettingsInner = ({
           rightIcon: (
             <>
               <span
-                className="text-14 mr-[8px] text-r-neutral-title-1"
+                className="text-14 mr-[8px] text-r-neutral-foot"
                 role="button"
               >
                 {langLabel}
+              </span>
+              <ThemeIcon
+                src={RcIconArrowRight}
+                className="icon icon-arrow-right"
+              />
+            </>
+          ),
+        },
+        ...(removedTokenCount
+          ? [
+              {
+                leftIcon: RcIconRemovedToken,
+                leftIconClassName:
+                  'text-r-neutral-body [&_path]:stroke-current',
+                content: t('page.dashboard.settings.removedToken.title'),
+                onClick: () => {
+                  reportSettings('Removed Token');
+                  openRemovedTokenPopup();
+                },
+                rightIcon: (
+                  <>
+                    <span className="text-14 mr-[8px] text-r-neutral-foot">
+                      {removedTokenCount}
+                    </span>
+                    <ThemeIcon
+                      src={RcIconArrowRight}
+                      className="icon icon-arrow-right"
+                    />
+                  </>
+                ),
+              },
+            ]
+          : []),
+        {
+          leftIcon: RcIconCurrency,
+          content: t('page.dashboard.settings.settings.currency'),
+          onClick: () => {
+            reportSettings('Currency');
+            setIsShowCurrencyModal(true);
+          },
+          rightIcon: (
+            <>
+              <span
+                className="text-14 mr-[8px] text-r-neutral-foot"
+                role="button"
+              >
+                {currency.code}
               </span>
               <ThemeIcon
                 src={RcIconArrowRight}
@@ -1086,7 +1216,7 @@ const SettingsInner = ({
           rightIcon: (
             <>
               <span
-                className="text-14 mr-[8px] text-r-neutral-title-1"
+                className="text-14 mr-[8px] text-r-neutral-foot"
                 role="button"
               >
                 {ThemeModes.find((item) => item.code === themeMode)?.name ||
@@ -1141,7 +1271,7 @@ const SettingsInner = ({
           rightIcon: (
             <>
               <span
-                className="text-14 mr-[8px] text-r-neutral-title-1"
+                className="text-14 mr-[8px] text-r-neutral-foot"
                 role="button"
               >
                 {autoLockTimeLabel}
@@ -1197,19 +1327,6 @@ const SettingsInner = ({
         },
         {
           leftIcon: RcIconServerCC,
-          content: (
-            <span>{t('page.dashboard.settings.testnetBackendServiceUrl')}</span>
-          ),
-          onClick: () => setShowTestnetOpenApiModal(true),
-          rightIcon: (
-            <ThemeIcon
-              src={RcIconArrowRight}
-              className="icon icon-arrow-right"
-            />
-          ),
-        },
-        {
-          leftIcon: RcIconServerCC,
           content: <span>Sync chain list</span>,
           onClick: () => {
             wallet.syncMainnetChainList({
@@ -1231,9 +1348,7 @@ const SettingsInner = ({
         },
         {
           leftIcon: RcIconSettingsCodeCC,
-          content: (
-            <div className="flex-shrink-0">Mock Exposure Rate Guidance</div>
-          ),
+          content: <div className="shrink-0">Mock Exposure Rate Guidance</div>,
           rightIcon: (
             <div className="flex items-center justify-end gap-8">
               <Button
@@ -1319,6 +1434,23 @@ const SettingsInner = ({
             }, 1500);
           },
         },
+        {
+          leftIcon: RcIconSettingsCodeCC,
+          content: <span>Perps Accounts Include Watch Address</span>,
+          rightIcon: (
+            <Switch
+              checked={perpsIncludeWatchForTest}
+              onChange={(checked) => {
+                if (checked) {
+                  localStorage.setItem(PERPS_TEST_INCLUDE_WATCH_KEY, '1');
+                } else {
+                  localStorage.removeItem(PERPS_TEST_INCLUDE_WATCH_KEY);
+                }
+                setPerpsIncludeWatchForTest(checked);
+              }}
+            />
+          ),
+        },
       ] as SettingItem[],
     },
     about: {
@@ -1339,7 +1471,7 @@ const SettingsInner = ({
             });
 
             reportSettings('feedback');
-            openInTab('https://debank.com/hi/0a110032');
+            openInTab('https://support.rabby.io/en/');
           },
           rightIcon: (
             <ThemeIcon
@@ -1368,9 +1500,12 @@ const SettingsInner = ({
           rightIcon: (
             <>
               <span
-                className="text-14 mr-[8px] text-r-neutral-title-1"
+                className="text-14 mr-[8px] text-r-neutral-foot"
                 role="button"
-                onClick={updateVersion}
+                onClick={(evt) => {
+                  evt.stopPropagation();
+                  updateVersion();
+                }}
               >
                 {process.env.release}
                 <span
@@ -1420,7 +1555,7 @@ const SettingsInner = ({
           rightIcon: (
             <>
               <span
-                className="text-14 mr-[8px] text-r-neutral-title-1"
+                className="text-14 mr-[8px] text-r-neutral-foot"
                 role="button"
               >
                 {getChainList('mainnet').length}
@@ -1518,74 +1653,87 @@ const SettingsInner = ({
     onClose && onClose(e);
   };
 
-  useEffect(() => {
-    dispatch.openapi.getHost();
-    dispatch.openapi.getTestnetHost();
-  }, [dispatch.openapi]);
-
   const [isShowEcology, setIsShowEcologyModal] = React.useState(false);
 
   return (
     <div className="popup-settings">
-      <div className="content">
-        {/* <ClaimRabbyBadge onClick={onOpenBadgeModal} /> */}
-        <EcosystemBanner
-          isVisible={isShowEcology}
-          onClose={() => setIsShowEcologyModal(false)}
-        />
-        <RateModalTriggerOnSettings className="mb-[16px]" />
-        {Object.values(renderData).map((group, idxl1) => {
-          return (
-            <div key={`g-${idxl1}`} className="setting-block">
-              <div className="setting-title">{group.label}</div>
-              <div className="setting-items">
-                {group.items.map((data, idxl2) => (
-                  <Field
-                    key={`g-${idxl1}-item-${idxl2}`}
-                    leftIcon={
-                      <ThemeIcon
-                        src={data.leftIcon}
-                        className={clsx('icon', data.leftIconClassName)}
-                        style={data.leftIconStyle}
-                      />
-                    }
-                    rightIcon={
-                      data.rightIcon || (
+      <div
+        className={
+          'absolute top-0 right-0 bottom-0 left-0 overflow-auto px-[20px] pt-[20px]'
+        }
+      >
+        <div className={clsx('content')}>
+          {/* <ClaimRabbyBadge onClick={onOpenBadgeModal} /> */}
+
+          {showExtensionUpdateCard ? (
+            <ExtensionUpdateCard
+              version={pendingVersion}
+              changelog={changelog}
+              onUpdate={reloadForUpdate}
+              onClose={dismissSettingsCard}
+            />
+          ) : (
+            <RateModalTriggerOnSettings className="mb-[16px]" />
+          )}
+
+          {Object.values(renderData).map((group, idxl1) => {
+            return (
+              <div key={`g-${idxl1}`} className="setting-block">
+                <div className="setting-title">{group.label}</div>
+                <div className="setting-items">
+                  {group.items.map((data, idxl2) => (
+                    <Field
+                      key={`g-${idxl1}-item-${idxl2}`}
+                      leftIcon={
                         <ThemeIcon
-                          src={RcIconArrowRight}
-                          className="icon icon-arrow-right"
+                          src={data.leftIcon}
+                          className={clsx('icon', data.leftIconClassName)}
+                          style={data.leftIconStyle}
                         />
-                      )
-                    }
-                    onClick={data.onClick}
-                    className={clsx(
-                      data.className,
-                      data.description ? 'has-desc' : null
-                    )}
-                  >
-                    {data.content}
-                    {data.description && (
-                      <p className="desc">{data.description}</p>
-                    )}
-                  </Field>
-                ))}
+                      }
+                      rightIcon={
+                        data.rightIcon || (
+                          <ThemeIcon
+                            src={RcIconArrowRight}
+                            className="icon icon-arrow-right"
+                          />
+                        )
+                      }
+                      onClick={data.onClick}
+                      className={clsx(
+                        data.className,
+                        data.description ? 'has-desc' : null
+                      )}
+                    >
+                      {data.content}
+                      {data.description && (
+                        <p className="desc">{data.description}</p>
+                      )}
+                    </Field>
+                  ))}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
-      <footer className="footer">
-        <div className="px-8 py-2 rounded hover:bg-r-blue-light-1 inline-block">
-          <img
-            className="inline-block cursor-pointer"
-            src={LogoRabby}
-            alt="https://rabby.io"
-            onClick={() => {
-              openInTab('https://rabby.io', false);
-            }}
-          />
+            );
+          })}
         </div>
-      </footer>
+        <footer className="footer">
+          <div className="px-8 py-2 rounded hover:bg-r-blue-light-1 inline-block">
+            <img
+              className="inline-block cursor-pointer"
+              src={LogoRabby}
+              alt="https://rabby.io"
+              onClick={() => {
+                openInTab('https://rabby.io', false);
+              }}
+            />
+          </div>
+        </footer>
+      </div>
+      <EcosystemBanner
+        isVisible={isShowEcology}
+        onClose={() => setIsShowEcologyModal(false)}
+      />
+
       <Contacts
         visible={contactsVisible}
         onCancel={() => {
@@ -1604,21 +1752,10 @@ const SettingsInner = ({
         value={openapiStore.host}
         defaultValue={INITIAL_OPENAPI_URL}
         onFinish={(host) => {
-          dispatch.openapi.setHost(host);
+          openapiStore.setHost(host);
           setShowOpenApiModal(false);
         }}
         onCancel={() => setShowOpenApiModal(false)}
-      />
-      <OpenApiModal
-        visible={showTestnetOpenApiModal}
-        value={openapiStore.testnetHost}
-        defaultValue={INITIAL_TESTNET_OPENAPI_URL}
-        title={t('page.dashboard.settings.testnetBackendServiceUrl')}
-        onFinish={(host) => {
-          dispatch.openapi.setTestnetHost(host);
-          setShowTestnetOpenApiModal(false);
-        }}
-        onCancel={() => setShowTestnetOpenApiModal(false)}
       />
       <ResetAccountModal
         visible={showResetAccountModal}
@@ -1630,11 +1767,24 @@ const SettingsInner = ({
         onFinish={() => setIsShowAutoLockModal(false)}
         onCancel={() => setIsShowAutoLockModal(false)}
       />
+      <ExtensionUpdateDialog
+        visible={!!visible && hasNewVersion && updateDialogVisible}
+        version={pendingVersion}
+        changelog={changelog}
+        onClose={() => setUpdateDialogVisible(false)}
+        onUpdate={reloadForUpdate}
+      />
       <SwitchLangModal
         visible={isShowLangModal}
         onFinish={() => setIsShowLangModal(false)}
         onCancel={() => setIsShowLangModal(false)}
       />
+      <CurrencyModal
+        visible={isShowCurrencyModal}
+        onFinish={() => setIsShowCurrencyModal(false)}
+        onCancel={() => setIsShowCurrencyModal(false)}
+      />
+      {removedTokenPopup}
       <SwitchThemeModal
         visible={isShowThemeModeModal}
         onFinish={() => setIsShowThemeModeModal(false)}

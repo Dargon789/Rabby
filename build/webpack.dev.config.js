@@ -6,8 +6,15 @@ const config = {
   devtool: 'inline-cheap-module-source-map',
   watch: true,
   watchOptions: {
-    ignored: ['**/public', '**/node_modules'],
+    ignored: [
+      '**/public',
+      '**/node_modules',
+      '**/dist/**',
+      '**/dist-mv2/**',
+      '**/tmp/**',
+    ],
     followSymlinks: false,
+    poll: 1000,
   },
   plugins: [
     new webpack.DefinePlugin({

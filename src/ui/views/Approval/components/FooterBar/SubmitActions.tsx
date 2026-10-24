@@ -31,13 +31,18 @@ export const SubmitActions: React.FC<Props> = ({
   const { t } = useTranslation();
   const [isSign, setIsSign] = React.useState(false);
 
+  React.useEffect(() => {
+    if (disabledProcess) setIsSign(false);
+  }, [disabledProcess]);
+
   const handleClickSign = React.useCallback(() => {
     setIsSign(true);
   }, []);
 
   const handleClickConfirm = React.useCallback(() => {
+    if (disabledProcess || isSubmitting) return;
     onSubmit();
-  }, [onSubmit]);
+  }, [disabledProcess, isSubmitting, onSubmit]);
 
   const handleClickCancel = React.useCallback(() => {
     setIsSign(false);
@@ -62,6 +67,7 @@ export const SubmitActions: React.FC<Props> = ({
           )}
         >
           <button
+            disabled={disabledProcess || isSubmitting}
             className={clsx(
               'hover:bg-[#00000033]',
               'w-[184px] h-full',
@@ -103,7 +109,7 @@ export const SubmitActions: React.FC<Props> = ({
                 gasLess && 'gasLess',
                 gasLessThemeColor && 'gasLessConfig',
                 'w-[246px] h-[48px] rounded-[8px]',
-                'disabled:text-opacity-40 disabled:bg-blue-light disabled:bg-opacity-40 border-transparent',
+                'disabled:text-white/40 disabled:bg-blue-light/40 border-transparent',
                 'before:content-none'
               )}
               style={

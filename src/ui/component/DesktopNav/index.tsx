@@ -2,7 +2,6 @@ import {
   RcIconHomeCC,
   RcIconHomeHover,
   RcIconHomeInActive,
-  RcIconLeadingCC,
   RcIconPerpsCC,
 } from '@/ui/assets/desktop/nav';
 import { splitNumberByStep } from '@/ui/utils';
@@ -23,8 +22,7 @@ import { KEYRING_TYPE } from '@/constant';
 import { matomoRequestEvent } from '@/utils/matomo-request';
 import { ga4 } from '@/utils/ga4';
 import { debounce } from 'lodash';
-import { useRabbySelector } from '@/ui/store';
-import { INNER_DAPP_LIST } from '@/constant/dappIframe';
+import { useDesktopProfileStore } from '@/ui/state/desktopProfile';
 
 type DesktopNavAction = 'swap' | 'send' | 'bridge' | 'gnosis-queue';
 
@@ -41,6 +39,9 @@ const reportNavEvent = debounce((eventKey: string) => {
   });
 }, 300);
 
+/**
+ * @deprecated
+ */
 export const DesktopNav: React.FC<{
   onActionSelect?: (action: DesktopNavAction) => void;
   showRightItems?: boolean;
@@ -48,19 +49,13 @@ export const DesktopNav: React.FC<{
   const { t } = useTranslation();
   const history = useHistory();
   const currentAccount = useCurrentAccount();
-  const activeProfileTab = useRabbySelector(
-    (state) => state.desktopProfile.activeTab || 'tokens'
+  const activeProfileTab = useDesktopProfileStore(
+    (state) => state.activeTab || 'tokens'
   );
 
   const isGnosis = currentAccount?.type === KEYRING_TYPE.GnosisKeyring;
 
   const currentPathname = history.location.pathname;
-  const lendingId = useRabbySelector((state) => state.innerDappFrame.lending);
-
-  const IconLending = useMemo(() => {
-    const dapp = INNER_DAPP_LIST.LENDING.find((item) => item.id === lendingId);
-    return dapp?.NavIcon || RcIconLeadingCC;
-  }, [lendingId]);
   const IconPerps = RcIconPerpsCC;
 
   const navs: {
@@ -83,14 +78,8 @@ export const DesktopNav: React.FC<{
         title: t('component.DesktopNav.perps'),
         eventKey: 'Perps',
       },
-      {
-        key: '/desktop/lending',
-        icon: IconLending,
-        title: t('component.DesktopNav.lending'),
-        eventKey: 'Lending',
-      },
     ];
-  }, [t, IconLending, IconPerps]);
+  }, [t, IconPerps]);
 
   const activeNav = useMemo(
     () => navs.find((item) => currentPathname.startsWith(item.key)),
@@ -162,8 +151,6 @@ export const DesktopNav: React.FC<{
               const Icon = item.icon;
               const isActive = currentPathname.startsWith(item.key);
 
-              const isLending = item.key === '/desktop/lending';
-
               return (
                 <Tooltip
                   key={item.key}
@@ -197,11 +184,7 @@ export const DesktopNav: React.FC<{
                       }
                     }}
                   >
-                    <Icon
-                      className={clsx(
-                        isLending ? 'w-[32px] h-[32px]' : 'w-[28px] h-[28px]'
-                      )}
-                    />
+                    <Icon className={clsx('w-[28px] h-[28px]')} />
                     <div className="space-y-[1px]">
                       <div className="text-[16px] leading-[19px] font-bold">
                         {item.title}

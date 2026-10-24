@@ -41,6 +41,14 @@ import { ReplacePopup } from './ReplacePopup';
 import { numberToHex } from 'viem';
 import { usePopupContainer } from '@/ui/hooks/usePopupContainer';
 import { UI_TYPE } from '@/constant/ui';
+import {
+  GNOSIS_REPLACE_QUERY_KEY,
+  serializeGnosisSendReplaceContext,
+} from '@/ui/utils/gnosisReplace';
+import {
+  getActionTypeTextByType,
+  isKnownActionType,
+} from '@/ui/views/Approval/components/Actions/utils';
 
 interface TransactionConfirmationsProps {
   confirmations: SafeTransactionItem['confirmations'];
@@ -248,6 +256,14 @@ const TransactionExplain = ({
       )} ${getTokenSymbol(data.token)}`;
     } else if (explain?.action?.type === 'cancel_tx') {
       content = t('page.safeQueue.action.cancel');
+    } else if (
+      explain?.action?.type !== 'contract_call' &&
+      isKnownActionType(explain?.action?.type || '')
+    ) {
+      icon = contractProtocol?.logo_url ? (
+        <img className="icon icon-explain" src={contractProtocol?.logo_url} />
+      ) : null;
+      content = getActionTypeTextByType(explain?.action?.type || '');
     } else if (explain?.contract_call) {
       icon = (
         <img
@@ -386,24 +402,23 @@ const GnosisTransactionItem = ({
   const history = useHistory();
   const handleReplace = async (type: string) => {
     if (type === 'send') {
+      const search = new URLSearchParams();
+      search.set(
+        GNOSIS_REPLACE_QUERY_KEY,
+        serializeGnosisSendReplaceContext({
+          safeAddress: data.safe,
+          nonce: Number(data.nonce),
+          chainId: Number(networkId),
+        })
+      );
       if (UI_TYPE.isDesktop) {
-        // todo check this
-        history.replace(
-          `/desktop/profile?action=send&safeInfo=${encodeURIComponent(
-            JSON.stringify({
-              nonce: data.nonce,
-              chainId: Number(networkId),
-            })
-          )}`
-        );
+        search.set('action', 'send');
+        history.replace(`/desktop/profile?${search.toString()}`);
       } else {
         history.replace({
           pathname: '/send-token',
+          search: `?${search.toString()}`,
           state: {
-            safeInfo: {
-              nonce: data.nonce,
-              chainId: Number(networkId),
-            },
             from: '/gnosis-queue',
           },
         });

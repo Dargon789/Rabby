@@ -10,16 +10,10 @@ browser.windows.onFocusChanged.addListener((winId) => {
   event.emit('windowFocusChange', winId);
 });
 
-let isManuallyClosed = true;
-browser.runtime.onMessage.addListener(({ type }) => {
-  if (type === 'closeNotification') {
-    isManuallyClosed = false;
-    event.emit('closeNotification');
-  }
-});
+const programmaticallyClosingWindows = new Set<number>();
 browser.windows.onRemoved.addListener((winId) => {
+  const isManuallyClosed = !programmaticallyClosingWindows.delete(winId);
   event.emit('windowRemoved', winId, isManuallyClosed);
-  isManuallyClosed = true;
 });
 
 const BROWSER_HEADER = 80;
@@ -43,18 +37,20 @@ const createFullScreenWindow = ({ url, ...rest }) => {
 };
 
 const create = async ({ url, ...rest }): Promise<number | undefined> => {
-  const {
-    top: cTop,
-    left: cLeft,
-    width,
-  } = await browser.windows.getLastFocused({
-    windowTypes: ['normal'],
-  } as Windows.GetInfo);
+  const [normalWindow, currentWindow] = await Promise.all([
+    browser.windows.getLastFocused({
+      windowTypes: ['normal'],
+    } as Windows.GetInfo),
+    browser.windows.getLastFocused(),
+  ]);
+  const { top: cTop, left: cLeft, width, height } = normalWindow;
 
   const top = cTop;
   const left = cLeft! + width! - WINDOW_SIZE.width;
+  const optionHeight = rest.height || 600;
+  const maxHeight = (height || 1000) - 40;
+  const finalHeight = Math.min(optionHeight, Math.max(maxHeight, 600));
 
-  const currentWindow = await browser.windows.getLastFocused();
   let win;
   if (currentWindow.state === 'fullscreen') {
     // browser.windows.create not pass state to chrome
@@ -69,6 +65,7 @@ const create = async ({ url, ...rest }): Promise<number | undefined> => {
         left,
         ...WINDOW_SIZE,
         ...rest,
+        height: finalHeight,
       });
     } catch (e) {
       if (e.message && /Invalid value for bound/i.test(e.message)) {
@@ -80,12 +77,15 @@ const create = async ({ url, ...rest }): Promise<number | undefined> => {
           left: 0,
           ...WINDOW_SIZE,
           ...rest,
+          height: finalHeight,
         });
       } else {
         Sentry.captureException(`tx prompt error: ${JSON.stringify(e)}`);
       }
     }
   }
+  if (!win) return;
+
   // shim firefox
   if (win.left !== left && currentWindow.state !== 'fullscreen') {
     try {
@@ -98,8 +98,16 @@ const create = async ({ url, ...rest }): Promise<number | undefined> => {
   return win.id;
 };
 
-const remove = async (winId) => {
-  return browser.windows.remove(winId);
+const remove = async (winId: number) => {
+  // Register before calling the browser: onRemoved may arrive before the
+  // removal promise resolves, and other windows can close in the meantime.
+  programmaticallyClosingWindows.add(winId);
+  try {
+    return await browser.windows.remove(winId);
+  } catch (error) {
+    programmaticallyClosingWindows.delete(winId);
+    throw error;
+  }
 };
 
 const openNotification = ({ route = '', ...rest } = {}): Promise<

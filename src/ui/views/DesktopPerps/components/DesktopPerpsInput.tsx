@@ -1,6 +1,7 @@
 import React from 'react';
 import { Input, InputProps } from 'antd';
 import styled from 'styled-components';
+import { useThousandsInput } from '../hooks/useThousandsInput';
 
 // 使用 styled-components 修改 antd Input 的样式
 const StyledInput = styled(Input)`
@@ -24,7 +25,7 @@ const StyledInput = styled(Input)`
       box-shadow: none;
       font-size: 13px;
       line-height: 16px;
-      color: var(--rb-neutral-title-1, #111827);
+      color: var(--rb-neutral-body, #111827);
       font-weight: 500;
 
       &::placeholder {
@@ -42,5 +43,17 @@ const StyledInput = styled(Input)`
 interface DesktopPerpsInputProps extends InputProps {}
 
 export const DesktopPerpsInput: React.FC<DesktopPerpsInputProps> = (props) => {
-  return <StyledInput placeholder="0" {...props} />;
+  const { ref, value, onChange } = useThousandsInput(
+    props.value,
+    props.onChange
+  );
+  return (
+    <StyledInput
+      placeholder="0"
+      {...props}
+      value={value}
+      onChange={onChange}
+      ref={ref}
+    />
+  );
 };

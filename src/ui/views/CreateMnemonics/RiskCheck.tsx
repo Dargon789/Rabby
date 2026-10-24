@@ -1,11 +1,12 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
-import { connectStore, useRabbyDispatch } from 'ui/store';
+import { connectStore } from 'ui/store';
 import { Button } from 'antd';
 import { Card } from '@/ui/component/NewUserImport';
 import { ReactComponent as RcIconTips } from '@/ui/assets/new-user-import/tips.svg';
 import { ReactComponent as IconDotCC } from '@/ui/assets/new-user-import/dot-cc.svg';
+import { useCreateMnemonicsStore } from '@/ui/state/createMnemonics';
 
 function useQuestionsCheck() {
   const { t } = useTranslation();
@@ -33,7 +34,7 @@ function useQuestionsCheck() {
 }
 
 const RiskCheck = () => {
-  const dispatch = useRabbyDispatch();
+  const stepTo = useCreateMnemonicsStore((state) => state.stepTo);
   const { t } = useTranslation();
   const { questionChecks } = useQuestionsCheck();
 
@@ -50,7 +51,7 @@ const RiskCheck = () => {
             className={clsx('flex justify-start gap-8', 'px-12')}
           >
             <IconDotCC
-              className="mt-6 text-rabby-blue-default flex-shrink-0"
+              className="mt-6 text-rabby-blue-default shrink-0"
               viewBox="0 0 8 8"
             />
             <span className="text-15 text-r-neutral-title1 font-normal">
@@ -61,7 +62,7 @@ const RiskCheck = () => {
       </div>
 
       <Button
-        onClick={() => dispatch.createMnemonics.stepTo('display')}
+        onClick={() => stepTo('display')}
         block
         type="primary"
         className={clsx(

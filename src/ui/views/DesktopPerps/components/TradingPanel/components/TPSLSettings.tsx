@@ -25,8 +25,8 @@ const MODE_OPTIONS: {
   label: string;
   unit: string;
 }[] = [
-  { value: 'price', label: 'Price', unit: 'USDC' },
-  { value: 'pnl', label: 'PNL', unit: 'USDC' },
+  { value: 'price', label: 'Price', unit: 'USD' },
+  { value: 'pnl', label: 'PNL', unit: 'USD' },
   { value: 'roi', label: 'ROI%', unit: '%' },
 ];
 
@@ -209,7 +209,8 @@ export const TPSLSettings: React.FC<TPSLSettingsProps> = ({
     const newConfig = { ...config };
     let changed = false;
     (['takeProfit', 'stopLoss'] as const).forEach((type) => {
-      const item = { ...newConfig[type] };
+      const prev = newConfig[type];
+      const item = { ...prev };
       if (!item.value || !priceNum) return;
       if (item.settingMode === 'price') {
         const est = calcEstimatedPnlFromPrice(
@@ -240,6 +241,15 @@ export const TPSLSettings: React.FC<TPSLSettingsProps> = ({
         item.buyTriggerPrice = triggers.buyTriggerPrice;
         item.sellTriggerPrice = triggers.sellTriggerPrice;
       }
+      // This effect re-runs on every price tick (several times a second). Writing
+      // unconditionally would hand the parent a new config object each tick and
+      // re-render the whole panel, so only propagate a genuine value change.
+      const unchanged =
+        item.buyTriggerPrice === prev.buyTriggerPrice &&
+        item.sellTriggerPrice === prev.sellTriggerPrice &&
+        item.estimatedPnl === prev.estimatedPnl &&
+        item.estimatedPnlPercent === prev.estimatedPnlPercent;
+      if (unchanged) return;
       newConfig[type] = item;
       changed = true;
     });
@@ -305,7 +315,7 @@ export const TPSLSettings: React.FC<TPSLSettingsProps> = ({
     const modeLabel =
       MODE_OPTIONS.find((o) => o.value === item.settingMode)?.label || 'Price';
     const unitLabel =
-      MODE_OPTIONS.find((o) => o.value === item.settingMode)?.unit || 'USDC';
+      MODE_OPTIONS.find((o) => o.value === item.settingMode)?.unit || 'USD';
 
     const hasError = !!item.error;
 
@@ -322,7 +332,7 @@ export const TPSLSettings: React.FC<TPSLSettingsProps> = ({
     return (
       <div className="space-y-[6px]">
         {/* Title */}
-        <div className="text-[12px] text-r-neutral-foot">
+        <div className="text-12 text-r-neutral-foot">
           {label} ({modeLabel})
         </div>
 
@@ -371,7 +381,7 @@ export const TPSLSettings: React.FC<TPSLSettingsProps> = ({
                   handleModeChange(type, mode as TPSLSettingMode)
                 }
               >
-                <span className="text-15 font-medium text-rb-neutral-title-1 flex items-center gap-[6px] cursor-pointer whitespace-nowrap">
+                <span className="text-15 text-rb-neutral-title-1 flex items-center gap-[6px] cursor-pointer whitespace-nowrap">
                   {unitLabel}
                   <RcIconArrowDownPerpsCC className="text-rb-neutral-secondary w-[12px] h-[12px]" />
                 </span>
@@ -382,7 +392,7 @@ export const TPSLSettings: React.FC<TPSLSettingsProps> = ({
 
         {/* Estimated PnL for Price mode - shown below input */}
         {showEstimatedPnl && (
-          <div className="text-[12px] text-r-neutral-foot">
+          <div className="text-12 text-r-neutral-foot">
             {t('page.perpsPro.tradingPanel.estimatedPnlWillBe')}{' '}
             <span
               className={
@@ -403,7 +413,7 @@ export const TPSLSettings: React.FC<TPSLSettingsProps> = ({
 
         {/* Error */}
         {item.error && (
-          <div className="text-[12px] text-rb-red-default px-[4px]">
+          <div className="text-12 text-rb-red-default px-[4px]">
             {item.error}
           </div>
         )}

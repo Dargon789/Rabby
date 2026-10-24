@@ -10,26 +10,38 @@ const SortHat = () => {
   const wallet = useWallet();
   const [to, setTo] = useState('');
   // eslint-disable-next-line prefer-const
-  let [getApproval] = useApproval();
+  let [getApproval] = useApproval(null);
   const UIType = getUiType();
 
   const loadView = async () => {
     const isInNotification = UIType.isNotification;
     const isInTab = UIType.isTab;
-    const approval: Approval | undefined = await getApproval();
+    const approvalPromise = getApproval() as Promise<Approval | undefined>;
+    const isBootedPromise = wallet.isBooted();
+    // The no-approval path may return before this prefetched request is awaited.
+    void isBootedPromise.catch(() => undefined);
+    const approval = await approvalPromise;
     if (isInNotification && !approval) {
-      Browser.runtime.sendMessage({ type: 'closeNotification' });
+      const { id } = await Browser.windows.getCurrent();
+      if (id == null) return;
+      if (!(await wallet.closeNotificationWindow(id))) {
+        // A new request arrived after our empty snapshot. The background kept
+        // this window open for it, so load its approval rather than closing.
+        return loadView();
+      }
+      // A window left over from a background restart may no longer be tracked.
+      // The background has confirmed this id cannot be reused for an approval.
       window.close();
       return;
     }
 
-    if (!(await wallet.isBooted())) {
+    if (!(await isBootedPromise)) {
       setTo('/welcome');
       return;
     }
 
-    await wallet.tryUnlock();
-    if (!(await wallet.isUnlocked())) {
+    const isUnlocked = await wallet.tryUnlock();
+    if (!isUnlocked) {
       if (
         isInNotification &&
         approval?.data?.approvalComponent === 'Connect' &&
@@ -42,10 +54,10 @@ const SortHat = () => {
       return;
     }
     if (
-      (await wallet.hasPageStateCache()) &&
       !isInNotification &&
       !isInTab &&
-      !approval
+      !approval &&
+      (await wallet.hasPageStateCache())
     ) {
       const cache = (await wallet.getPageStateCache())!;
       if (cache.path && cache.path !== '/') {
